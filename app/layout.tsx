@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" })
 
 export const metadata: Metadata = {
-  title: 'HireSwipe Admin Dashboard',
+  title: 'NextQuark Admin Dashboard',
   description: 'Internal admin dashboard for monitoring AI-powered job applications',
   icons: {
     icon: [

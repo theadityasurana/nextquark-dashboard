@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, ReactNode } from "react"
+import { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
 export interface LogEntry {
   id: string
@@ -24,6 +24,12 @@ export function LogsProvider({ children }: { children: ReactNode }) {
 
   const addLog = (log: LogEntry) => {
     setLogs((prev) => [log, ...prev])
+    // Sync to API
+    fetch('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log)
+    }).catch(console.error)
   }
 
   const clearLogs = () => {

@@ -1,6 +1,7 @@
 import { BrowserUse } from "browser-use-sdk"
 import { createClient } from "@supabase/supabase-js"
 import axios from "axios"
+import { buildOptimizedPrompt, detectPortal } from "./portal-detector"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -50,17 +51,7 @@ export interface StreamCallback {
 
 export async function fillJobApplicationWithStreaming(
   portalUrl: string,
-  userData: {
-    name: string
-    email: string
-    phone: string
-    location: string
-    resume: string
-    coverLetter: string
-    experience: string
-    education: string
-    skills: string[]
-  },
+  userData: any,
   onStep?: StreamCallback
 ): Promise<BrowserUseResponse> {
   const apiKey = await getApiKey()
@@ -74,34 +65,15 @@ export async function fillJobApplicationWithStreaming(
 
   try {
     const resumeBase64 = await downloadResumeAsBase64(userData.resume)
+    const portal = detectPortal(portalUrl)
     
     const client = new BrowserUse({
       apiKey,
     })
 
-    const goal = `Navigate to ${portalUrl} and fill out the job application form and click the submit button.
-      
-Available user data:
-- Name: ${userData.name}
-- Email: ${userData.email}
-- Phone: ${userData.phone}
-- Location: ${userData.location}
-- Resume (PDF base64): ${resumeBase64 ? "[PDF file available - upload to form]" : "[No resume available]"}
-- Cover Letter: ${userData.coverLetter}
-- Experience: ${userData.experience}
-- Education: ${userData.education}
-- Skills: ${userData.skills.join(", ")}
+    const goal = buildOptimizedPrompt(portalUrl, userData, resumeBase64)
 
-CRITICAL INSTRUCTIONS:
-1. Only fill fields that are actually present in the form
-2. If a field is not available, skip it completely
-3. Always upload the resume PDF to file input fields if available
-4. Adapt to the form's requirements - use only the data that matches the form fields
-5. After filling all available fields, submit the application
-
-Example: If the form only asks for name and resume, fill only those two fields.`
-
-    console.log("Starting Browser Use task with streaming for:", userData.name)
+    console.log(`Starting Browser Use task for: ${userData.name}${portal ? ` [${portal.name} detected]` : " [Unknown portal]"}`)
 
     let stepCount = 0
     let result: any = null

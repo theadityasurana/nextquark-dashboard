@@ -44,17 +44,17 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
         {!collapsed && (
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-              HS
+              NQ
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight">HireSwipe</h1>
+              <h1 className="text-sm font-semibold tracking-tight">NextQuark</h1>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Admin</p>
             </div>
           </div>
         )}
         {collapsed && (
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            HS
+            NQ
           </div>
         )}
         {onToggle && !collapsed && (
