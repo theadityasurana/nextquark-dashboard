@@ -22,12 +22,20 @@ const levelBg: Record<string, string> = {
 }
 
 export function LogsScreen() {
-  const { logs } = useLogs()
+  const { logs, agentDetailsMap } = useLogs()
   const [searchQuery, setSearchQuery] = useState("")
   const [levelFilter, setLevelFilter] = useState("all")
   const [agentFilter, setAgentFilter] = useState("all")
 
   const uniqueAgents = Array.from(new Set(logs.map((l) => l.agentId)))
+
+  const getAgentDisplayName = (agentId: string) => {
+    const details = agentDetailsMap[agentId]
+    if (details) {
+      return `${details.firstName} ${details.lastName} - ${details.jobTitle} at ${details.companyName}`
+    }
+    return agentId
+  }
 
   const filteredLogs = logs.filter((log) => {
     if (levelFilter !== "all" && log.level !== levelFilter) return false
@@ -64,13 +72,13 @@ export function LogsScreen() {
           </SelectContent>
         </Select>
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-[140px] bg-card border-border text-sm">
+          <SelectTrigger className="w-[280px] bg-card border-border text-sm">
             <SelectValue placeholder="All Agents" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Agents</SelectItem>
             {uniqueAgents.map((agent) => (
-              <SelectItem key={agent} value={agent}>{agent}</SelectItem>
+              <SelectItem key={agent} value={agent}>{getAgentDisplayName(agent)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -96,7 +104,7 @@ export function LogsScreen() {
       {/* Logs */}
       <Card className="bg-card border-border">
         <CardContent className="p-0">
-          <div className="hidden md:grid grid-cols-[80px_70px_100px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[80px_70px_200px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
             <span>Time</span>
             <span>Level</span>
             <span>Agent</span>
@@ -107,7 +115,7 @@ export function LogsScreen() {
               <div
                 key={log.id}
                 className={cn(
-                  "grid grid-cols-1 md:grid-cols-[80px_70px_100px_1fr] gap-1 md:gap-4 px-4 py-2.5 hover:bg-accent/50 transition-colors items-center",
+                  "grid grid-cols-1 md:grid-cols-[80px_70px_200px_1fr] gap-1 md:gap-4 px-4 py-2.5 hover:bg-accent/50 transition-colors items-center",
                   log.level === "error" && "bg-destructive/5"
                 )}
               >
@@ -115,7 +123,7 @@ export function LogsScreen() {
                 <span className={cn("text-[11px] font-semibold uppercase px-1.5 py-0.5 rounded w-fit", levelColors[log.level], levelBg[log.level])}>
                   {log.level}
                 </span>
-                <span className="text-xs text-muted-foreground">{log.agentId}</span>
+                <span className="text-xs text-muted-foreground truncate" title={getAgentDisplayName(log.agentId)}>{getAgentDisplayName(log.agentId)}</span>
                 <span className="text-xs text-foreground">{log.message}</span>
               </div>
             ))}

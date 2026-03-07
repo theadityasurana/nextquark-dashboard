@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useQueueCount } from "@/hooks/use-queue-count"
 import {
   LayoutDashboard,
   Zap,
@@ -37,6 +38,7 @@ const navItems = [
 
 function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () => void }) {
   const pathname = usePathname()
+  const pendingCount = useQueueCount()
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -84,7 +86,7 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
                 {!collapsed && <span>{item.label}</span>}
                 {!collapsed && item.label === "Live Queue" && (
                   <Badge variant="secondary" className="ml-auto bg-primary/15 text-primary text-[10px] px-1.5 py-0">
-                    47
+                    {pendingCount}
                   </Badge>
                 )}
               </Link>

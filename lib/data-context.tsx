@@ -51,6 +51,7 @@ function mapJob(j: Record<string, unknown>): Job {
     successRate: Number(j.success_rate) || 0,
     avgTime: j.avg_time as string || "-",
     postedAt: j.posted_at as string || new Date().toISOString().split("T")[0],
+    createdAt: j.created_at as string,
     description: j.description as string || "",
     requirements: (j.requirements as string[]) || [],
     skills: (j.skills as string[]) || [],
@@ -58,6 +59,30 @@ function mapJob(j: Record<string, unknown>): Job {
     detailedRequirements: (j.detailed_requirements as string) || "",
     educationLevel: (j.education_level as string) || undefined,
     workAuthorization: (j.work_authorization as string) || undefined,
+  }
+}
+
+function mapApplication(a: Record<string, unknown>): Application {
+  return {
+    id: a.id as string,
+    userId: a.user_id as string,
+    userName: a.user?.name as string || "",
+    userEmail: a.user?.email as string || "",
+    userPhone: a.user?.phone as string || "",
+    userLocation: a.user?.location as string || "",
+    companyId: a.company_id as string,
+    companyName: a.company?.name as string || "",
+    jobTitle: a.job?.title as string || "",
+    jobId: a.job_id as string,
+    status: a.status as ApplicationStatus,
+    agentId: a.agent_id as string | null,
+    progressStep: (a.progress_step as number) || 0,
+    totalSteps: (a.total_steps as number) || 5,
+    stepDescription: a.step_description as string || "",
+    startedAt: a.started_at as string || "",
+    duration: a.duration as string || "-",
+    createdAt: a.created_at as string,
+    screenshot: a.screenshot as string | undefined,
   }
 }
 
@@ -102,10 +127,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     fallbackData: [],
     revalidateOnFocus: false,
   })
+  const { data: rawApplications, isLoading: loadingApplications } = useSWR("/api/applications/queue", async (url) => {
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const json = await res.json()
+    return json.data || []
+  }, {
+    fallbackData: [],
+    revalidateOnFocus: false,
+  })
 
   const companies: Company[] = Array.isArray(rawCompanies) ? rawCompanies.map(mapCompany) : []
   const jobs: Job[] = Array.isArray(rawJobs) ? rawJobs.map(mapJob) : []
-  const applications = mockApplications
+  const applications: Application[] = Array.isArray(rawApplications) ? rawApplications.map(mapApplication) : []
 
   const setCompanies = useCallback(() => {
     globalMutate("/api/companies")
@@ -205,7 +239,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateJob,
         refreshCompanies,
         refreshJobs,
-        isLoading: loadingCompanies || loadingJobs,
+        isLoading: loadingCompanies || loadingJobs || loadingApplications,
       }}
     >
       {children}

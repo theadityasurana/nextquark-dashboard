@@ -26,10 +26,25 @@ export function QueueScreen() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [stats, setStats] = useState<ApplicationStats>({ totalApps: 0, successful: 0, failed: 0, inProgress: 0 })
   const [isStreaming, setIsStreaming] = useState(false)
+  const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null)
+  const [isStartingAll, setIsStartingAll] = useState(false)
   const { addLog } = useLogs()
 
   const startLiveStream = async (app: LiveApplicationQueue) => {
     setIsStreaming(true)
+    setLiveStreamUrl(null)
+    
+    // Update status to processing
+    await fetch('/api/live-queue', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: app.id, status: 'processing' })
+    })
+    
+    // Update local state
+    setApplications(prev => prev.map(a => 
+      a.id === app.id ? { ...a, status: 'processing' as const } : a
+    ))
     
     // Add initial log
     addLog({
@@ -56,7 +71,11 @@ export function QueueScreen() {
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
 
-      if (!reader) return
+      if (!reader) {
+        throw new Error('No response stream')
+      }
+
+      let hasStarted = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -69,6 +88,36 @@ export function QueueScreen() {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6))
+              
+              // Mark as started if we get any valid data
+              if (!hasStarted && (data.liveUrl || data.log || data.status)) {
+                hasStarted = true
+              }
+              
+              // Capture live stream URL from session creation or streaming
+              if (data.liveUrl) {
+                console.log('Setting live stream URL:', data.liveUrl)
+                setLiveStreamUrl(data.liveUrl)
+                
+                // Update database with live URL
+                fetch('/api/live-queue', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: app.id, live_url: data.liveUrl })
+                }).catch(err => console.error('Failed to update live URL:', err))
+                
+                if (data.status === 'session_created') {
+                  addLog({
+                    id: `log-${Date.now()}-${Math.random()}`,
+                    timestamp: new Date().toLocaleTimeString(),
+                    level: "info",
+                    agentId: app.id,
+                    message: `Live stream available at: ${data.liveUrl}`,
+                    applicationId: app.id,
+                  })
+                }
+              }
+              
               if (data.log) {
                 addLog({
                   id: `log-${Date.now()}-${Math.random()}`,
@@ -88,6 +137,17 @@ export function QueueScreen() {
                   message: data.error || "An error occurred",
                   applicationId: app.id,
                 })
+                
+                // Update status to failed
+                await fetch('/api/live-queue', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: app.id, status: 'failed' })
+                })
+                
+                setApplications(prev => prev.map(a => 
+                  a.id === app.id ? { ...a, status: 'failed' as const } : a
+                ))
               }
               if (data.status === "completed") {
                 addLog({
@@ -98,12 +158,41 @@ export function QueueScreen() {
                   message: `Application completed successfully after ${data.steps} steps`,
                   applicationId: app.id,
                 })
+                
+                // Update status and recording URL
+                const updatePayload: any = { id: app.id, status: 'completed' }
+                if (data.recordingUrl) {
+                  updatePayload.recording_url = data.recordingUrl
+                  addLog({
+                    id: `log-${Date.now()}-${Math.random()}`,
+                    timestamp: new Date().toLocaleTimeString(),
+                    level: "info",
+                    agentId: app.id,
+                    message: `Recording saved: ${data.recordingUrl}`,
+                    applicationId: app.id,
+                  })
+                }
+                
+                await fetch('/api/live-queue', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(updatePayload)
+                })
+                
+                setApplications(prev => prev.map(a => 
+                  a.id === app.id ? { ...a, status: 'completed' as const, recording_url: data.recordingUrl || a.recording_url } : a
+                ))
               }
             } catch (e) {
               // Ignore parse errors
             }
           }
         }
+      }
+      
+      // If stream ended but never started, mark as failed
+      if (!hasStarted) {
+        throw new Error('Stream failed to start')
       }
     } catch (error) {
       console.error('Live stream error:', error)
@@ -115,6 +204,17 @@ export function QueueScreen() {
         message: `Live stream error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         applicationId: app.id,
       })
+      
+      // Update status to failed
+      await fetch('/api/live-queue', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: app.id, status: 'failed' })
+      })
+      
+      setApplications(prev => prev.map(a => 
+        a.id === app.id ? { ...a, status: 'failed' as const } : a
+      ))
     } finally {
       setIsStreaming(false)
     }
@@ -186,6 +286,34 @@ export function QueueScreen() {
         <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
         <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
       </div>
+
+      {/* Start All Button - Only show when on pending tab */}
+      {activeTab === "pending" && pending.length > 0 && (
+        <div className="flex justify-end">
+          <Button
+            onClick={async () => {
+              setIsStartingAll(true)
+              for (const app of pending) {
+                startLiveStream(app)
+                // Small delay to avoid overwhelming the system
+                await new Promise(resolve => setTimeout(resolve, 100))
+              }
+              setIsStartingAll(false)
+            }}
+            disabled={isStartingAll}
+            className="gap-2"
+          >
+            {isStartingAll ? (
+              <>
+                <Loader className="h-4 w-4 animate-spin" />
+                Starting All...
+              </>
+            ) : (
+              `Start All (${pending.length})`
+            )}
+          </Button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -288,6 +416,7 @@ export function QueueScreen() {
               stats={stats}
               onStartLiveStream={() => startLiveStream(selectedApp)}
               isStreaming={isStreaming}
+              liveStreamUrl={liveStreamUrl}
             />
           )}
         </DialogContent>

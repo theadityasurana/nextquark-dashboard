@@ -127,6 +127,7 @@ export interface Job {
   successRate: number
   avgTime: string
   postedAt: string
+  createdAt?: string
   description: string
   requirements?: string[]
   skills?: string[]

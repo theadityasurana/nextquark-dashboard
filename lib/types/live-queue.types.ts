@@ -66,6 +66,12 @@ export interface LiveApplicationQueue {
   // Application status
   status: 'pending' | 'processing' | 'completed' | 'failed'
   
+  // Live stream URL
+  live_url?: string | null
+  
+  // Recording URL
+  recording_url?: string | null
+  
   // Metadata
   onboarding_data: Record<string, any>
   created_at: string

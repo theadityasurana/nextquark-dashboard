@@ -151,7 +151,8 @@ export async function POST(request: Request) {
               const result = await fillJobApplicationWithStreaming(
                 jobUrl,
                 formData,
-                onStep
+                onStep,
+                userId // Pass applicationId for metrics tracking
               )
 
               controller.enqueue(
@@ -161,6 +162,8 @@ export async function POST(request: Request) {
                     success: result.success,
                     result: result.result,
                     steps: result.steps,
+                    liveUrl: result.liveUrl,
+                    recordingUrl: result.recordingUrl,
                   })}\n\n`
                 )
               )
@@ -191,7 +194,9 @@ export async function POST(request: Request) {
 
     const result = await fillJobApplicationWithStreaming(
       jobUrl,
-      formData
+      formData,
+      undefined,
+      userId // Pass applicationId for metrics tracking
     )
 
     if (result.success) {

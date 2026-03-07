@@ -120,7 +120,7 @@ export function detectPortal(url: string): PortalPattern | null {
 export function buildOptimizedPrompt(
   portalUrl: string,
   userData: any,
-  resumeBase64: string | null
+  resumeUploaded: string | null
 ): string {
   const portal = detectPortal(portalUrl);
 
@@ -139,7 +139,7 @@ export function buildOptimizedPrompt(
   if (userData.disabilityStatus) userDataLines.push(`Disability Status: ${userData.disabilityStatus}`);
   if (userData.veteranStatus) userDataLines.push(`Veteran Status: ${userData.veteranStatus}`);
   if (userData.workAuthorization) userDataLines.push(`Work Authorization: ${userData.workAuthorization}`);
-  if (resumeBase64) userDataLines.push(`Resume: [PDF available for upload]`);
+  if (resumeUploaded) userDataLines.push(`Resume: resume.pdf (uploaded to session)`);
   if (userData.coverLetter) userDataLines.push(`Cover Letter: ${userData.coverLetter}`);
   if (userData.experience) userDataLines.push(`\nWork Experience:\n${userData.experience}`);
   if (userData.education) userDataLines.push(`\nEducation:\n${userData.education}`);
@@ -151,10 +151,16 @@ export function buildOptimizedPrompt(
   }
 
   if (portal) {
+    const resumeInstruction = resumeUploaded 
+      ? "IMPORTANT: A resume file named 'resume.pdf' is already uploaded and available in this session. When you find a resume upload field, select this existing 'resume.pdf' file - DO NOT create a new resume file."
+      : "Skip resume upload if no file is available.";
+    
     return `Navigate to ${portalUrl} and complete the job application.
 
 PORTAL: ${portal.name}
 ${portal.instructions}
+
+${resumeInstruction}
 
 USER DATA:
 ${userDataLines.join("\n")}
@@ -164,14 +170,20 @@ ${Object.entries(portal.fieldMappings)
   .map(([field, selectors]) => `- ${field}: ${selectors.join(" OR ")}`)
   .join("\n")}
 
-TASK: Use the provided selectors to fill fields efficiently. If selector doesn't work, find the field visually. Upload resume to file input. Submit when complete.`;
+TASK: Use the provided selectors to fill fields efficiently. If selector doesn't work, find the field visually. For file uploads, use the pre-uploaded files. Submit when complete.`;
   }
 
   // Fallback for unknown portals
+  const resumeInstruction = resumeUploaded 
+    ? "IMPORTANT: A resume file named 'resume.pdf' is already uploaded and available in this session. When you find a resume upload field, select this existing 'resume.pdf' file - DO NOT create a new resume file."
+    : "Skip resume upload if no file is available.";
+  
   return `Navigate to ${portalUrl} and fill out the job application form.
+
+${resumeInstruction}
 
 USER DATA:
 ${userDataLines.join("\n")}
 
-TASK: Identify form fields, fill with matching data, upload resume if file input exists, and submit.`;
+TASK: Identify form fields, fill with matching data. For file uploads, use the pre-uploaded files. Submit when complete.`;
 }

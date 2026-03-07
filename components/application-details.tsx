@@ -1,10 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
-import { useLogs } from "@/lib/logs-context"
+import { useLogs, LogEntry } from "@/lib/logs-context"
 import { 
   User as UserIcon, Heart, Shield, ExternalLink, FileText, 
   Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal
@@ -15,17 +16,47 @@ interface ApplicationDetailsProps {
   stats: ApplicationStats
   onStartLiveStream?: () => void
   isStreaming?: boolean
+  liveStreamUrl?: string | null
 }
 
 export function ApplicationDetails({ 
   application, 
   stats, 
   onStartLiveStream,
-  isStreaming = false 
+  isStreaming = false,
+  liveStreamUrl = null
 }: ApplicationDetailsProps) {
   const fullName = `${application.first_name} ${application.last_name}`
   const { logs } = useLogs()
-  const appLogs = logs.filter(log => log.applicationId === application.id)
+  const [dbLogs, setDbLogs] = useState<LogEntry[]>([])
+  
+  // Fetch logs from database
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const response = await fetch(`/api/logs?applicationId=${application.id}`)
+        const data = await response.json()
+        if (data.logs) {
+          setDbLogs(data.logs)
+        }
+      } catch (err) {
+        console.error('Failed to fetch logs:', err)
+      }
+    }
+    
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 3000)
+    return () => clearInterval(interval)
+  }, [application.id])
+  
+  // Combine context logs (real-time) with database logs
+  const contextLogs = logs.filter(log => log.applicationId === application.id)
+  const allLogs = [...contextLogs, ...dbLogs]
+  const uniqueLogs = Array.from(new Map(allLogs.map(log => [log.id, log])).values())
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  
+  // Debug logging
+  console.log('ApplicationDetails - liveStreamUrl:', liveStreamUrl)
 
   return (
     <div className="flex flex-col">
@@ -55,11 +86,63 @@ export function ApplicationDetails({
           >
             {isStreaming ? 'Streaming...' : 'Start Live Stream'}
           </Button>
-          <Button size="sm" variant="outline" className="text-xs gap-1.5">
-            Current screenshot
-          </Button>
         </div>
       </div>
+
+      {/* Live Stream Viewer */}
+      {liveStreamUrl && (
+        <div className="px-6 py-5 border-b border-border">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-primary">Live Browser Session</h4>
+              <Badge variant="secondary" className="text-[10px] animate-pulse">● LIVE</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">URL: {liveStreamUrl}</p>
+            <div className="relative w-full bg-black rounded-lg" style={{ paddingBottom: '56.25%' }}>
+              <iframe
+                src={liveStreamUrl}
+                className="absolute top-0 left-0 w-full h-full rounded-lg"
+                allow="clipboard-read; clipboard-write; autoplay"
+                title="Live Browser Session"
+                onLoad={() => console.log('iframe loaded successfully')}
+                onError={(e) => console.error('iframe error:', e)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Viewing browser automation in real-time</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Recorded Video Viewer */}
+      {application.recording_url && (
+        <div className="px-6 py-5 border-b border-border">
+          <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-green-600">Recorded Session</h4>
+              <Badge variant="outline" className="text-[10px]">● SAVED</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">Recording URL: {application.recording_url}</p>
+            <div className="relative w-full bg-black rounded-lg" style={{ paddingBottom: '56.25%' }}>
+              <iframe
+                src={application.recording_url}
+                className="absolute top-0 left-0 w-full h-full rounded-lg"
+                allow="clipboard-read; clipboard-write; autoplay"
+                title="Recorded Browser Session"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Playback of the completed application session</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Debug: Show streaming status */}
+      {isStreaming && !liveStreamUrl && (
+        <div className="px-6 py-5 border-b border-border">
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
+            <p className="text-xs text-yellow-600">Waiting for live stream URL... Check console for debug logs</p>
+          </div>
+        </div>
+      )}
 
       {/* Job Details */}
       <div className="px-6 py-5 border-b border-border">
@@ -85,13 +168,13 @@ export function ApplicationDetails({
         </div>
 
         {/* Logs Section */}
-        {appLogs.length > 0 && (
+        {uniqueLogs.length > 0 && (
           <div className="rounded-lg border border-border bg-background p-4 mt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
               <Terminal className="h-3 w-3" /> Application Logs
             </h4>
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {appLogs.map((log) => (
+              {uniqueLogs.map((log) => (
                 <div key={log.id} className="flex items-start gap-2 text-xs font-mono">
                   <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
                   <Badge variant={log.level === "error" ? "destructive" : log.level === "warn" ? "secondary" : "outline"} className="text-[9px] h-4 shrink-0">

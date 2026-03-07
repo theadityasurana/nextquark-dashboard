@@ -1,21 +1,90 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/status-badge"
-import { mockAgents, type Agent } from "@/lib/mock-data"
+import { ConfigureDialog } from "@/components/configure-dialog"
+import { PerformanceDialog } from "@/components/performance-dialog"
+import { AddAgentDialog } from "@/components/add-agent-dialog"
+interface Agent {
+  id: string
+  status: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  location: string
+  companyName: string
+  jobTitle: string
+  jobUrl: string
+  resumeUrl: string
+  createdAt: string
+  duration: string
+  skills?: string[]
+  experience?: any
+  education?: any
+}
+
+interface AgentStats {
+  total: number
+  active: number
+  idle: number
+  completed: number
+  error: number
+  successRate: string
+  avgProcessingTime: string
+}
 import { Plus, Settings, BarChart3, Eye, Pause, Play, RotateCcw, ScrollText, Cpu, HardDrive, Wifi, Server } from "lucide-react"
 
 export function AgentsScreen() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [stats, setStats] = useState<AgentStats>({
+    total: 0,
+    active: 0,
+    idle: 0,
+    completed: 0,
+    error: 0,
+    successRate: '0.0',
+    avgProcessingTime: '0m'
+  })
+  const [loading, setLoading] = useState(true)
+  const [configureOpen, setConfigureOpen] = useState(false)
+  const [performanceOpen, setPerformanceOpen] = useState(false)
+  const [addAgentOpen, setAddAgentOpen] = useState(false)
 
-  const activeCount = mockAgents.filter((a) => a.status === "active").length
-  const idleCount = mockAgents.filter((a) => a.status === "idle").length
-  const errorCount = mockAgents.filter((a) => a.status === "error").length
+  const fetchAgents = async () => {
+      try {
+        const response = await fetch('/api/agents')
+        const data = await response.json()
+        if (data.agents) {
+          setAgents(data.agents)
+          setStats(data.stats)
+        }
+      } catch (error) {
+        console.error('Failed to fetch agents:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+  useEffect(() => {
+    
+    fetchAgents()
+    const interval = setInterval(fetchAgents, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const getStatusBadgeStatus = (status: string) => {
+    if (status === 'processing') return 'active'
+    if (status === 'pending') return 'idle'
+    if (status === 'failed') return 'error'
+    return 'idle'
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -25,13 +94,13 @@ export function AgentsScreen() {
           <p className="text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setConfigureOpen(true)}>
             <Settings className="h-3 w-3" /> Configure
           </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setPerformanceOpen(true)}>
             <BarChart3 className="h-3 w-3" /> Performance
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button size="sm" className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setAddAgentOpen(true)}>
             <Plus className="h-3 w-3" /> Add Agent
           </Button>
         </div>
@@ -39,35 +108,43 @@ export function AgentsScreen() {
 
       {/* Stats */}
       <div className="flex items-center gap-6 text-sm">
-        <span className="text-muted-foreground">Total: <span className="text-foreground font-semibold">{mockAgents.length}</span></span>
-        <span className="text-muted-foreground">Active: <span className="text-success font-semibold">{activeCount}</span></span>
-        <span className="text-muted-foreground">Idle: <span className="text-warning font-semibold">{idleCount}</span></span>
-        <span className="text-muted-foreground">Error: <span className="text-destructive font-semibold">{errorCount}</span></span>
+        <span className="text-muted-foreground">Total: <span className="text-foreground font-semibold">{stats.total}</span></span>
+        <span className="text-muted-foreground">Active: <span className="text-success font-semibold">{stats.active}</span></span>
+        <span className="text-muted-foreground">Idle: <span className="text-warning font-semibold">{stats.idle}</span></span>
+        <span className="text-muted-foreground">Completed: <span className="text-chart-2 font-semibold">{stats.completed}</span></span>
+        <span className="text-muted-foreground">Error: <span className="text-destructive font-semibold">{stats.error}</span></span>
+        <span className="text-muted-foreground">Success Rate: <span className="text-foreground font-semibold">{stats.successRate}%</span></span>
+        <span className="text-muted-foreground">Avg Time: <span className="text-foreground font-semibold">{stats.avgProcessingTime}</span></span>
       </div>
 
       {/* Agent Cards */}
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">Loading agents...</div>
+      ) : agents.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">No agents found</div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {mockAgents.map((agent) => (
+        {agents.map((agent) => (
           <Card
             key={agent.id}
             className={`bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${
-              agent.status === "error" ? "border-destructive/30" : ""
+              agent.status === "failed" ? "border-destructive/30" : ""
             }`}
             onClick={() => setSelectedAgent(agent)}
           >
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono font-semibold">{agent.id}</span>
-                  <StatusBadge status={agent.status} />
+                  <span className="text-xs font-mono font-semibold truncate max-w-[200px]" title={agent.id}>{agent.id.slice(0, 8)}...</span>
+                  <StatusBadge status={getStatusBadgeStatus(agent.status)} />
                 </div>
                 <div className="flex items-center gap-1">
-                  {agent.status === "active" && (
+                  {agent.status === "processing" && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setSelectedAgent(agent) }}>
                       <Eye className="h-3.5 w-3.5" />
                     </Button>
                   )}
-                  {agent.status === "error" && (
+                  {agent.status === "failed" && (
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-primary">
                       <RotateCcw className="h-3.5 w-3.5" />
                     </Button>
@@ -75,53 +152,56 @@ export function AgentsScreen() {
                 </div>
               </div>
 
-              {agent.status === "active" && (
-                <>
-                  <div className="mb-2">
-                    <p className="text-sm">
-                      <span className="text-muted-foreground">Current: </span>
-                      <span className="font-medium">{agent.currentJob}</span>
-                      <span className="text-muted-foreground"> ({agent.currentUser})</span>
-                    </p>
-                  </div>
+              <div className="mb-3">
+                <p className="text-sm">
+                  <span className="text-muted-foreground">User: </span>
+                  <span className="font-medium">{agent.firstName} {agent.lastName}</span>
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Job: </span>
+                  <span className="font-medium">{agent.jobTitle}</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{agent.companyName}</p>
+              </div>
+
+              {agent.status === "processing" && (
+                <div className="mb-3">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] text-muted-foreground">Step {agent.progressStep}/{agent.totalSteps}</span>
-                    <span className="text-[11px] text-muted-foreground">{Math.round((agent.progressStep / agent.totalSteps) * 100)}%</span>
+                    <span className="text-[11px] text-muted-foreground">Processing...</span>
+                    <span className="text-[11px] text-muted-foreground">{agent.duration}</span>
                   </div>
-                  <Progress value={(agent.progressStep / agent.totalSteps) * 100} className="h-1.5 mb-3" />
-                </>
-              )}
-
-              {agent.status === "idle" && (
-                <div className="mb-3">
-                  <p className="text-sm text-muted-foreground">
-                    Last: <span className="text-foreground">{agent.lastJob}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Idle for {agent.idleTime}</p>
+                  <Progress value={50} className="h-1.5" />
                 </div>
               )}
 
-              {agent.status === "error" && (
+              {agent.status === "pending" && (
                 <div className="mb-3">
-                  <p className="text-sm text-muted-foreground">
-                    Failed: <span className="text-foreground">{agent.lastJob}</span>
-                  </p>
-                  <p className="text-xs text-destructive mt-1">{agent.lastError}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Retries: {agent.retryCount}/{agent.maxRetries} exhausted</p>
+                  <p className="text-xs text-muted-foreground">Waiting in queue for {agent.duration}</p>
                 </div>
               )}
 
-              {/* Resource Usage */}
+              {agent.status === "completed" && (
+                <div className="mb-3">
+                  <p className="text-xs text-success">✓ Application completed in {agent.duration}</p>
+                </div>
+              )}
+
+              {agent.status === "failed" && (
+                <div className="mb-3">
+                  <p className="text-xs text-destructive">✗ Application failed after {agent.duration}</p>
+                </div>
+              )}
+
               <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1"><Cpu className="h-3 w-3" /> {agent.cpu}%</span>
-                <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {agent.ram}</span>
-                <span className="flex items-center gap-1"><Wifi className="h-3 w-3" /> {agent.network}</span>
-                {agent.status === "active" && <span className="ml-auto">{agent.runtime}</span>}
+                <span className="flex items-center gap-1" title={agent.location}><Server className="h-3 w-3" /> {agent.location.split(',')[0]}</span>
+                <span className="flex items-center gap-1" title={agent.email}><Wifi className="h-3 w-3" /> {agent.email.split('@')[0]}</span>
+                <span className="ml-auto">{new Date(agent.createdAt).toLocaleTimeString()}</span>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+      )}
 
       {/* Agent Detail / Live View Modal */}
       <Dialog open={!!selectedAgent} onOpenChange={() => setSelectedAgent(null)}>
@@ -131,13 +211,13 @@ export function AgentsScreen() {
               <DialogHeader>
                 <div className="flex items-center gap-2">
                   <DialogTitle className="text-lg font-mono">{selectedAgent.id}</DialogTitle>
-                  <StatusBadge status={selectedAgent.status} />
+                  <StatusBadge status={getStatusBadgeStatus(selectedAgent.status)} />
                 </div>
               </DialogHeader>
 
               <div className="flex flex-col gap-5 mt-2">
                 {/* Live View Placeholder */}
-                {selectedAgent.status === "active" && (
+                {selectedAgent.status === "processing" && (
                   <div className="rounded-lg border border-border bg-background overflow-hidden">
                     <div className="flex items-center gap-2 px-3 py-2 bg-accent/50 border-b border-border">
                       <div className="flex gap-1">
@@ -149,31 +229,54 @@ export function AgentsScreen() {
                     </div>
                     <div className="p-6 flex flex-col items-center justify-center h-48 text-muted-foreground">
                       <Monitor className="h-10 w-10 mb-2 text-primary/30" />
-                      <p className="text-sm">VNC Stream Preview</p>
-                      <p className="text-xs text-muted-foreground mt-1">Currently processing: {selectedAgent.currentJob} ({selectedAgent.currentUser})</p>
+                      <p className="text-sm">Live Application View</p>
+                      <p className="text-xs text-muted-foreground mt-1">Processing: {selectedAgent.jobTitle} at {selectedAgent.companyName}</p>
+                      <p className="text-xs text-muted-foreground">User: {selectedAgent.firstName} {selectedAgent.lastName}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Agent Details */}
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Agent Details</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Application Details</h3>
                   <div className="grid grid-cols-2 gap-y-2 text-sm">
-                    <span className="text-muted-foreground">Server</span>
-                    <span className="font-mono text-xs">{selectedAgent.server}</span>
-                    <span className="text-muted-foreground">Browser</span>
-                    <span className="font-mono text-xs">{selectedAgent.browser}</span>
-                    <span className="text-muted-foreground">CPU Usage</span>
-                    <span className="font-medium">{selectedAgent.cpu}%</span>
-                    <span className="text-muted-foreground">Memory</span>
-                    <span className="font-medium">{selectedAgent.ram}</span>
-                    <span className="text-muted-foreground">Network</span>
-                    <span className="font-medium">{selectedAgent.network}</span>
+                    <span className="text-muted-foreground">User</span>
+                    <span className="font-medium">{selectedAgent.firstName} {selectedAgent.lastName}</span>
+                    <span className="text-muted-foreground">Email</span>
+                    <span className="text-xs">{selectedAgent.email}</span>
+                    <span className="text-muted-foreground">Phone</span>
+                    <span className="text-xs">{selectedAgent.phone}</span>
+                    <span className="text-muted-foreground">Location</span>
+                    <span className="text-xs">{selectedAgent.location}</span>
+                    <span className="text-muted-foreground">Company</span>
+                    <span className="font-medium">{selectedAgent.companyName}</span>
+                    <span className="text-muted-foreground">Job Title</span>
+                    <span className="font-medium">{selectedAgent.jobTitle}</span>
+                    <span className="text-muted-foreground">Job URL</span>
+                    <a href={selectedAgent.jobUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">{selectedAgent.jobUrl}</a>
+                    <span className="text-muted-foreground">Resume</span>
+                    <a href={selectedAgent.resumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">View Resume</a>
+                    <span className="text-muted-foreground">Duration</span>
+                    <span className="font-medium">{selectedAgent.duration}</span>
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="text-xs">{new Date(selectedAgent.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
 
+                {/* Skills */}
+                {selectedAgent.skills && selectedAgent.skills.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Skills</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedAgent.skills.slice(0, 10).map((skill, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">{skill}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Simulated Logs */}
-                {selectedAgent.status === "active" && (
+                {selectedAgent.status === "processing" && (
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Real-time Logs</h3>
                     <div className="rounded-lg border border-border bg-background p-3 font-mono text-xs flex flex-col gap-1">
@@ -188,7 +291,7 @@ export function AgentsScreen() {
 
                 {/* Controls */}
                 <div className="flex items-center gap-2 pt-2 border-t border-border">
-                  {selectedAgent.status === "active" && (
+                  {selectedAgent.status === "processing" && (
                     <>
                       <Button size="sm" variant="outline" className="text-xs gap-1.5">
                         <Pause className="h-3 w-3" /> Pause
@@ -198,18 +301,18 @@ export function AgentsScreen() {
                       </Button>
                     </>
                   )}
-                  {selectedAgent.status === "idle" && (
+                  {selectedAgent.status === "pending" && (
                     <Button size="sm" variant="outline" className="text-xs gap-1.5">
-                      <Play className="h-3 w-3" /> Assign Job
+                      <Play className="h-3 w-3" /> Start Processing
                     </Button>
                   )}
-                  {selectedAgent.status === "error" && (
+                  {selectedAgent.status === "failed" && (
                     <Button size="sm" className="text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
-                      <RotateCcw className="h-3 w-3" /> Restart Agent
+                      <RotateCcw className="h-3 w-3" /> Retry Application
                     </Button>
                   )}
                   <Button size="sm" variant="outline" className="text-xs gap-1.5 ml-auto">
-                    <ScrollText className="h-3 w-3" /> Full Logs
+                    <ScrollText className="h-3 w-3" /> View Logs
                   </Button>
                 </div>
               </div>
@@ -217,6 +320,11 @@ export function AgentsScreen() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dialogs */}
+      <ConfigureDialog open={configureOpen} onOpenChange={setConfigureOpen} />
+      <PerformanceDialog open={performanceOpen} onOpenChange={setPerformanceOpen} />
+      <AddAgentDialog open={addAgentOpen} onOpenChange={setAddAgentOpen} onAgentAdded={fetchAgents} />
     </div>
   )
 }

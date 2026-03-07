@@ -96,29 +96,39 @@ export function AnalyticsScreen() {
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId)
 
-  // Compute "Right Swipes Over the Week" from real job data
+  // Compute "Right Swipes Over the Week" from real job timestamps
   const rightSwipesOverWeek = useMemo(() => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    const totalSwipes = filteredJobs.reduce((sum, j) => sum + (j.rightSwipes ?? 0), 0)
-    // Distribute swipes across days with realistic weekday-heavy pattern
-    const weights = [0.18, 0.19, 0.17, 0.2, 0.15, 0.06, 0.05]
-    return days.map((day, i) => ({
-      day,
-      count: Math.round(totalSwipes * weights[i]),
-    }))
+    const counts = new Array(7).fill(0)
+    
+    filteredJobs.forEach(job => {
+      if (job.createdAt) {
+        const date = new Date(job.createdAt)
+        const dayIndex = (date.getDay() + 6) % 7 // Convert Sunday=0 to Monday=0
+        counts[dayIndex] += job.rightSwipes || 0
+      }
+    })
+    
+    return days.map((day, i) => ({ day, count: counts[i] }))
   }, [filteredJobs])
 
-  // Compute "Peak Hours" from real data - when right swipes happen most
+  // Compute "Peak Hours" from real application timestamps
   const peakHoursData = useMemo(() => {
     const hours = ["6am", "7am", "8am", "9am", "10am", "11am", "12pm", "1pm", "2pm", "3pm", "4pm", "5pm"]
-    const totalSwipes = filteredJobs.reduce((sum, j) => sum + (j.rightSwipes ?? 0), 0)
-    // Realistic distribution: peak at 10am, secondary peak at 2pm
-    const weights = [0.02, 0.05, 0.08, 0.14, 0.16, 0.13, 0.09, 0.1, 0.11, 0.06, 0.04, 0.02]
-    return hours.map((hour, i) => ({
-      hour,
-      count: Math.round(totalSwipes * weights[i]),
-    }))
-  }, [filteredJobs])
+    const counts = new Array(12).fill(0)
+    
+    filteredApplications.forEach(app => {
+      if (app.createdAt) {
+        const date = new Date(app.createdAt)
+        const hour = date.getHours()
+        if (hour >= 6 && hour <= 17) {
+          counts[hour - 6]++
+        }
+      }
+    })
+    
+    return hours.map((hour, i) => ({ hour, count: counts[i] }))
+  }, [filteredApplications])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
