@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
         skills: agent.skills,
         experience: agent.experience,
         education: agent.education,
+        liveUrl: agent.live_url,
+        recordingUrl: agent.recording_url,
       }
     }) || []
 
