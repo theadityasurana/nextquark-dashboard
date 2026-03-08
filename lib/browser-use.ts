@@ -101,8 +101,17 @@ export async function fillJobApplicationWithStreaming(
     const portal = detectPortal(portalUrl)
     const portalType = portal?.name || 'Unknown'
     
+    const captchaSolverKey = process.env.CAPTCHA_SOLVER_API_KEY
+    
     const client = new BrowserUse({
       apiKey,
+      ...(captchaSolverKey && {
+        captchaSolver: {
+          enabled: true,
+          provider: "2captcha",
+          apiKey: captchaSolverKey,
+        },
+      }),
     })
 
     console.log(`Starting Browser Use task for: ${userData.name}${portal ? ` [${portal.name} detected]` : " [Unknown portal]"}`)

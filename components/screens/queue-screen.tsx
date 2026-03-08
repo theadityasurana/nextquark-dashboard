@@ -308,7 +308,7 @@ export function QueueScreen() {
       </div>
 
       {/* Start All Button & Auto-Start Toggle - Only show when on pending tab */}
-      {activeTab === "pending" && pending.length > 0 && (
+      {activeTab === "pending" && (
         <div className="flex justify-end gap-2">
           <Button
             onClick={() => setAutoStart(!autoStart)}
@@ -318,28 +318,30 @@ export function QueueScreen() {
             <Power className={`h-4 w-4 ${autoStart ? 'text-green-500' : ''}`} />
             Auto Start: {autoStart ? 'ON' : 'OFF'}
           </Button>
-          <Button
-            onClick={async () => {
-              setIsStartingAll(true)
-              for (const app of pending) {
-                startLiveStream(app)
-                // Small delay to avoid overwhelming the system
-                await new Promise(resolve => setTimeout(resolve, 100))
-              }
-              setIsStartingAll(false)
-            }}
-            disabled={isStartingAll}
-            className="gap-2"
-          >
-            {isStartingAll ? (
-              <>
-                <Loader className="h-4 w-4 animate-spin" />
-                Starting All...
-              </>
-            ) : (
-              `Start All (${pending.length})`
-            )}
-          </Button>
+          {pending.length > 0 && (
+            <Button
+              onClick={async () => {
+                setIsStartingAll(true)
+                for (const app of pending) {
+                  startLiveStream(app)
+                  // Small delay to avoid overwhelming the system
+                  await new Promise(resolve => setTimeout(resolve, 100))
+                }
+                setIsStartingAll(false)
+              }}
+              disabled={isStartingAll}
+              className="gap-2"
+            >
+              {isStartingAll ? (
+                <>
+                  <Loader className="h-4 w-4 animate-spin" />
+                  Starting All...
+                </>
+              ) : (
+                `Start All (${pending.length})`
+              )}
+            </Button>
+          )}
         </div>
       )}
 
