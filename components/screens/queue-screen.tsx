@@ -15,7 +15,7 @@ import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs } from "@/lib/logs-context"
 import {
-  Search, Eye, Trash2, Loader
+  Search, Eye, Trash2, Loader, Power
 } from "lucide-react"
 
 export function QueueScreen() {
@@ -28,6 +28,8 @@ export function QueueScreen() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
+  const [autoStart, setAutoStart] = useState(false)
+  const prevPendingIdsRef = useRef<Set<string>>(new Set())
   const { addLog } = useLogs()
 
   const startLiveStream = async (app: LiveApplicationQueue) => {
@@ -236,6 +238,24 @@ export function QueueScreen() {
           const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing').length
           
           setStats({ totalApps, successful, failed, inProgress })
+          
+          // Auto-start new pending applications
+          if (autoStart) {
+            const currentPending = data.filter((app: LiveApplicationQueue) => app.status === 'pending')
+            const currentPendingIds = new Set(currentPending.map((app: LiveApplicationQueue) => app.id))
+            
+            // Find new pending applications
+            const newPendingApps = currentPending.filter(
+              (app: LiveApplicationQueue) => !prevPendingIdsRef.current.has(app.id)
+            )
+            
+            // Start live stream for new pending applications
+            newPendingApps.forEach((app: LiveApplicationQueue) => {
+              startLiveStream(app)
+            })
+            
+            prevPendingIdsRef.current = currentPendingIds
+          }
         }
       } catch (err) {
         console.error('Failed to fetch applications:', err)
@@ -245,7 +265,7 @@ export function QueueScreen() {
     fetchApplications()
     const interval = setInterval(fetchApplications, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, [autoStart])
 
   const handleDelete = async (id: string) => {
     try {
@@ -287,9 +307,17 @@ export function QueueScreen() {
         <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
       </div>
 
-      {/* Start All Button - Only show when on pending tab */}
+      {/* Start All Button & Auto-Start Toggle - Only show when on pending tab */}
       {activeTab === "pending" && pending.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button
+            onClick={() => setAutoStart(!autoStart)}
+            variant={autoStart ? "default" : "outline"}
+            className="gap-2"
+          >
+            <Power className={`h-4 w-4 ${autoStart ? 'text-green-500' : ''}`} />
+            Auto Start: {autoStart ? 'ON' : 'OFF'}
+          </Button>
           <Button
             onClick={async () => {
               setIsStartingAll(true)
