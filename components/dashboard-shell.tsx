@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   LogOut,
   Menu,
+  Mail,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +34,7 @@ const navItems = [
   { label: "Jobs", href: "/jobs", icon: Briefcase },
   { label: "AI Agents", href: "/agents", icon: Bot },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "Email Manager", href: "/emails", icon: Mail },
   { label: "Logs", href: "/logs", icon: ScrollText },
 ]
 
