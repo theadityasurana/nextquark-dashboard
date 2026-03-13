@@ -388,7 +388,7 @@ export function AnalyticsScreen() {
               <CardTitle className="text-sm font-medium">Right Swipes by Company</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2">
                 {companyBreakdown.map((entry, i) => {
                   const maxSwipes = companyBreakdown[0]?.rightSwipes || 1
                   const width = (entry.rightSwipes / maxSwipes) * 100
@@ -416,7 +416,7 @@ export function AnalyticsScreen() {
               <CardTitle className="text-sm font-medium">Jobs Listed per Company</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2">
                 {companyBreakdown.map((entry, i) => {
                   const maxJobs = Math.max(...companyBreakdown.map((e) => e.jobs))
                   const width = (entry.jobs / maxJobs) * 100

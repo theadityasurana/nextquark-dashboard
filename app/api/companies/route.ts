@@ -20,7 +20,22 @@ export async function GET() {
     return NextResponse.json([])
   }
 
-  return NextResponse.json(data || [])
+  // Get actual job counts for each company
+  const companiesWithJobCounts = await Promise.all(
+    (data || []).map(async (company) => {
+      const { count } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", company.id)
+      
+      return {
+        ...company,
+        total_jobs: count || 0
+      }
+    })
+  )
+
+  return NextResponse.json(companiesWithJobCounts)
 }
 
 export async function POST(request: NextRequest) {

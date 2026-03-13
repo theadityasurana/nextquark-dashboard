@@ -22,6 +22,11 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const today = new Date().toISOString().split('T')[0]
 
+    // Get total jobs count
+    const { count: totalJobsCount } = await supabase
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+
     // Get all applications
     const { data: allApps } = await supabase
       .from('live_application_queue')
@@ -261,6 +266,7 @@ export async function GET(request: Request) {
         completedAll,
         completedToday
       },
+      totalJobs: totalJobsCount || 0,
       recentApps,
       applicationsChart,
       topCompanies,

@@ -10,18 +10,34 @@ function getAdminClient() {
 
 export async function GET() {
   const supabase = getAdminClient()
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .order("created_at", { ascending: false })
+  
+  // Remove the default 1000 row limit by fetching all jobs
+  let allJobs: any[] = []
+  let from = 0
+  const batchSize = 1000
+  
+  while (true) {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + batchSize - 1)
 
-  if (error) {
-    console.log("[v0] GET /api/jobs error:", error.message)
-    // Return empty array if table doesn't exist yet
-    return NextResponse.json([])
+    if (error) {
+      console.log("[v0] GET /api/jobs error:", error.message)
+      return NextResponse.json([])
+    }
+
+    if (!data || data.length === 0) break
+    
+    allJobs = allJobs.concat(data)
+    
+    if (data.length < batchSize) break
+    
+    from += batchSize
   }
 
-  return NextResponse.json(data || [])
+  return NextResponse.json(allJobs)
 }
 
 export async function POST(request: NextRequest) {

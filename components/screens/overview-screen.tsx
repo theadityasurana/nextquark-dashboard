@@ -77,6 +77,22 @@ export function OverviewScreen() {
         ))}
       </div>
 
+      {/* Total Jobs Card */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Briefcase className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">Total Jobs Listed</p>
+                <p className="text-[11px] text-muted-foreground">Across all companies</p>
+              </div>
+            </div>
+            <span className="text-2xl font-bold">{data.totalJobs?.toLocaleString() || 0}</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Live Stream */}
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">

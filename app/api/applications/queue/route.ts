@@ -10,95 +10,97 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
     const userId = searchParams.get("userId")
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = parseInt(searchParams.get("limit") || "1000")
     const offset = parseInt(searchParams.get("offset") || "0")
 
-    let query = supabase
-      .from("applications")
-      .select(
-        `
-        id,
-        user_id,
-        job_id,
-        company_id,
-        status,
-        progress_step,
-        total_steps,
-        step_description,
-        started_at,
-        completed_at,
-        error_message,
-        created_at,
-        users(id, name, email, phone, location),
-        jobs(id, title, location, type, salary_range, company_name, portal_url),
-        companies(id, name, logo_initial)
-      `,
-        { count: "exact" }
-      )
+    // Fetch all applications without limit by using pagination
+    let allApplications: any[] = []
+    let currentOffset = 0
+    const batchSize = 1000
+    
+    while (true) {
+      let query = supabase
+        .from("live_application_queue")
+        .select(
+          `
+          id,
+          user_id,
+          job_id,
+          company_id,
+          company_name,
+          job_title,
+          status,
+          first_name,
+          last_name,
+          email,
+          phone,
+          location,
+          started_at,
+          completed_at,
+          created_at
+        `,
+          { count: "exact" }
+        )
 
-    if (status) {
-      query = query.eq("status", status)
+      if (status) {
+        query = query.eq("status", status)
+      }
+
+      if (userId) {
+        query = query.eq("user_id", userId)
+      }
+
+      const { data, error, count } = await query
+        .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + batchSize - 1)
+
+      if (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        )
+      }
+
+      if (!data || data.length === 0) break
+      
+      allApplications = allApplications.concat(data)
+      
+      if (data.length < batchSize) break
+      
+      currentOffset += batchSize
     }
 
-    if (userId) {
-      query = query.eq("user_id", userId)
-    }
-
-    const { data, error, count } = await query
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    if (error) {
-      return Response.json(
-        { error: error.message },
-        { status: 500 }
-      )
-    }
-
-    const applications = data?.map((app: any) => ({
+    const applications = allApplications.map((app: any) => ({
       id: app.id,
       userId: app.user_id,
       jobId: app.job_id,
       companyId: app.company_id,
       status: app.status,
-      progressStep: app.progress_step || 0,
-      totalSteps: app.total_steps || 5,
-      stepDescription: app.step_description || "",
-      errorMessage: app.error_message,
       startedAt: app.started_at,
       completedAt: app.completed_at,
       createdAt: app.created_at,
-      user: app.users ? {
-        id: app.users.id,
-        name: app.users.name,
-        email: app.users.email,
-        phone: app.users.phone,
-        location: app.users.location,
-      } : null,
-      job: app.jobs ? {
-        id: app.jobs.id,
-        title: app.jobs.title,
-        location: app.jobs.location,
-        type: app.jobs.type,
-        salaryRange: app.jobs.salary_range,
-        companyName: app.jobs.company_name,
-        portalUrl: app.jobs.portal_url,
-      } : null,
-      company: app.companies ? {
-        id: app.companies.id,
-        name: app.companies.name,
-        logoInitial: app.companies.logo_initial,
-      } : null,
+      user: {
+        name: `${app.first_name} ${app.last_name}`,
+        email: app.email,
+        phone: app.phone,
+        location: app.location,
+      },
+      job: {
+        title: app.job_title,
+      },
+      company: {
+        name: app.company_name,
+      },
     }))
 
     return Response.json({
       success: true,
       data: applications,
       pagination: {
-        total: count,
-        limit,
-        offset,
-        hasMore: offset + limit < (count || 0),
+        total: allApplications.length,
+        limit: allApplications.length,
+        offset: 0,
+        hasMore: false,
       },
     })
   } catch (error) {
