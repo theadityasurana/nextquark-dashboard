@@ -1,4 +1,4 @@
-import { fillJobApplicationWithStreaming } from "@/lib/browser-use"
+import { fillJobApplicationWithStreaming } from "@/lib/skyvern"
 import { mockUsers, mockJobs } from "@/lib/mock-data"
 import { createClient } from '@/lib/supabase/server'
 
@@ -17,12 +17,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Use provided applicationData or fallback to mock data
     let userData = applicationData
     let jobUrl = applicationData?.job_url
     let userEmail = applicationData?.email || ""
 
-    // Fetch user email from profiles table if not in applicationData
     if (userData && !userEmail) {
       try {
         const supabase = await createClient()
@@ -42,106 +40,75 @@ export async function POST(request: Request) {
     if (!userData) {
       userData = mockUsers.find(u => u.id === userId)
       if (!userData) {
-        return Response.json(
-          { error: "User not found" },
-          { status: 404 }
-        )
+        return Response.json({ error: "User not found" }, { status: 404 })
       }
     }
 
     if (!jobUrl) {
       const jobData = mockJobs.find(j => j.id === jobId)
       if (!jobData) {
-        return Response.json(
-          { error: "Job not found" },
-          { status: 404 }
-        )
+        return Response.json({ error: "Job not found" }, { status: 404 })
       }
       jobUrl = jobData.portalUrl
     }
 
-    // Format experience from JSONB array
     const experienceText = userData.experience?.map((exp: any) => 
       `${exp.title} at ${exp.company} (${exp.startDate} - ${exp.isCurrent ? 'Present' : exp.endDate}) - ${exp.description}`
     ).join('\n') || ""
 
-    // Format education from JSONB array
     const educationText = userData.education?.map((edu: any) => 
       `${edu.degree} in ${edu.field || edu.course} from ${edu.institution || edu.university} (${edu.startDate} - ${edu.endDate})`
     ).join('\n') || ""
 
-    // Format certifications
     const certificationsText = userData.certifications?.map((cert: any) => 
       `${cert.name} - ${cert.issuingOrganization}`
     ).join('\n') || ""
 
-    // Format achievements
     const achievementsText = userData.achievements?.map((ach: any) => 
       `${ach.title} (${ach.date}) - ${ach.issuer}: ${ach.description}`
     ).join('\n') || ""
 
-    // Get resume URL from Supabase storage
     const resumeUrl = userData.resume_url ? 
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${userData.resume_url}` : ""
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${userId}/${userData.resume_url}` : ""
 
     const formData = {
-      // Basic Info
       name: userData.name || `${userData.first_name} ${userData.last_name}` || "",
       firstName: userData.first_name || "",
       lastName: userData.last_name || "",
       email: userEmail || userData.email || "",
       phone: userData.phone || "",
       location: userData.location || "",
-      
-      // Demographics
       gender: userData.gender || "",
       ethnicity: userData.ethnicity || "",
       disabilityStatus: userData.disability_status || "",
       veteranStatus: userData.veteran_status || "",
       workAuthorization: userData.work_authorization_status || "",
-      
-      // Professional Info
       headline: userData.headline || "",
       bio: userData.bio || "",
-      
-      // URLs
       linkedinUrl: userData.linkedin_url || "",
       githubUrl: userData.github_url || "",
-      
-      // Documents
       resume: resumeUrl,
       coverLetter: userData.cover_letter || "",
-      
-      // Detailed Info
       experience: experienceText,
       education: educationText,
       certifications: certificationsText,
       achievements: achievementsText,
-      
-      // Skills
       skills: userData.top_skills || userData.skills || [],
-      
-      // Preferences
       jobPreferences: userData.job_preferences || [],
       workModePreferences: userData.work_mode_preferences || [],
-      
-      // Salary
       salaryCurrency: userData.salary_currency || "",
       salaryMin: userData.salary_min || null,
       salaryMax: userData.salary_max || null,
     }
 
-    console.log('FormData being sent to browser-use:', JSON.stringify(formData, null, 2))
-    console.log('Resume URL:', resumeUrl)
-    console.log('User Email:', userEmail)
+    console.log('FormData being sent to Skyvern:', JSON.stringify(formData, null, 2))
 
     if (stream) {
       return new Response(
         new ReadableStream({
           async start(controller) {
+            const encoder = new TextEncoder()
             try {
-              const encoder = new TextEncoder()
-
               const onStep = (step: any) => {
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify(step)}\n\n`)
@@ -152,7 +119,7 @@ export async function POST(request: Request) {
                 jobUrl,
                 formData,
                 onStep,
-                userId // Pass applicationId for metrics tracking
+                userId
               )
 
               controller.enqueue(
@@ -162,8 +129,8 @@ export async function POST(request: Request) {
                     success: result.success,
                     result: result.result,
                     steps: result.steps,
-                    liveUrl: result.liveUrl,
                     recordingUrl: result.recordingUrl,
+                    taskId: result.taskId,
                   })}\n\n`
                 )
               )
@@ -196,7 +163,7 @@ export async function POST(request: Request) {
       jobUrl,
       formData,
       undefined,
-      userId // Pass applicationId for metrics tracking
+      userId
     )
 
     if (result.success) {
@@ -208,6 +175,7 @@ export async function POST(request: Request) {
         company: applicationData?.company_name || "Unknown",
         result: result.result,
         steps: result.steps,
+        recordingUrl: result.recordingUrl,
       })
     } else {
       return Response.json(

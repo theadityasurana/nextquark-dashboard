@@ -66,7 +66,7 @@ export interface LiveApplicationQueue {
   // Application status
   status: 'pending' | 'processing' | 'completed' | 'failed'
   
-  // Live stream URL
+  // Live stream URL (deprecated — Skyvern uses recordings instead)
   live_url?: string | null
   
   // Recording URL

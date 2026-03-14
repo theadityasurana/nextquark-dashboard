@@ -1,4 +1,4 @@
-import { fillJobApplicationWithStreaming } from "@/lib/browser-use"
+import { fillJobApplicationWithStreaming } from "@/lib/skyvern"
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
@@ -11,7 +11,6 @@ export async function POST(request: Request) {
 
     const supabase = await createClient()
     
-    // Fetch application data
     const { data: app, error } = await supabase
       .from('live_application_queue')
       .select('*')
@@ -22,7 +21,6 @@ export async function POST(request: Request) {
       return Response.json({ error: "Application not found" }, { status: 404 })
     }
 
-    // Update status to processing
     await supabase
       .from('live_application_queue')
       .update({ 
@@ -31,9 +29,24 @@ export async function POST(request: Request) {
       })
       .eq('id', applicationId)
 
-    // Get resume URL from Supabase storage
     const resumeUrl = app.resume_url ? 
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${app.resume_url}` : ""
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${app.user_id}/${app.resume_url}` : ""
+
+    const experienceText = app.experience?.map((exp: any) => 
+      `${exp.title} at ${exp.company} (${exp.startDate} - ${exp.isCurrent ? 'Present' : exp.endDate}) - ${exp.description}`
+    ).join('\n') || ""
+
+    const educationText = app.education?.map((edu: any) => 
+      `${edu.degree} in ${edu.field || edu.course} from ${edu.institution || edu.university} (${edu.startDate} - ${edu.endDate})`
+    ).join('\n') || ""
+
+    const certificationsText = app.certifications?.map((cert: any) => 
+      `${cert.name} - ${cert.issuingOrganization}`
+    ).join('\n') || ""
+
+    const achievementsText = app.achievements?.map((ach: any) => 
+      `${ach.title} (${ach.date}) - ${ach.issuer}: ${ach.description}`
+    ).join('\n') || ""
 
     const formData = {
       name: `${app.first_name} ${app.last_name}`,
@@ -53,11 +66,11 @@ export async function POST(request: Request) {
       githubUrl: app.github_url,
       resume: resumeUrl,
       coverLetter: app.cover_letter,
-      experience: app.experience,
-      education: app.education,
-      certifications: app.certifications,
-      achievements: app.achievements,
-      skills: app.skills || [],
+      experience: experienceText,
+      education: educationText,
+      certifications: certificationsText,
+      achievements: achievementsText,
+      skills: app.top_skills || app.skills || [],
       jobPreferences: app.job_preferences || [],
       workModePreferences: app.work_mode_preferences || [],
       salaryCurrency: app.salary_currency,
@@ -86,14 +99,14 @@ export async function POST(request: Request) {
 
               const processingTime = Date.now() - startTime
 
-              // Update application with results
               await supabase
                 .from('live_application_queue')
                 .update({
                   status: result.success ? 'completed' : 'failed',
                   completed_at: new Date().toISOString(),
                   error_message: result.error || null,
-                  processing_time_ms: processingTime
+                  processing_time_ms: processingTime,
+                  recording_url: result.recordingUrl || null,
                 })
                 .eq('id', applicationId)
 
@@ -103,8 +116,8 @@ export async function POST(request: Request) {
                   success: result.success,
                   result: result.result,
                   steps: result.steps,
-                  liveUrl: result.liveUrl,
                   recordingUrl: result.recordingUrl,
+                  taskId: result.taskId,
                 })}\n\n`)
               )
 
@@ -158,7 +171,8 @@ export async function POST(request: Request) {
         status: result.success ? 'completed' : 'failed',
         completed_at: new Date().toISOString(),
         error_message: result.error || null,
-        processing_time_ms: processingTime
+        processing_time_ms: processingTime,
+        recording_url: result.recordingUrl || null,
       })
       .eq('id', applicationId)
 
@@ -167,8 +181,8 @@ export async function POST(request: Request) {
       message: result.success ? "Application submitted successfully" : "Application failed",
       result: result.result,
       steps: result.steps,
-      liveUrl: result.liveUrl,
       recordingUrl: result.recordingUrl,
+      taskId: result.taskId,
     })
   } catch (error) {
     console.error("Auto-apply queue error:", error)

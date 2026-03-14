@@ -14,17 +14,17 @@ import {
 interface ApplicationDetailsProps {
   application: LiveApplicationQueue
   stats: ApplicationStats
-  onStartLiveStream?: () => void
+  onStartApplication?: () => void
   isStreaming?: boolean
-  liveStreamUrl?: string | null
+  recordingUrl?: string | null
 }
 
 export function ApplicationDetails({ 
   application, 
   stats, 
-  onStartLiveStream,
+  onStartApplication,
   isStreaming = false,
-  liveStreamUrl = null
+  recordingUrl = null
 }: ApplicationDetailsProps) {
   const fullName = `${application.first_name} ${application.last_name}`
   const { logs } = useLogs()
@@ -55,8 +55,7 @@ export function ApplicationDetails({
   const uniqueLogs = Array.from(new Map(allLogs.map(log => [log.id, log])).values())
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   
-  // Debug logging
-  console.log('ApplicationDetails - liveStreamUrl:', liveStreamUrl)
+
 
   return (
     <div className="flex flex-col">
@@ -81,65 +80,41 @@ export function ApplicationDetails({
           <Button
             size="sm"
             className="text-xs gap-1.5"
-            onClick={onStartLiveStream}
+            onClick={onStartApplication}
             disabled={isStreaming}
           >
-            {isStreaming ? 'Streaming...' : 'Start Live Stream'}
+            {isStreaming ? 'Processing...' : 'Start Application'}
           </Button>
         </div>
       </div>
 
-      {/* Live Stream Viewer */}
-      {liveStreamUrl && (
-        <div className="px-6 py-5 border-b border-border">
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-primary">Live Browser Session</h4>
-              <Badge variant="secondary" className="text-[10px] animate-pulse">● LIVE</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">URL: {liveStreamUrl}</p>
-            <div className="relative w-full bg-black rounded-lg" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                src={liveStreamUrl}
-                className="absolute top-0 left-0 w-full h-full rounded-lg"
-                allow="clipboard-read; clipboard-write; autoplay"
-                title="Live Browser Session"
-                onLoad={() => console.log('iframe loaded successfully')}
-                onError={(e) => console.error('iframe error:', e)}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">Viewing browser automation in real-time</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Recorded Video Viewer */}
-      {application.recording_url && (
+      {/* Task Recording Viewer */}
+      {(recordingUrl || application.recording_url) && (
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-green-600">Recorded Session</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-green-600">Task Recording</h4>
               <Badge variant="outline" className="text-[10px]">● SAVED</Badge>
             </div>
-            <p className="text-xs text-muted-foreground mb-2">Recording URL: {application.recording_url}</p>
+            <p className="text-xs text-muted-foreground mb-2">Recording URL: {recordingUrl || application.recording_url}</p>
             <div className="relative w-full bg-black rounded-lg" style={{ paddingBottom: '56.25%' }}>
               <iframe
-                src={application.recording_url}
+                src={recordingUrl || application.recording_url || ""}
                 className="absolute top-0 left-0 w-full h-full rounded-lg"
                 allow="clipboard-read; clipboard-write; autoplay"
-                title="Recorded Browser Session"
+                title="Task Recording"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Playback of the completed application session</p>
+            <p className="text-xs text-muted-foreground mt-2">Playback of the completed Skyvern task</p>
           </div>
         </div>
       )}
       
-      {/* Debug: Show streaming status */}
-      {isStreaming && !liveStreamUrl && (
+      {/* Processing indicator */}
+      {isStreaming && !recordingUrl && !application.recording_url && (
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-            <p className="text-xs text-yellow-600">Waiting for live stream URL... Check console for debug logs</p>
+            <p className="text-xs text-yellow-600">Skyvern task is running... Recording will be available once the task completes. Check logs below for progress.</p>
           </div>
         </div>
       )}

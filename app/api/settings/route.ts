@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { clearCachedApiKey } from "@/lib/skyvern"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -25,22 +26,25 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { browserUseApiKey } = body
+    const { skyvernApiKey } = body
 
-    if (!browserUseApiKey) {
+    if (!skyvernApiKey) {
       return Response.json(
-        { error: "browserUseApiKey is required" },
+        { error: "skyvernApiKey is required" },
         { status: 400 }
       )
     }
 
     const { data, error } = await supabase
       .from("settings")
-      .upsert({ id: 1, browserUseApiKey }, { onConflict: "id" })
+      .upsert({ id: 1, skyvernApiKey }, { onConflict: "id" })
       .select()
       .single()
 
     if (error) throw error
+
+    // Clear cached key so next request uses the new one
+    clearCachedApiKey()
 
     return Response.json({
       success: true,

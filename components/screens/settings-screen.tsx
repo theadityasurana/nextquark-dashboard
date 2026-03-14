@@ -22,8 +22,8 @@ export function SettingsScreen() {
     try {
       const response = await fetch("/api/settings")
       const data = await response.json()
-      if (data.browserUseApiKey) {
-        setApiKey(data.browserUseApiKey)
+      if (data.skyvernApiKey) {
+        setApiKey(data.skyvernApiKey)
       } else {
         const envResponse = await fetch("/api/settings/env-key")
         const envData = await envResponse.json()
@@ -51,7 +51,7 @@ export function SettingsScreen() {
       const response = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ browserUseApiKey: apiKey }),
+        body: JSON.stringify({ skyvernApiKey: apiKey }),
       })
 
       const data = await response.json()
@@ -62,7 +62,7 @@ export function SettingsScreen() {
 
       toast({
         title: "Success",
-        description: "Browser Use API key saved successfully",
+        description: "Skyvern API key saved successfully",
       })
     } catch (error) {
       toast({
@@ -88,9 +88,9 @@ export function SettingsScreen() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Browser Use API Key</CardTitle>
+          <CardTitle>Skyvern API Key</CardTitle>
           <CardDescription>
-            Enter your Browser Use API key. This key will be used for all job application automation.
+            Enter your Skyvern API key. This key will be used for all job application automation.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -107,7 +107,7 @@ export function SettingsScreen() {
                 type={showKey ? "text" : "password"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your Browser Use API key"
+                placeholder="Enter your Skyvern API key"
                 className="flex-1"
               />
               <Button

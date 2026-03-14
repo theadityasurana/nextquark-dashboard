@@ -27,7 +27,7 @@ interface Agent {
   skills?: string[]
   experience?: any
   education?: any
-  liveUrl?: string
+  liveUrl?: string // deprecated — Skyvern uses recordings
   recordingUrl?: string
 }
 
@@ -104,15 +104,8 @@ export function AgentsScreen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName: agent.firstName,
-          lastName: agent.lastName,
-          email: agent.email,
-          phone: agent.phone,
-          location: agent.location,
-          companyName: agent.companyName,
-          jobTitle: agent.jobTitle,
-          jobUrl: agent.jobUrl,
-          resumeUrl: agent.resumeUrl,
+          applicationId: agent.id,
+          stream: false,
         })
       })
       
@@ -316,8 +309,8 @@ export function AgentsScreen() {
               </DialogHeader>
 
               <div className="flex flex-col gap-5 mt-2">
-                {/* Live View */}
-                {selectedAgent.status === "processing" && selectedAgent.liveUrl && (
+                {/* Live View replaced with Recording View */}
+                {selectedAgent.recordingUrl && (
                   <div className="rounded-lg border border-border bg-background overflow-hidden">
                     <div className="flex items-center gap-2 px-3 py-2 bg-accent/50 border-b border-border">
                       <div className="flex gap-1">
@@ -325,13 +318,20 @@ export function AgentsScreen() {
                         <span className="h-2.5 w-2.5 rounded-full bg-warning" />
                         <span className="h-2.5 w-2.5 rounded-full bg-success" />
                       </div>
-                      <span className="text-[11px] text-muted-foreground ml-2">Live Browser View - {selectedAgent.jobTitle}</span>
+                      <span className="text-[11px] text-muted-foreground ml-2">Task Recording - {selectedAgent.jobTitle}</span>
                     </div>
                     <iframe
-                      src={selectedAgent.liveUrl}
+                      src={selectedAgent.recordingUrl}
                       className="w-full h-[400px] bg-background"
-                      title="Live Application View"
+                      title="Task Recording"
                     />
+                  </div>
+                )}
+
+                {/* Processing indicator */}
+                {selectedAgent.status === "processing" && !selectedAgent.recordingUrl && (
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
+                    <p className="text-xs text-yellow-600">Skyvern task is running... Recording will be available once the task completes.</p>
                   </div>
                 )}
 

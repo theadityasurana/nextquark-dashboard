@@ -26,47 +26,42 @@ export function QueueScreen() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [stats, setStats] = useState<ApplicationStats>({ totalApps: 0, successful: 0, failed: 0, inProgress: 0 })
   const [isStreaming, setIsStreaming] = useState(false)
-  const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null)
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
   const prevPendingIdsRef = useRef<Set<string>>(new Set())
   const { addLog } = useLogs()
 
-  const startLiveStream = async (app: LiveApplicationQueue) => {
+  const startApplication = async (app: LiveApplicationQueue) => {
     setIsStreaming(true)
-    setLiveStreamUrl(null)
+    setRecordingUrl(null)
     
-    // Update status to processing
     await fetch('/api/live-queue', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: app.id, status: 'processing' })
     })
     
-    // Update local state
     setApplications(prev => prev.map(a => 
       a.id === app.id ? { ...a, status: 'processing' as const } : a
     ))
     
-    // Add initial log
     addLog({
       id: `log-${Date.now()}-${Math.random()}`,
       timestamp: new Date().toLocaleTimeString(),
       level: "info",
       agentId: app.id,
-      message: `Starting live stream for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`,
+      message: `Starting Skyvern task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`,
       applicationId: app.id,
     })
     
     try {
-      const response = await fetch("/api/auto-apply", {
+      const response = await fetch("/api/auto-apply-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          userId: app.user_id,
-          jobId: app.job_id,
+          applicationId: app.id,
           stream: true,
-          applicationData: app
         }),
       })
 
@@ -91,33 +86,8 @@ export function QueueScreen() {
             try {
               const data = JSON.parse(line.slice(6))
               
-              // Mark as started if we get any valid data
-              if (!hasStarted && (data.liveUrl || data.log || data.status)) {
+              if (!hasStarted && (data.log || data.status)) {
                 hasStarted = true
-              }
-              
-              // Capture live stream URL from session creation or streaming
-              if (data.liveUrl) {
-                console.log('Setting live stream URL:', data.liveUrl)
-                setLiveStreamUrl(data.liveUrl)
-                
-                // Update database with live URL
-                fetch('/api/live-queue', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: app.id, live_url: data.liveUrl })
-                }).catch(err => console.error('Failed to update live URL:', err))
-                
-                if (data.status === 'session_created') {
-                  addLog({
-                    id: `log-${Date.now()}-${Math.random()}`,
-                    timestamp: new Date().toLocaleTimeString(),
-                    level: "info",
-                    agentId: app.id,
-                    message: `Live stream available at: ${data.liveUrl}`,
-                    applicationId: app.id,
-                  })
-                }
               }
               
               if (data.log) {
@@ -140,7 +110,6 @@ export function QueueScreen() {
                   applicationId: app.id,
                 })
                 
-                // Update status to failed
                 await fetch('/api/live-queue', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
@@ -161,10 +130,10 @@ export function QueueScreen() {
                   applicationId: app.id,
                 })
                 
-                // Update status and recording URL
                 const updatePayload: any = { id: app.id, status: 'completed' }
                 if (data.recordingUrl) {
                   updatePayload.recording_url = data.recordingUrl
+                  setRecordingUrl(data.recordingUrl)
                   addLog({
                     id: `log-${Date.now()}-${Math.random()}`,
                     timestamp: new Date().toLocaleTimeString(),
@@ -192,22 +161,20 @@ export function QueueScreen() {
         }
       }
       
-      // If stream ended but never started, mark as failed
       if (!hasStarted) {
-        throw new Error('Stream failed to start')
+        throw new Error('Task failed to start')
       }
     } catch (error) {
-      console.error('Live stream error:', error)
+      console.error('Skyvern task error:', error)
       addLog({
         id: `log-${Date.now()}-${Math.random()}`,
         timestamp: new Date().toLocaleTimeString(),
         level: "error",
         agentId: app.id,
-        message: `Live stream error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         applicationId: app.id,
       })
       
-      // Update status to failed
       await fetch('/api/live-queue', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -249,9 +216,8 @@ export function QueueScreen() {
               (app: LiveApplicationQueue) => !prevPendingIdsRef.current.has(app.id)
             )
             
-            // Start live stream for new pending applications
             newPendingApps.forEach((app: LiveApplicationQueue) => {
-              startLiveStream(app)
+              startApplication(app)
             })
             
             prevPendingIdsRef.current = currentPendingIds
@@ -323,7 +289,7 @@ export function QueueScreen() {
               onClick={async () => {
                 setIsStartingAll(true)
                 for (const app of pending) {
-                  startLiveStream(app)
+                  startApplication(app)
                   // Small delay to avoid overwhelming the system
                   await new Promise(resolve => setTimeout(resolve, 100))
                 }
@@ -444,9 +410,9 @@ export function QueueScreen() {
             <ApplicationDetails 
               application={selectedApp} 
               stats={stats}
-              onStartLiveStream={() => startLiveStream(selectedApp)}
+              onStartApplication={() => startApplication(selectedApp)}
               isStreaming={isStreaming}
-              liveStreamUrl={liveStreamUrl}
+              recordingUrl={recordingUrl}
             />
           )}
         </DialogContent>
