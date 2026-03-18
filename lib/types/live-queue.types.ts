@@ -64,7 +64,10 @@ export interface LiveApplicationQueue {
   job_url: string
   
   // Application status
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'awaiting_otp'
+  
+  // OTP verification
+  verification_otp?: string | null
   
   // Live stream URL (deprecated — Skyvern uses recordings instead)
   live_url?: string | null

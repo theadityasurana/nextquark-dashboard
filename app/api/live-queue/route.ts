@@ -39,12 +39,13 @@ export async function DELETE(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()
-    const { id, recording_url, status } = body
+    const { id, recording_url, status, verification_otp } = body
     const supabase = await createClient()
     
     const updateData: any = {}
     if (recording_url !== undefined) updateData.recording_url = recording_url
     if (status !== undefined) updateData.status = status
+    if (verification_otp !== undefined) updateData.verification_otp = verification_otp
     
     const { error } = await supabase
       .from('live_application_queue')

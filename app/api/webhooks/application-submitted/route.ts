@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendEmail, getTemplate, renderTemplate } from '@/lib/email-service'
+import { sendEmail, getTemplate, renderTemplate, getProxyEmail } from '@/lib/email-service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,11 +22,14 @@ export async function POST(req: NextRequest) {
       location: record.location || 'N/A',
     })
 
+    const proxyEmail = await getProxyEmail(record.email)
+
     await sendEmail({
       to: record.email,
       subject: template.subject,
       html,
       triggerType: 'application_submitted',
+      cc: proxyEmail,
     })
 
     return NextResponse.json({ success: true })

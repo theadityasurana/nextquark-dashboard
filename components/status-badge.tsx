@@ -1,12 +1,14 @@
 import { cn } from "@/lib/utils"
 
-type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed"
+type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed" | "awaiting_otp" | "pending"
 
 const statusConfig: Record<StatusType, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
   queued: { label: "Queued", dotColor: "bg-warning", bgColor: "bg-warning/10", textColor: "text-warning" },
+  pending: { label: "Pending", dotColor: "bg-warning", bgColor: "bg-warning/10", textColor: "text-warning" },
   processing: { label: "Processing", dotColor: "bg-chart-2", bgColor: "bg-chart-2/10", textColor: "text-chart-2" },
   completed: { label: "Completed", dotColor: "bg-success", bgColor: "bg-success/10", textColor: "text-success" },
   failed: { label: "Failed", dotColor: "bg-destructive", bgColor: "bg-destructive/10", textColor: "text-destructive" },
+  awaiting_otp: { label: "Awaiting OTP", dotColor: "bg-orange-500", bgColor: "bg-orange-500/10", textColor: "text-orange-500" },
   active: { label: "Active", dotColor: "bg-success", bgColor: "bg-success/10", textColor: "text-success" },
   idle: { label: "Idle", dotColor: "bg-warning", bgColor: "bg-warning/10", textColor: "text-warning" },
   error: { label: "Error", dotColor: "bg-destructive", bgColor: "bg-destructive/10", textColor: "text-destructive" },

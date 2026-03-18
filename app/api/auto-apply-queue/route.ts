@@ -1,4 +1,4 @@
-import { fillJobApplicationWithStreaming } from "@/lib/skyvern"
+import { fillJobApplication } from "@/lib/automation-provider"
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
@@ -20,6 +20,12 @@ export async function POST(request: Request) {
     if (error || !app) {
       return Response.json({ error: "Application not found" }, { status: 404 })
     }
+
+    console.log(`[auto-apply-queue] App ID: ${applicationId}`)
+    console.log(`[auto-apply-queue] job_url: ${app.job_url}`)
+    console.log(`[auto-apply-queue] Name: ${app.first_name} ${app.last_name}`)
+    console.log(`[auto-apply-queue] Email: ${app.email}`)
+    console.log(`[auto-apply-queue] Resume: ${app.resume_url}`)
 
     await supabase
       .from('live_application_queue')
@@ -84,17 +90,32 @@ export async function POST(request: Request) {
           async start(controller) {
             const encoder = new TextEncoder()
             const startTime = Date.now()
+            let closed = false
+
+            const safeEnqueue = (data: string) => {
+              if (!closed) {
+                try { controller.enqueue(encoder.encode(data)) } catch { closed = true }
+              }
+            }
+
+            const safeClose = () => {
+              if (!closed) {
+                closed = true
+                try { controller.close() } catch {}
+              }
+            }
 
             try {
               const onStep = (step: any) => {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(step)}\n\n`))
+                safeEnqueue(`data: ${JSON.stringify(step)}\n\n`)
               }
 
-              const result = await fillJobApplicationWithStreaming(
+              const result = await fillJobApplication(
                 app.job_url,
                 formData,
                 onStep,
-                applicationId
+                applicationId,
+                app.user_id
               )
 
               const processingTime = Date.now() - startTime
@@ -110,18 +131,16 @@ export async function POST(request: Request) {
                 })
                 .eq('id', applicationId)
 
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  status: "completed",
-                  success: result.success,
-                  result: result.result,
-                  steps: result.steps,
-                  recordingUrl: result.recordingUrl,
-                  taskId: result.taskId,
-                })}\n\n`)
-              )
+              safeEnqueue(`data: ${JSON.stringify({
+                status: "completed",
+                success: result.success,
+                result: result.result,
+                steps: result.steps,
+                recordingUrl: result.recordingUrl,
+                taskId: result.taskId,
+              })}\n\n`)
 
-              controller.close()
+              safeClose()
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : "Unknown error"
               
@@ -135,13 +154,11 @@ export async function POST(request: Request) {
                 })
                 .eq('id', applicationId)
 
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  status: "error",
-                  error: errorMsg,
-                })}\n\n`)
-              )
-              controller.close()
+              safeEnqueue(`data: ${JSON.stringify({
+                status: "error",
+                error: errorMsg,
+              })}\n\n`)
+              safeClose()
             }
           },
         }),
@@ -156,11 +173,12 @@ export async function POST(request: Request) {
     }
 
     const startTime = Date.now()
-    const result = await fillJobApplicationWithStreaming(
+    const result = await fillJobApplication(
       app.job_url,
       formData,
       undefined,
-      applicationId
+      applicationId,
+      app.user_id
     )
 
     const processingTime = Date.now() - startTime

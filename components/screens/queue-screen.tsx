@@ -15,7 +15,7 @@ import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs } from "@/lib/logs-context"
 import {
-  Search, Eye, Trash2, Loader, Power
+  Search, Eye, Trash2, Loader, Power, KeyRound
 } from "lucide-react"
 
 export function QueueScreen() {
@@ -29,8 +29,44 @@ export function QueueScreen() {
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
+  const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
+  const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
   const prevPendingIdsRef = useRef<Set<string>>(new Set())
   const { addLog } = useLogs()
+
+  const handleSaveOtp = async (appId: string, otp: string) => {
+    setSavingOtp(prev => ({ ...prev, [appId]: true }))
+
+    try {
+      await fetch('/api/live-queue', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: appId, verification_otp: otp })
+      })
+
+      addLog({
+        id: `log-${Date.now()}-${Math.random()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: "info",
+        agentId: appId,
+        message: `OTP saved. Backend will pick it up and resume automation automatically.`,
+        applicationId: appId,
+      })
+
+      setOtpInputs(prev => { const n = { ...prev }; delete n[appId]; return n })
+    } catch (error) {
+      addLog({
+        id: `log-${Date.now()}-${Math.random()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: "error",
+        agentId: appId,
+        message: `Failed to save OTP: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        applicationId: appId,
+      })
+    } finally {
+      setSavingOtp(prev => ({ ...prev, [appId]: false }))
+    }
+  }
 
   const startApplication = async (app: LiveApplicationQueue) => {
     setIsStreaming(true)
@@ -120,6 +156,20 @@ export function QueueScreen() {
                   a.id === app.id ? { ...a, status: 'failed' as const } : a
                 ))
               }
+              if (data.status === "awaiting_otp") {
+                addLog({
+                  id: `log-${Date.now()}-${Math.random()}`,
+                  timestamp: new Date().toLocaleTimeString(),
+                  level: "warn",
+                  agentId: app.id,
+                  message: `OTP verification required. Automation paused. Waiting for OTP...`,
+                  applicationId: app.id,
+                })
+                
+                setApplications(prev => prev.map(a => 
+                  a.id === app.id ? { ...a, status: 'awaiting_otp' as const } : a
+                ))
+              }
               if (data.status === "completed") {
                 addLog({
                   id: `log-${Date.now()}-${Math.random()}`,
@@ -202,7 +252,7 @@ export function QueueScreen() {
           const totalApps = data.length
           const successful = data.filter((app: LiveApplicationQueue) => app.status === 'completed').length
           const failed = data.filter((app: LiveApplicationQueue) => app.status === 'failed').length
-          const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing').length
+          const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing' || app.status === 'awaiting_otp').length
           
           setStats({ totalApps, successful, failed, inProgress })
           
@@ -265,6 +315,7 @@ export function QueueScreen() {
   const processing = applications.filter((a) => a.status === "processing")
   const completed = applications.filter((a) => a.status === "completed")
   const failed = applications.filter((a) => a.status === "failed")
+  const awaitingOtp = applications.filter((a) => a.status === "awaiting_otp")
 
   return (
     <div className="flex flex-col gap-6">
@@ -329,6 +380,7 @@ export function QueueScreen() {
             <TabsTrigger value="processing" className="text-xs">Processing ({processing.length})</TabsTrigger>
             <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
             <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
+            <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex items-center gap-1.5 ml-auto">
@@ -372,6 +424,11 @@ export function QueueScreen() {
                     <span className="text-[10px] text-muted-foreground">{createdDate}</span>
                   </div>
                   <div className="flex items-center gap-1">
+                    {app.status === 'awaiting_otp' && (
+                      <Badge variant="outline" className="text-[9px] text-orange-500 border-orange-500/30 gap-1">
+                        <KeyRound className="h-2.5 w-2.5" /> OTP Required
+                      </Badge>
+                    )}
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setSelectedApp(app) }}>
                       <Eye className="h-3 w-3" />
                     </Button>
@@ -380,6 +437,30 @@ export function QueueScreen() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Inline OTP input for awaiting_otp cards */}
+                {app.status === 'awaiting_otp' && (
+                  <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Enter OTP..."
+                        className="h-7 text-xs flex-1"
+                        value={otpInputs[app.id] || ''}
+                        onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))}
+                      />
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        disabled={!otpInputs[app.id] || savingOtp[app.id]}
+                        onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}
+                      >
+                        {savingOtp[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+                        {savingOtp[app.id] ? 'Saving...' : 'Submit OTP'}
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Enter the OTP — backend will automatically pick it up and resume</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )

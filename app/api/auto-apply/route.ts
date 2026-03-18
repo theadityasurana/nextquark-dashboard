@@ -1,4 +1,4 @@
-import { fillJobApplicationWithStreaming } from "@/lib/skyvern"
+import { fillJobApplication } from "@/lib/automation-provider"
 import { mockUsers, mockJobs } from "@/lib/mock-data"
 import { createClient } from '@/lib/supabase/server'
 
@@ -108,44 +108,49 @@ export async function POST(request: Request) {
         new ReadableStream({
           async start(controller) {
             const encoder = new TextEncoder()
+            let closed = false
+
+            const safeEnqueue = (data: string) => {
+              if (!closed) {
+                try { controller.enqueue(encoder.encode(data)) } catch { closed = true }
+              }
+            }
+
+            const safeClose = () => {
+              if (!closed) {
+                closed = true
+                try { controller.close() } catch {}
+              }
+            }
+
             try {
               const onStep = (step: any) => {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify(step)}\n\n`)
-                )
+                safeEnqueue(`data: ${JSON.stringify(step)}\n\n`)
               }
 
-              const result = await fillJobApplicationWithStreaming(
+              const result = await fillJobApplication(
                 jobUrl,
                 formData,
                 onStep,
                 userId
               )
 
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    status: "completed",
-                    success: result.success,
-                    result: result.result,
-                    steps: result.steps,
-                    recordingUrl: result.recordingUrl,
-                    taskId: result.taskId,
-                  })}\n\n`
-                )
-              )
+              safeEnqueue(`data: ${JSON.stringify({
+                status: "completed",
+                success: result.success,
+                result: result.result,
+                steps: result.steps,
+                recordingUrl: result.recordingUrl,
+                taskId: result.taskId,
+              })}\n\n`)
 
-              controller.close()
+              safeClose()
             } catch (error) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    status: "error",
-                    error: error instanceof Error ? error.message : "Unknown error",
-                  })}\n\n`
-                )
-              )
-              controller.close()
+              safeEnqueue(`data: ${JSON.stringify({
+                status: "error",
+                error: error instanceof Error ? error.message : "Unknown error",
+              })}\n\n`)
+              safeClose()
             }
           },
         }),
@@ -159,7 +164,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const result = await fillJobApplicationWithStreaming(
+    const result = await fillJobApplication(
       jobUrl,
       formData,
       undefined,

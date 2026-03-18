@@ -11,14 +11,16 @@ interface EmailOptions {
   subject: string
   html: string
   triggerType: string
+  cc?: string
 }
 
-export async function sendEmail({ to, subject, html, triggerType }: EmailOptions) {
+export async function sendEmail({ to, subject, html, triggerType, cc }: EmailOptions) {
   try {
     console.log('Sending email with config:', {
       user: process.env.GMAIL_USER,
       hasPassword: !!process.env.GMAIL_APP_PASSWORD,
       to,
+      cc,
     })
 
     const transporter = nodemailer.createTransport({
@@ -32,6 +34,7 @@ export async function sendEmail({ to, subject, html, triggerType }: EmailOptions
     await transporter.sendMail({
       from: `"NextQuark" <${process.env.GMAIL_USER}>`,
       to,
+      cc,
       subject,
       html,
     })
@@ -76,6 +79,28 @@ export async function getTemplate(triggerType: string) {
     .single()
 
   return data
+}
+
+export async function getProxyEmail(userEmail: string): Promise<string | undefined> {
+  console.log('=== getProxyEmail START ===')
+  console.log('Input userEmail:', userEmail)
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, proxy_email')
+    .eq('email', userEmail)
+    .single()
+
+  console.log('Profile lookup result:', {
+    userEmail,
+    profileFound: !!profile,
+    proxyEmail: profile?.proxy_email,
+    profileError: profileError?.message || null,
+  })
+
+  const result = profile?.proxy_email || undefined
+  console.log('=== getProxyEmail END === Returning:', result)
+  return result
 }
 
 export function renderTemplate(template: string, variables: Record<string, string>) {
