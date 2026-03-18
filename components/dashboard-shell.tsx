@@ -20,6 +20,7 @@ import {
   LogOut,
   Menu,
   Mail,
+  KeyRound,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +37,7 @@ const navItems = [
   { label: "AI Agents", href: "/agents", icon: Bot },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Email Manager", href: "/emails", icon: Mail },
+  { label: "OTP Manager", href: "/otp-manager", icon: KeyRound },
   { label: "Logs", href: "/logs", icon: ScrollText },
 ]
 

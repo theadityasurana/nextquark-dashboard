@@ -206,7 +206,7 @@ ${resumeInstruction}
 - TERMINATE if you encounter a login wall that cannot be bypassed.
 - SKIP EEO/demographic questions (gender, race, veteran status, disability) unless they are explicitly required and block submission.
 - If you encounter a CAPTCHA (reCAPTCHA, hCaptcha, Cloudflare Turnstile, or any other challenge), SOLVE IT. Click the checkbox, complete the image challenge, or wait for it to auto-resolve. Do NOT skip or give up on captchas — always attempt to solve them before continuing.
-- IMPORTANT: If after submitting the form you see an OTP/verification code page (e.g. "Enter the code sent to your email", "Verify your email", "Enter verification code"), STOP IMMEDIATELY. Do NOT try to guess or enter any code. TERMINATE the task and include the phrase "OTP_VERIFICATION_REQUIRED" in your final output/reason.`
+- IMPORTANT: If after submitting the form you see an OTP/verification code page (e.g. "Enter the code sent to your email", "Verify your email", "Enter verification code"), STOP IMMEDIATELY. Do NOT try to guess or enter any code. TERMINATE the task and include the exact phrase "OTP_VERIFICATION_REQUIRED" in your final output/reason. The OTP will be fetched automatically and entered in a follow-up task.`
 
   switch (portalName) {
     case "Greenhouse":
@@ -350,7 +350,7 @@ ${dataBlock}`
   }
 }
 
-// ─── OTP Detection ───
+// ─── OTP Detection & Auto-Fetch from Inbound Emails ───
 
 const OTP_DETECTION_KEYWORDS = [
   "otp_verification_required", "otp", "verification code", "verify your email",
@@ -364,35 +364,81 @@ function detectOtpRequired(output: string | null): boolean {
   return OTP_DETECTION_KEYWORDS.some(kw => text.includes(kw))
 }
 
+// Extract OTP (4-8 digit code) from email text
+function extractOtpFromEmail(subject: string | null, bodyText: string | null, bodyHtml: string | null): string | null {
+  const sources = [subject, bodyText, bodyHtml].filter(Boolean).join(" ")
+  if (!sources) return null
+
+  // Common patterns: "Your code is 123456", "OTP: 123456", standalone 4-8 digit codes
+  const patterns = [
+    /(?:code|otp|pin|token|password)\s*(?:is|:)\s*(\d{4,8})/i,
+    /\b(\d{6})\b/,  // Most OTPs are 6 digits
+    /\b(\d{4,8})\b/, // Fallback: 4-8 digits
+  ]
+
+  for (const pattern of patterns) {
+    const match = sources.match(pattern)
+    if (match?.[1]) return match[1]
+  }
+  return null
+}
+
 async function waitForOtp(
   applicationId: string,
+  proxyEmail: string,
+  taskStartTime: number,
   onStep?: StreamCallback,
-  timeoutMs: number = 10 * 60 * 1000
+  timeoutMs: number = 5 * 60 * 1000
 ): Promise<string | null> {
   const pollInterval = 5000
   const maxPolls = Math.ceil(timeoutMs / pollInterval)
+  const cutoffTime = new Date(taskStartTime).toISOString()
+
+  if (onStep) onStep({ status: "awaiting_otp", log: `Polling inbound emails for OTP sent to ${proxyEmail}...` })
+  await persistLog(applicationId, "info", `Auto-fetching OTP from inbound_emails for ${proxyEmail} (emails after ${cutoffTime})`)
 
   for (let i = 0; i < maxPolls; i++) {
     await new Promise((r) => setTimeout(r, pollInterval))
 
-    const { data } = await supabase
+    // Check inbound_emails for recent emails to this proxy address
+    const { data: emails } = await supabase
+      .from("inbound_emails")
+      .select("subject, body_text, body_html, created_at")
+      .eq("proxy_address", proxyEmail)
+      .gte("created_at", cutoffTime)
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    if (emails?.length) {
+      for (const email of emails) {
+        const otp = extractOtpFromEmail(email.subject, email.body_text, email.body_html)
+        if (otp) {
+          if (onStep) onStep({ status: "in_progress", log: `OTP auto-extracted: ${otp} (from email: "${email.subject}")` })
+          await persistLog(applicationId, "info", `OTP auto-extracted: ${otp} from "${email.subject}"`)
+          return otp
+        }
+      }
+    }
+
+    // Fallback: also check manual OTP entry from the UI
+    const { data: manual } = await supabase
       .from("live_application_queue")
       .select("verification_otp")
       .eq("id", applicationId)
       .single()
 
-    if (data?.verification_otp) {
-      if (onStep) onStep({ status: "in_progress", log: `OTP received: ${data.verification_otp}. Resuming automation...` })
-      await persistLog(applicationId, "info", "OTP received. Resuming automation...")
-      return data.verification_otp
+    if (manual?.verification_otp) {
+      if (onStep) onStep({ status: "in_progress", log: `OTP received (manual): ${manual.verification_otp}` })
+      await persistLog(applicationId, "info", "OTP received via manual entry")
+      return manual.verification_otp
     }
 
     if (onStep && i % 6 === 0) {
-      onStep({ status: "awaiting_otp", log: `Waiting for OTP... (${Math.round((i * pollInterval) / 1000)}s elapsed)` })
+      onStep({ status: "awaiting_otp", log: `Waiting for OTP email to ${proxyEmail}... (${Math.round((i * pollInterval) / 1000)}s elapsed)` })
     }
   }
 
-  await persistLog(applicationId, "error", "OTP wait timed out after 10 minutes")
+  await persistLog(applicationId, "error", `OTP wait timed out after ${timeoutMs / 1000}s for ${proxyEmail}`)
   return null
 }
 
@@ -537,7 +583,8 @@ export async function fillJobApplicationWithBrowserUse(
       await persistLog(applicationId, "info", "OTP required. Automation paused. Session kept alive. Waiting for OTP...")
       if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Automation paused. Waiting for OTP..." })
 
-      const otp = await waitForOtp(applicationId, onStep)
+      const proxyEmail = userData.email || ""
+      const otp = await waitForOtp(applicationId, proxyEmail, startTime, onStep)
 
       if (otp) {
         await supabase
