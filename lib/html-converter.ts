@@ -60,3 +60,39 @@ export function htmlToMarkdown(html: string): string {
 
   return markdown
 }
+
+/**
+ * Converts HTML to plain readable text by stripping all tags, styles, scripts,
+ * and decoding entities. Used for extracting OTPs from HTML emails.
+ */
+export function htmlToPlainText(html: string): string {
+  if (!html) return ""
+
+  return html
+    // Remove style and script blocks entirely
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    // Remove HTML comments
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // Block-level elements get newlines
+    .replace(/<\/(p|div|tr|h[1-6]|li|blockquote|section|article|header|footer)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(td|th)>/gi, " ")
+    // Strip all remaining tags
+    .replace(/<[^>]*>/g, "")
+    // Decode HTML entities
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#(\d+);/gi, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    // Collapse whitespace
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n/g, "\n")
+    .trim()
+}

@@ -188,17 +188,41 @@ function buildPortalPrompt(portalName: string, userData: any, uploadedFileName: 
   const dataBlock = JSON.stringify(userJson, null, 2)
 
   const resumeInstruction = uploadedFileName
-    ? `- A resume file "${uploadedFileName}" has been uploaded to this browser session. When the form requires a resume/CV upload or attachment, use this file. Look for buttons labeled "Upload", "Attach", "Attach Resume", "Choose File", "Browse", "Add File", or any file input field — they all work the same way. Click the button to open the file picker and select the uploaded file.`
-    : `- If a resume/CV upload or attachment field is required, download the file from the resume_url provided in the applicant data and upload it. Look for buttons labeled "Upload", "Attach", "Attach Resume", "Choose File", "Browse", "Add File", or any file input field.`
+    ? `- RESUME UPLOAD: A resume file "${uploadedFileName}" has been uploaded to this browser session. Whenever you see ANY file upload field for resume/CV, ALWAYS upload this file. Look for buttons labeled "Upload", "Attach", "Attach Resume", "Choose File", "Browse", "Add File", or any file input field. Click the button to open the file picker and select the uploaded file.
+- COVER LETTER: Do NOT upload or attach a cover letter. If the form has SEPARATE upload fields for both resume AND cover letter, upload the resume ONLY and leave the cover letter field empty. If the form has a SINGLE upload field that says "Resume or Cover Letter" or "Resume/Cover Letter", upload the resume file into that field.`
+    : `- RESUME UPLOAD: If a resume/CV upload field is present, download the file from the resume_url provided in the applicant data and upload it.
+- COVER LETTER: Do NOT upload or attach a cover letter. If the form has SEPARATE upload fields for both resume AND cover letter, upload the resume ONLY and leave the cover letter field empty. If the form has a SINGLE upload field that says "Resume or Cover Letter" or "Resume/Cover Letter", upload the resume file into that field.`
+
+  const fieldMapping = `
+FIELD-TO-VALUE MAPPING — When you see a form field, use the EXACT value from this mapping:
+- "First Name" / "First name" / "Given Name" → ${userData.firstName || ""}
+- "Last Name" / "Last name" / "Surname" / "Family Name" → ${userData.lastName || ""}
+- "Full Name" / "Name" → ${userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim()}
+- "Email" / "Email Address" / "E-mail" → ${userData.email || ""}
+- "Phone" / "Phone Number" / "Mobile" / "Contact Number" / "Telephone" → ${userData.phone || ""}
+- "Location" / "City" / "Current Location" / "Where are you based" → ${userData.location || ""}
+- "LinkedIn" / "LinkedIn URL" / "LinkedIn Profile" → ${userData.linkedinUrl || ""}
+- "GitHub" / "GitHub URL" / "Portfolio" → ${userData.githubUrl || ""}
+- "Work Authorization" / "Are you authorized to work" / "Visa Sponsorship" / "Do you require sponsorship" → ${userData.workAuthorization || ""}
+- "Gender" → ${userData.gender || ""}
+- "Race" / "Ethnicity" → ${userData.ethnicity || ""}
+- "Veteran Status" → ${userData.veteranStatus || ""}
+- "Disability" / "Disability Status" → ${userData.disabilityStatus || ""}
+- "Salary" / "Expected Salary" / "Compensation" → ${userData.salaryMin && userData.salaryMax ? `${userData.salaryCurrency || "USD"} ${userData.salaryMin} - ${userData.salaryMax}` : ""}
+- "How did you hear about us" / "Source" / "Referral" → "Job Board"
+- "Start Date" / "When can you start" / "Availability" → "Immediately"
+- Any acknowledgement / agreement / certification checkbox → Check it / select "Yes" / "I agree"`
 
   const commonRules = `
+${fieldMapping}
+
 IMPORTANT RULES:
 - ONLY fill fields that are MANDATORY / REQUIRED (marked with *, "required", or that block form submission). SKIP all optional fields entirely.
-- Do NOT fill optional fields like "How did you hear about us", cover letter, LinkedIn URL, GitHub URL, portfolio, website, or any field not marked as required.
+- When you encounter a field, MATCH it to the FIELD-TO-VALUE MAPPING above and enter the corresponding value. Do NOT leave required fields empty if a value is available in the mapping.
 - For required dropdown/select fields, pick the CLOSEST matching option. If no exact match, pick the most reasonable one.
-- DROPDOWN/SEARCHABLE SELECT HANDLING: When you encounter a field that has BOTH a dropdown arrow AND a text/search input, ALWAYS click the dropdown arrow or the field FIRST to open the options list, then select the matching option from the visible list. Do NOT type directly into the search box first — many searchable selects will fail or show no results if you type before opening the dropdown. The correct order is: (1) click to open dropdown, (2) if a search box appears inside the dropdown, type a few characters to filter, (3) click the matching option from the list. This applies to location fields, country selectors, phone country codes, "How did you hear" fields, and any other combo-box/searchable-select elements.
+- DROPDOWN/SEARCHABLE SELECT HANDLING: Most dropdowns have a search bar inside them. Follow this EXACT sequence every time: (1) Click the dropdown arrow or the field to OPEN the dropdown list. (2) Once the dropdown is open, look for a search/filter input INSIDE the dropdown panel. (3) Click on that search input and type a few characters to filter the options. (4) Wait for filtered results to appear, then click the correct option from the visible list. NEVER type directly into the main field before opening the dropdown — this will fail on most searchable selects. This applies to ALL dropdowns: location fields, country selectors, phone country codes, "How did you hear" fields, state/province selectors, degree selectors, and any other combo-box/searchable-select elements.
+- AUTOCOMPLETE / TYPEAHEAD FIELDS: Some text fields are NOT free-text — when you start typing, a list of suggestions/options will appear below the field. If suggestions appear, you MUST select one of the suggested options by clicking on it. Do NOT just type your full answer and press Enter or move on. Always wait for the suggestion list to appear, then click the closest matching option. If none of the suggestions match exactly, pick the closest one. This is common for location/city fields, company name fields, university/school fields, job title fields, and skill fields.
 - For required acknowledgement/agreement/certification checkboxes, CHECK THEM (select "I agree" / "I acknowledge" / "I confirm").
-- For work authorization: answer ONLY if the field is required.
 ${resumeInstruction}
 - Do NOT click "Save for later" or "Save draft". Only click "Submit" / "Apply" / "Send Application".
 - If a popup, modal, or cookie banner appears, DISMISS it immediately and continue.
@@ -206,7 +230,7 @@ ${resumeInstruction}
 - TERMINATE if you encounter a login wall that cannot be bypassed.
 - SKIP EEO/demographic questions (gender, race, veteran status, disability) unless they are explicitly required and block submission.
 - If you encounter a CAPTCHA (reCAPTCHA, hCaptcha, Cloudflare Turnstile, or any other challenge), SOLVE IT. Click the checkbox, complete the image challenge, or wait for it to auto-resolve. Do NOT skip or give up on captchas — always attempt to solve them before continuing.
-- IMPORTANT: If after submitting the form you see an OTP/verification code page (e.g. "Enter the code sent to your email", "Verify your email", "Enter verification code"), STOP IMMEDIATELY. Do NOT try to guess or enter any code. TERMINATE the task and include the exact phrase "OTP_VERIFICATION_REQUIRED" in your final output/reason. The OTP will be fetched automatically and entered in a follow-up task.`
+- ⚠️ HIGHEST PRIORITY — OTP/VERIFICATION DETECTION: At ANY point during the entire process — whether you are filling the form, clicking next, submitting, or on any page — if you see ANYTHING on screen related to OTP, verification code, "Enter the code sent to your email", "Verify your email", "Enter verification code", "Check your inbox", "We sent you a code", or any similar prompt asking for a code/verification, you MUST STOP IMMEDIATELY. Do NOT check whether other fields on the page are filled or empty. Do NOT scroll. Do NOT try to fill any remaining fields. Do NOT try to guess or enter any code. Just TERMINATE the task RIGHT THEN AND THERE and include the exact phrase "OTP_VERIFICATION_REQUIRED" in your final output/reason. This rule overrides ALL other instructions. The OTP will be fetched automatically in a follow-up task after a 2-minute wait.`
 
   switch (portalName) {
     case "Greenhouse":
@@ -214,8 +238,8 @@ ${resumeInstruction}
 
 STEPS:
 1. Scroll down to the "Apply for this job" section.
-2. Fill in ONLY the required fields: First Name, Last Name, Email, Phone — these are always required.
-3. Upload resume ONLY if the resume field is marked as required.
+2. Fill in the required fields using the FIELD-TO-VALUE MAPPING: First Name → "${userData.firstName}", Last Name → "${userData.lastName}", Email → "${userData.email}", Phone → "${userData.phone}".
+3. Upload resume using the uploaded file. SKIP the cover letter upload field.
 4. Answer ONLY custom questions that are marked as required (have * or "required" label). SKIP all optional questions.
 5. SKIP: LinkedIn URL, Website, Cover Letter, "How did you hear" — unless explicitly marked required.
 6. SKIP: EEO/demographic section (gender, race, veteran, disability) — these are always optional on Greenhouse.
@@ -238,9 +262,9 @@ ${dataBlock}`
 
 STEPS:
 1. If you see the job description page, click the "Apply for this job" button.
-2. Fill in ONLY required fields: Full Name, Email, Phone.
-3. Upload resume ONLY if marked as required.
-4. SKIP: LinkedIn URL, GitHub URL, Cover Letter, Additional Information — unless marked required.
+2. Fill in required fields using the FIELD-TO-VALUE MAPPING: Full Name → "${userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim()}", Email → "${userData.email}", Phone → "${userData.phone}".
+3. Upload resume using the uploaded file. SKIP the cover letter upload/text field.
+4. SKIP: LinkedIn URL, GitHub URL, Additional Information — unless marked required.
 5. Answer ONLY custom questions that are marked as required. SKIP all optional ones.
 6. Check ONLY required checkboxes.
 7. SKIP: EEO section (gender, race, veteran status) — these are always optional on Lever.
@@ -262,8 +286,8 @@ ${dataBlock}`
 
 STEPS:
 1. Scroll down to find the application form.
-2. Fill in ONLY required fields: Name (or First Name + Last Name), Email, Phone Number.
-3. Upload resume ONLY if marked as required.
+2. Fill in required fields using the FIELD-TO-VALUE MAPPING: First Name → "${userData.firstName}", Last Name → "${userData.lastName}" (or Full Name → "${userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim()}"), Email → "${userData.email}", Phone → "${userData.phone}".
+3. Upload resume using the uploaded file. SKIP the cover letter upload field.
 4. SKIP: LinkedIn URL, Location — unless marked required.
 5. Answer ONLY custom questions that are marked as required. SKIP all optional ones.
 6. Check ONLY required checkboxes (arbitration agreements that block submission).
@@ -287,10 +311,10 @@ ${dataBlock}`
 
 STEPS:
 1. Click "Apply" or "Apply Manually". Do NOT click "Apply with LinkedIn".
-2. If there's a "Sign In" page, look for "Create Account" or "Apply without account". If forced to sign in, use the applicant's email.
-3. The form has MULTIPLE PAGES. On each page, fill ONLY the required/mandatory fields (marked with * or "required"), then click "Next" / "Continue".
+2. If there's a "Sign In" page, look for "Create Account" or "Apply without account". If forced to sign in, use the applicant's email: "${userData.email}".
+3. The form has MULTIPLE PAGES. On each page, fill ONLY the required/mandatory fields (marked with * or "required") using the FIELD-TO-VALUE MAPPING, then click "Next" / "Continue".
 4. SKIP all optional fields on every page. Do NOT fill optional experience, education, or additional info unless required.
-5. Upload resume ONLY if the field is required. If "My Experience" offers resume auto-fill, USE IT to save steps.
+5. Upload resume using the uploaded file. If "My Experience" offers resume auto-fill, USE IT to save steps. SKIP the cover letter upload field.
 6. On the Review page, click "Submit" immediately.
 7. Wait for confirmation. DONE.
 
@@ -311,8 +335,8 @@ ${dataBlock}`
 STEPS:
 1. Click "Apply" or "Apply Now".
 2. Look for "Apply as Guest" or "Continue without signing in" if available.
-3. Fill in ONLY required fields: First Name, Last Name, Email, Phone. Fill address ONLY if required.
-4. Upload resume ONLY if required.
+3. Fill in required fields using the FIELD-TO-VALUE MAPPING: First Name → "${userData.firstName}", Last Name → "${userData.lastName}", Email → "${userData.email}", Phone → "${userData.phone}". Fill address ONLY if required, using Location → "${userData.location}".
+4. Upload resume using the uploaded file. SKIP the cover letter upload field.
 5. SKIP optional work experience and education pages — click "Next" / "Skip" if possible.
 6. Answer ONLY required screening questions. SKIP optional ones.
 7. SKIP EEO/demographic questions — these are always optional.
@@ -335,8 +359,8 @@ ${dataBlock}`
 
 STEPS:
 1. If on a job description page, find and click the "Apply" button.
-2. Fill in ONLY mandatory/required fields (marked with *, "required", or that block submission). SKIP all optional fields.
-3. Upload resume ONLY if the field is required.
+2. Fill in mandatory/required fields using the FIELD-TO-VALUE MAPPING provided. Match each form field label to the mapping and enter the corresponding value.
+3. Upload resume using the uploaded file. SKIP the cover letter upload field.
 4. For required dropdown fields, select the closest matching option.
 5. Answer ONLY required custom questions. SKIP optional ones.
 6. Check ONLY required checkboxes and agreements.
@@ -350,7 +374,9 @@ ${dataBlock}`
   }
 }
 
-// ─── OTP Detection & Auto-Fetch from Inbound Emails ───
+// ─── OTP Detection ───
+
+const OTP_MANAGER_URL = "https://admin.nextquark.in/otp-manager"
 
 const OTP_DETECTION_KEYWORDS = [
   "otp_verification_required", "otp", "verification code", "verify your email",
@@ -364,82 +390,28 @@ function detectOtpRequired(output: string | null): boolean {
   return OTP_DETECTION_KEYWORDS.some(kw => text.includes(kw))
 }
 
-// Extract OTP (4-8 digit code) from email text
-function extractOtpFromEmail(subject: string | null, bodyText: string | null, bodyHtml: string | null): string | null {
-  const sources = [subject, bodyText, bodyHtml].filter(Boolean).join(" ")
-  if (!sources) return null
+// Build the prompt for the agent to fetch OTP from the admin panel tab
+function buildOtpFetchPrompt(userId: string, proxyEmail: string): string {
+  return `You need to retrieve an OTP/verification/security code from the OTP Manager admin panel.
 
-  // Common patterns: "Your code is 123456", "OTP: 123456", standalone 4-8 digit codes
-  const patterns = [
-    /(?:code|otp|pin|token|password)\s*(?:is|:)\s*(\d{4,8})/i,
-    /\b(\d{6})\b/,  // Most OTPs are 6 digits
-    /\b(\d{4,8})\b/, // Fallback: 4-8 digits
-  ]
+STEPS:
+1. You should now be on the OTP Manager page (${OTP_MANAGER_URL}). If not, navigate to it.
+2. Refresh the page to load the latest emails.
+3. Look at the table on the page. The table has columns: ID, User ID, Proxy Address, From Email, Body Text, Body HTML, Extracted OTP.
+4. Find the row that matches ALL of these criteria:
+   - User ID: "${userId}"
+   - Proxy Address: "${proxyEmail}"
+5. Once you find the matching row, look at the "Extracted OTP" column FIRST. If it has a value (a badge/highlighted code), that is the OTP — use it directly.
+6. If the "Extracted OTP" column is empty (shows a dash), then read the "Body Text" column and extract the code manually. It can be a 4-10 character code that is either purely numeric (e.g. 123456), purely alphabetic (e.g. RvnyAyws), or alphanumeric (e.g. Ab3xK9). It is often near words like "code", "OTP", "verification", "verify", "security code".
+7. Remember the OTP code.
+8. Switch back to the first browser tab (the application page).
+9. Output the OTP code as your final result in this exact format: OTP_CODE=<the code>
 
-  for (const pattern of patterns) {
-    const match = sources.match(pattern)
-    if (match?.[1]) return match[1]
-  }
-  return null
-}
-
-async function waitForOtp(
-  applicationId: string,
-  proxyEmail: string,
-  taskStartTime: number,
-  onStep?: StreamCallback,
-  timeoutMs: number = 5 * 60 * 1000
-): Promise<string | null> {
-  const pollInterval = 5000
-  const maxPolls = Math.ceil(timeoutMs / pollInterval)
-  const cutoffTime = new Date(taskStartTime).toISOString()
-
-  if (onStep) onStep({ status: "awaiting_otp", log: `Polling inbound emails for OTP sent to ${proxyEmail}...` })
-  await persistLog(applicationId, "info", `Auto-fetching OTP from inbound_emails for ${proxyEmail} (emails after ${cutoffTime})`)
-
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise((r) => setTimeout(r, pollInterval))
-
-    // Check inbound_emails for recent emails to this proxy address
-    const { data: emails } = await supabase
-      .from("inbound_emails")
-      .select("subject, body_text, body_html, created_at")
-      .eq("proxy_address", proxyEmail)
-      .gte("created_at", cutoffTime)
-      .order("created_at", { ascending: false })
-      .limit(5)
-
-    if (emails?.length) {
-      for (const email of emails) {
-        const otp = extractOtpFromEmail(email.subject, email.body_text, email.body_html)
-        if (otp) {
-          if (onStep) onStep({ status: "in_progress", log: `OTP auto-extracted: ${otp} (from email: "${email.subject}")` })
-          await persistLog(applicationId, "info", `OTP auto-extracted: ${otp} from "${email.subject}"`)
-          return otp
-        }
-      }
-    }
-
-    // Fallback: also check manual OTP entry from the UI
-    const { data: manual } = await supabase
-      .from("live_application_queue")
-      .select("verification_otp")
-      .eq("id", applicationId)
-      .single()
-
-    if (manual?.verification_otp) {
-      if (onStep) onStep({ status: "in_progress", log: `OTP received (manual): ${manual.verification_otp}` })
-      await persistLog(applicationId, "info", "OTP received via manual entry")
-      return manual.verification_otp
-    }
-
-    if (onStep && i % 6 === 0) {
-      onStep({ status: "awaiting_otp", log: `Waiting for OTP email to ${proxyEmail}... (${Math.round((i * pollInterval) / 1000)}s elapsed)` })
-    }
-  }
-
-  await persistLog(applicationId, "error", `OTP wait timed out after ${timeoutMs / 1000}s for ${proxyEmail}`)
-  return null
+IMPORTANT:
+- If no matching row is found, refresh the page and try again (up to 3 times with a few seconds wait between each).
+- The most recent matching row (highest ID) is the correct one.
+- ALWAYS check the "Extracted OTP" column first — it already has the code extracted for you.
+- Do NOT enter the OTP on the application page yet — just extract and output it.`
 }
 
 // ─── Task polling ───
@@ -551,7 +523,7 @@ export async function fillJobApplicationWithBrowserUse(
 
     const prompt = buildPortalPrompt(portalType, userData, uploadedFileName)
 
-    // Create task in the session
+    // Create main application task in the session
     const createRes = await buRequest("POST", "/tasks", {
       task: prompt,
       start_url: targetUrl,
@@ -570,71 +542,92 @@ export async function fillJobApplicationWithBrowserUse(
     let totalSteps = result.steps.length
     let liveUrl = result.live_url || session.liveUrl || null
 
-    // ─── OTP Pause & Resume (same session) ───
+    // ─── OTP Pause & Resume (same session, fetch from OTP Manager tab) ───
     const outputText = typeof result.output === "string" ? result.output : JSON.stringify(result.output || "")
     if (applicationId && detectOtpRequired(outputText)) {
-      console.log("[Browser Use] OTP detected. Session still alive. Pausing...")
+      console.log("[Browser Use] OTP detected. Session still alive. Fetching from OTP Manager tab...")
 
       await supabase
         .from("live_application_queue")
         .update({ status: "awaiting_otp" })
         .eq("id", applicationId)
 
-      await persistLog(applicationId, "info", "OTP required. Automation paused. Session kept alive. Waiting for OTP...")
-      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Automation paused. Waiting for OTP..." })
+      await persistLog(applicationId, "info", "OTP required. Waiting 120s for email to arrive before fetching...")
+      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Waiting 120 seconds for the email to arrive..." })
+
+      await new Promise(r => setTimeout(r, 120_000))
 
       const proxyEmail = userData.email || ""
-      const otp = await waitForOtp(applicationId, proxyEmail, startTime, onStep)
+      const otpUserId = userId || ""
+
+      // Step 1: Open OTP Manager tab, then fetch the OTP from it
+      if (onStep) onStep({ status: "awaiting_otp", log: "Opening OTP Manager tab to fetch verification code..." })
+      const openAndFetchPrompt = `STEP A: Open a new browser tab and navigate to ${OTP_MANAGER_URL}.
+STEP B: Once the page loads, follow these instructions:
+${buildOtpFetchPrompt(otpUserId, proxyEmail)}`
+      const otpFetchRes = await buRequest("POST", "/tasks", {
+        task: openAndFetchPrompt,
+        session_id: sessionId,
+        vision: true,
+      })
+
+      const otpFetchResult = await pollTaskUntilComplete(otpFetchRes.id, onStep, applicationId)
+      totalSteps += otpFetchResult.steps.length
+
+      // Extract OTP from the agent's output
+      const otpOutput = typeof otpFetchResult.output === "string" ? otpFetchResult.output : JSON.stringify(otpFetchResult.output || "")
+      const otpMatch = otpOutput.match(/OTP_CODE=([A-Za-z0-9]{4,10})/)
+      const otp = otpMatch?.[1] || null
 
       if (otp) {
+        await persistLog(applicationId, "info", `OTP extracted from admin panel: ${otp}`)
+        if (onStep) onStep({ status: "in_progress", log: `OTP extracted: ${otp}. Entering on application page...` })
+
         await supabase
           .from("live_application_queue")
           .update({ status: "processing" })
           .eq("id", applicationId)
 
         const userJson = buildUserDataJson(userData)
-        const otpPrompt = `The browser is currently on an OTP/verification code page. The code has been received.
+        const otpEntryPrompt = `The browser should now be on the first tab (the application page) showing an OTP/verification code input.
 
 The OTP/verification code is: ${otp}
 
 STEPS:
-1. Find the OTP/verification code input field on the current page.
-2. Enter the code: ${otp}
-3. Click "Verify" / "Submit" / "Confirm".
-4. If the application form continues after verification, fill in any remaining REQUIRED fields using the applicant data below, then submit.
-5. Wait for confirmation. DONE.
+1. Make sure you are on the first browser tab (the application page). If not, switch to it.
+2. Find the OTP/verification code input field on the current page.
+3. Enter the code: ${otp}
+4. Click "Verify" / "Submit" / "Confirm".
+5. If the application form continues after verification, fill in any remaining REQUIRED fields using the applicant data below, then submit.
+6. Wait for confirmation. DONE.
 
 IMPORTANT:
 - The OTP code is: ${otp} — enter it exactly.
-- The browser is already on the OTP page. Do NOT navigate away.
 - If verification succeeds and you see a confirmation, TERMINATE successfully.
 
 APPLICANT DATA:
 ${JSON.stringify(userJson, null, 2)}`
 
-        if (onStep) onStep({ status: "in_progress", log: "OTP received. Resuming in same browser session..." })
-
-        // Run OTP task in the SAME session — browser is still on the OTP page
-        const otpCreateRes = await buRequest("POST", "/tasks", {
-          task: otpPrompt,
+        const otpEntryRes = await buRequest("POST", "/tasks", {
+          task: otpEntryPrompt,
           session_id: sessionId,
         })
 
-        const otpResult = await pollTaskUntilComplete(otpCreateRes.id, onStep, applicationId)
-        result = otpResult
-        totalSteps += otpResult.steps.length
-        liveUrl = otpResult.live_url || liveUrl
+        const otpEntryResult = await pollTaskUntilComplete(otpEntryRes.id, onStep, applicationId)
+        result = otpEntryResult
+        totalSteps += otpEntryResult.steps.length
+        liveUrl = otpEntryResult.live_url || liveUrl
 
         await supabase
           .from("live_application_queue")
           .update({ verification_otp: null })
           .eq("id", applicationId)
       } else {
-        await persistLog(applicationId, "error", "OTP not provided within timeout.")
-        if (onStep) onStep({ status: "error", log: "OTP wait timed out. Application failed." })
+        await persistLog(applicationId, "error", "Could not extract OTP from admin panel.")
+        if (onStep) onStep({ status: "error", log: "Failed to extract OTP from admin panel. Application failed." })
         return {
           success: false,
-          error: "OTP verification timed out. OTP was not provided.",
+          error: "OTP extraction failed. Could not find matching OTP in admin panel.",
           steps: totalSteps,
           recordingUrl: liveUrl,
           taskId,

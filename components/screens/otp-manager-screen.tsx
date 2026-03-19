@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { RefreshCw } from "lucide-react"
 
 interface InboundEmail {
@@ -12,6 +13,29 @@ interface InboundEmail {
   proxy_address: string
   from_email: string
   body_text: string
+  body_html: string | null
+  extracted_otp: string | null
+}
+
+function stripHtmlToText(html: string | null): string {
+  if (!html) return ""
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<\/(p|div|tr|h[1-6]|li|blockquote)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(td|th)>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n/g, "\n")
+    .trim()
 }
 
 export function OtpManagerScreen() {
@@ -63,6 +87,8 @@ export function OtpManagerScreen() {
                 <TableHead>Proxy Address</TableHead>
                 <TableHead>From Email</TableHead>
                 <TableHead>Body Text</TableHead>
+                <TableHead>Body HTML</TableHead>
+                <TableHead>Extracted OTP</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -73,11 +99,19 @@ export function OtpManagerScreen() {
                   <TableCell className="font-mono text-xs">{email.proxy_address}</TableCell>
                   <TableCell className="font-mono text-xs">{email.from_email}</TableCell>
                   <TableCell className="max-w-xs whitespace-pre-wrap break-words text-xs">{email.body_text}</TableCell>
+                  <TableCell className="max-w-xs whitespace-pre-wrap break-words text-xs">{stripHtmlToText(email.body_html)}</TableCell>
+                  <TableCell>
+                    {email.extracted_otp ? (
+                      <Badge variant="default" className="font-mono text-sm">{email.extracted_otp}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {emails.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No inbound emails found
                   </TableCell>
                 </TableRow>
