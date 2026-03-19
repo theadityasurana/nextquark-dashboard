@@ -15,6 +15,7 @@ interface InboundEmail {
   body_text: string
   body_html: string | null
   extracted_otp: string | null
+  live_application_queue_id: string | null
 }
 
 function stripHtmlToText(html: string | null): string {
@@ -83,6 +84,7 @@ export function OtpManagerScreen() {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
+                <TableHead>Live App Queue ID</TableHead>
                 <TableHead>User ID</TableHead>
                 <TableHead>Proxy Address</TableHead>
                 <TableHead>From Email</TableHead>
@@ -95,6 +97,7 @@ export function OtpManagerScreen() {
               {emails.map((email) => (
                 <TableRow key={email.id}>
                   <TableCell className="font-mono text-xs">{email.id}</TableCell>
+                  <TableCell className="font-mono text-xs">{email.live_application_queue_id ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{email.user_id}</TableCell>
                   <TableCell className="font-mono text-xs">{email.proxy_address}</TableCell>
                   <TableCell className="font-mono text-xs">{email.from_email}</TableCell>
@@ -111,7 +114,7 @@ export function OtpManagerScreen() {
               ))}
               {emails.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     No inbound emails found
                   </TableCell>
                 </TableRow>

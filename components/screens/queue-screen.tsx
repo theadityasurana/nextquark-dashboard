@@ -15,7 +15,7 @@ import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs } from "@/lib/logs-context"
 import {
-  Search, Eye, Trash2, Loader, Power, KeyRound
+  Search, Eye, Trash2, Loader, Power, KeyRound, ShieldAlert, ExternalLink
 } from "lucide-react"
 
 export function QueueScreen() {
@@ -31,6 +31,7 @@ export function QueueScreen() {
   const [autoStart, setAutoStart] = useState(false)
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
   const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
+  const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
   const prevPendingIdsRef = useRef<Set<string>>(new Set())
   const { addLog } = useLogs()
 
@@ -65,6 +66,42 @@ export function QueueScreen() {
       })
     } finally {
       setSavingOtp(prev => ({ ...prev, [appId]: false }))
+    }
+  }
+
+  const handleResolveCaptcha = async (appId: string) => {
+    setResolvingCaptcha(prev => ({ ...prev, [appId]: true }))
+
+    try {
+      await fetch('/api/live-queue', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: appId, status: 'processing' })
+      })
+
+      setApplications(prev => prev.map(a =>
+        a.id === appId ? { ...a, status: 'processing' as const } : a
+      ))
+
+      addLog({
+        id: `log-${Date.now()}-${Math.random()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: "info",
+        agentId: appId,
+        message: `CAPTCHA marked as solved. Automation will resume automatically.`,
+        applicationId: appId,
+      })
+    } catch (error) {
+      addLog({
+        id: `log-${Date.now()}-${Math.random()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        level: "error",
+        agentId: appId,
+        message: `Failed to mark CAPTCHA as solved: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        applicationId: appId,
+      })
+    } finally {
+      setResolvingCaptcha(prev => ({ ...prev, [appId]: false }))
     }
   }
 
@@ -154,6 +191,20 @@ export function QueueScreen() {
                 
                 setApplications(prev => prev.map(a => 
                   a.id === app.id ? { ...a, status: 'failed' as const } : a
+                ))
+              }
+              if (data.status === "awaiting_captcha") {
+                addLog({
+                  id: `log-${Date.now()}-${Math.random()}`,
+                  timestamp: new Date().toLocaleTimeString(),
+                  level: "warn",
+                  agentId: app.id,
+                  message: `CAPTCHA detected. Browser session is live — waiting for human to solve it.${data.liveUrl ? ` Live URL: ${data.liveUrl}` : ''}`,
+                  applicationId: app.id,
+                })
+                
+                setApplications(prev => prev.map(a => 
+                  a.id === app.id ? { ...a, status: 'awaiting_captcha' as const, live_url: data.liveUrl || a.live_url } : a
                 ))
               }
               if (data.status === "awaiting_otp") {
@@ -252,7 +303,7 @@ export function QueueScreen() {
           const totalApps = data.length
           const successful = data.filter((app: LiveApplicationQueue) => app.status === 'completed').length
           const failed = data.filter((app: LiveApplicationQueue) => app.status === 'failed').length
-          const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing' || app.status === 'awaiting_otp').length
+          const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing' || app.status === 'awaiting_otp' || app.status === 'awaiting_captcha').length
           
           setStats({ totalApps, successful, failed, inProgress })
           
@@ -316,6 +367,7 @@ export function QueueScreen() {
   const completed = applications.filter((a) => a.status === "completed")
   const failed = applications.filter((a) => a.status === "failed")
   const awaitingOtp = applications.filter((a) => a.status === "awaiting_otp")
+  const awaitingCaptcha = applications.filter((a) => a.status === "awaiting_captcha")
 
   return (
     <div className="flex flex-col gap-6">
@@ -381,6 +433,7 @@ export function QueueScreen() {
             <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
             <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
             <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
+            <TabsTrigger value="awaiting_captcha" className="text-xs">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex items-center gap-1.5 ml-auto">
@@ -429,6 +482,11 @@ export function QueueScreen() {
                         <KeyRound className="h-2.5 w-2.5" /> OTP Required
                       </Badge>
                     )}
+                    {app.status === 'awaiting_captcha' && (
+                      <Badge variant="outline" className="text-[9px] text-red-500 border-red-500/30 gap-1">
+                        <ShieldAlert className="h-2.5 w-2.5" /> CAPTCHA Required
+                      </Badge>
+                    )}
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setSelectedApp(app) }}>
                       <Eye className="h-3 w-3" />
                     </Button>
@@ -459,6 +517,34 @@ export function QueueScreen() {
                       </Button>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">Enter the OTP — backend will automatically pick it up and resume</p>
+                  </div>
+                )}
+                {/* Inline CAPTCHA action for awaiting_captcha cards */}
+                {app.status === 'awaiting_captcha' && (
+                  <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[10px] text-muted-foreground mb-2">Browser session is live. Open it, solve the CAPTCHA, then mark as solved.</p>
+                    <div className="flex items-center gap-2">
+                      {app.live_url && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => window.open(app.live_url!, '_blank')}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open Browser
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
+                        disabled={resolvingCaptcha[app.id]}
+                        onClick={() => handleResolveCaptcha(app.id)}
+                      >
+                        {resolvingCaptcha[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
+                        {resolvingCaptcha[app.id] ? 'Resuming...' : 'Mark as Solved'}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

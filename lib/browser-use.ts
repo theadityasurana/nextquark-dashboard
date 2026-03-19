@@ -217,11 +217,12 @@ FIELD-TO-VALUE MAPPING — When you see a form field, use the EXACT value from t
 ${fieldMapping}
 
 IMPORTANT RULES:
-- ONLY fill fields that are MANDATORY / REQUIRED (marked with *, "required", or that block form submission). SKIP all optional fields entirely.
-- When you encounter a field, MATCH it to the FIELD-TO-VALUE MAPPING above and enter the corresponding value. Do NOT leave required fields empty if a value is available in the mapping.
-- For required dropdown/select fields, pick the CLOSEST matching option. If no exact match, pick the most reasonable one.
+- ONLY fill fields that are MANDATORY / REQUIRED (marked with *, "required", or that block form submission). SKIP ALL optional fields entirely — do NOT fill them, do NOT click on them, do NOT interact with them at all. If a field is not marked as required, LEAVE IT BLANK and move on. This is critical — filling optional fields wastes time and can cause errors.
+- When you encounter a REQUIRED field, MATCH it to the FIELD-TO-VALUE MAPPING above and enter the corresponding value. Do NOT leave required fields empty if a value is available in the mapping.
+- For required dropdown/select fields, pick the CLOSEST matching option from the dropdown list. If no exact match, pick the most reasonable one from the available options.
+- CRITICAL DROPDOWN RULE: You MUST ONLY select values that appear in the dropdown options list. NEVER type a custom value that is not in the dropdown. NEVER force-type your own text into a dropdown field. If the dropdown shows options, you MUST pick one of those options by clicking on it. If none of the options match, pick the closest available option. Do NOT try to override the dropdown by typing and pressing Enter.
 - DROPDOWN/SEARCHABLE SELECT HANDLING: Most dropdowns have a search bar inside them. Follow this EXACT sequence every time: (1) Click the dropdown arrow or the field to OPEN the dropdown list. (2) Once the dropdown is open, look for a search/filter input INSIDE the dropdown panel. (3) Click on that search input and type a few characters to filter the options. (4) Wait for filtered results to appear, then click the correct option from the visible list. NEVER type directly into the main field before opening the dropdown — this will fail on most searchable selects. This applies to ALL dropdowns: location fields, country selectors, phone country codes, "How did you hear" fields, state/province selectors, degree selectors, and any other combo-box/searchable-select elements.
-- AUTOCOMPLETE / TYPEAHEAD FIELDS: Some text fields are NOT free-text — when you start typing, a list of suggestions/options will appear below the field. If suggestions appear, you MUST select one of the suggested options by clicking on it. Do NOT just type your full answer and press Enter or move on. Always wait for the suggestion list to appear, then click the closest matching option. If none of the suggestions match exactly, pick the closest one. This is common for location/city fields, company name fields, university/school fields, job title fields, and skill fields.
+- AUTOCOMPLETE / TYPEAHEAD FIELDS: Some text fields are NOT free-text — when you start typing, a list of suggestions/options will appear below the field. If suggestions/options appear, you MUST select one of the suggested options by clicking on it. Do NOT just type your full answer and press Enter or move on. Do NOT ignore the dropdown suggestions and force your own typed value. Always wait for the suggestion list to appear, then click the closest matching option. If none of the suggestions match exactly, pick the closest one. This is common for location/city fields, company name fields, university/school fields, job title fields, and skill fields.
 - For required acknowledgement/agreement/certification checkboxes, CHECK THEM (select "I agree" / "I acknowledge" / "I confirm").
 ${resumeInstruction}
 - Do NOT click "Save for later" or "Save draft". Only click "Submit" / "Apply" / "Send Application".
@@ -229,7 +230,7 @@ ${resumeInstruction}
 - TERMINATE IMMEDIATELY if you see a "successfully applied" or "application received" confirmation.
 - TERMINATE if you encounter a login wall that cannot be bypassed.
 - SKIP EEO/demographic questions (gender, race, veteran status, disability) unless they are explicitly required and block submission.
-- If you encounter a CAPTCHA (reCAPTCHA, hCaptcha, Cloudflare Turnstile, or any other challenge), SOLVE IT. Click the checkbox, complete the image challenge, or wait for it to auto-resolve. Do NOT skip or give up on captchas — always attempt to solve them before continuing.
+- ⚠️ CAPTCHA HANDLING: If you encounter a CAPTCHA (reCAPTCHA, hCaptcha, Cloudflare Turnstile, or any other visual challenge / puzzle / image selection / "I am not a robot" checkbox), STOP IMMEDIATELY. Do NOT try to solve it. Do NOT click the checkbox. Do NOT attempt the image challenge. Do NOT wait for it to auto-resolve. TERMINATE the task RIGHT AWAY and include the exact phrase "CAPTCHA_VERIFICATION_REQUIRED" in your final output/reason. A human operator will come and solve the CAPTCHA manually while the browser session is still alive.
 - ⚠️ HIGHEST PRIORITY — OTP/VERIFICATION DETECTION: At ANY point during the entire process — whether you are filling the form, clicking next, submitting, or on any page — if you see ANYTHING on screen related to OTP, verification code, "Enter the code sent to your email", "Verify your email", "Enter verification code", "Check your inbox", "We sent you a code", or any similar prompt asking for a code/verification, you MUST STOP IMMEDIATELY. Do NOT check whether other fields on the page are filled or empty. Do NOT scroll. Do NOT try to fill any remaining fields. Do NOT try to guess or enter any code. Just TERMINATE the task RIGHT THEN AND THERE and include the exact phrase "OTP_VERIFICATION_REQUIRED" in your final output/reason. This rule overrides ALL other instructions. The OTP will be fetched automatically in a follow-up task after a 2-minute wait.`
 
   switch (portalName) {
@@ -250,7 +251,6 @@ KNOWN QUIRKS:
 - Greenhouse forms are single-page. Do NOT look for a "Next" button.
 - Location fields use an autocomplete dropdown — click the field first, type a few characters of the city, wait for suggestions to appear, then click the matching suggestion. Do NOT just type and move on.
 - Country/phone code selectors are dropdowns — click to open, then select from the list.
-- If a CAPTCHA appears, solve it before submitting.
 - If submission fails due to a missing required field, fill ONLY that field and resubmit.
 ${commonRules}
 
@@ -275,7 +275,6 @@ KNOWN QUIRKS:
 - Lever uses a SINGLE full name field, not separate first/last name. Combine them.
 - The resume upload may be a drag-and-drop area — click it to open the file picker.
 - Location and other searchable dropdowns: click the field first to open the dropdown, then type to filter, then select from the list.
-- Some Lever forms have an hCaptcha — wait for it to auto-solve or complete it.
 ${commonRules}
 
 APPLICANT DATA:
@@ -299,7 +298,6 @@ KNOWN QUIRKS:
 - Ashby location fields require selecting from an autocomplete dropdown — click the field first to open the dropdown, type a few characters to filter, then click the matching option from the list. Do NOT just type the full city name and press Enter.
 - Phone country code is a searchable dropdown — click the dropdown arrow first, then select the country.
 - Boolean fields show as Yes/No toggle buttons, not checkboxes.
-- If a CAPTCHA appears, solve it before submitting.
 - If submission fails due to a missing required field, fill ONLY that field and resubmit.
 ${commonRules}
 
@@ -322,7 +320,6 @@ KNOWN QUIRKS:
 - Workday forms are MULTI-PAGE. Always click "Next"/"Continue" after filling required fields.
 - "Source" / "How did you hear" is often required on Workday — if so, click the dropdown first, then select "Job Board" or "Internet" from the list.
 - Workday uses many searchable dropdowns (country, state, degree, etc.) — always click the dropdown to open it first, then type to filter, then select from the visible options.
-- If a CAPTCHA appears, solve it before proceeding to the next page.
 - If submission fails due to a missing required field, fill ONLY that field and resubmit.
 ${commonRules}
 
@@ -347,7 +344,6 @@ KNOWN QUIRKS:
 - iCIMS often requires account creation — look for guest/quick apply options first.
 - Phone fields often require selecting a phone type from a dropdown — click the dropdown first, then select "Mobile".
 - Location, state, and country fields are searchable dropdowns — click to open first, then type to filter, then select from the list.
-- If a CAPTCHA appears, solve it before submitting.
 - If submission fails due to a missing required field, fill ONLY that field and resubmit.
 ${commonRules}
 
@@ -384,32 +380,71 @@ const OTP_DETECTION_KEYWORDS = [
   "2fa", "two-factor", "check your email", "sent a code", "enter code", "verify code",
 ]
 
+const CAPTCHA_DETECTION_KEYWORDS = [
+  "captcha_verification_required", "captcha", "recaptcha", "hcaptcha",
+  "cloudflare turnstile", "i am not a robot", "verify you are human",
+  "human verification", "security challenge",
+]
+
 function detectOtpRequired(output: string | null): boolean {
   if (!output) return false
   const text = output.toLowerCase()
   return OTP_DETECTION_KEYWORDS.some(kw => text.includes(kw))
 }
 
+function detectCaptchaRequired(output: string | null): boolean {
+  if (!output) return false
+  const text = output.toLowerCase()
+  return CAPTCHA_DETECTION_KEYWORDS.some(kw => text.includes(kw))
+}
+
+// Broader CAPTCHA detection: checks output + all step data (goals, URLs, descriptions)
+function detectCaptchaFromResult(result: BUTaskResult): boolean {
+  // Check final output
+  const outputText = typeof result.output === "string" ? result.output : JSON.stringify(result.output || "")
+  if (detectCaptchaRequired(outputText)) return true
+
+  // Check all step data for CAPTCHA mentions
+  if (result.steps?.length) {
+    for (const step of result.steps) {
+      const stepText = [
+        step.nextGoal,
+        step.output,
+        step.description,
+        step.url,
+        step.error,
+        step.reason,
+        typeof step === "string" ? step : JSON.stringify(step),
+      ].filter(Boolean).join(" ")
+      if (detectCaptchaRequired(stepText)) return true
+    }
+  }
+
+  return false
+}
+
 // Build the prompt for the agent to fetch OTP from the admin panel tab
-function buildOtpFetchPrompt(userId: string, proxyEmail: string): string {
+function buildOtpFetchPrompt(applicationId: string, proxyEmail: string): string {
   return `You need to retrieve an OTP/verification/security code from the OTP Manager admin panel.
 
 STEPS:
 1. You should now be on the OTP Manager page (${OTP_MANAGER_URL}). If not, navigate to it.
-2. Refresh the page to load the latest emails.
-3. Look at the table on the page. The table has columns: ID, User ID, Proxy Address, From Email, Body Text, Body HTML, Extracted OTP.
-4. Find the row that matches ALL of these criteria:
-   - User ID: "${userId}"
-   - Proxy Address: "${proxyEmail}"
-5. Once you find the matching row, look at the "Extracted OTP" column FIRST. If it has a value (a badge/highlighted code), that is the OTP — use it directly.
-6. If the "Extracted OTP" column is empty (shows a dash), then read the "Body Text" column and extract the code manually. It can be a 4-10 character code that is either purely numeric (e.g. 123456), purely alphabetic (e.g. RvnyAyws), or alphanumeric (e.g. Ab3xK9). It is often near words like "code", "OTP", "verification", "verify", "security code".
-7. Remember the OTP code.
-8. Switch back to the first browser tab (the application page).
-9. Output the OTP code as your final result in this exact format: OTP_CODE=<the code>
+2. IMPORTANT: The page might initially show "No inbound emails found" or "0 records" — IGNORE this message completely. The table data may take a moment to load, or the UI may not reflect the actual data. Always look at the actual table rows regardless of what the page header or empty state says.
+3. Click the "Refresh" button on the page to reload the latest emails. Wait a few seconds for the table to update.
+4. Look at the table on the page. The table has columns: ID, Live App Queue ID, User ID, Proxy Address, From Email, Body Text, Body HTML, Extracted OTP.
+5. Find the row where the "Live App Queue ID" column matches: "${applicationId}"
+   - This is the MOST IMPORTANT filter. Match by Live App Queue ID first.
+   - If no row matches by Live App Queue ID, fall back to matching by "Proxy Address" = "${proxyEmail}" and use the most recent row.
+6. Once you find the matching row, look at the "Extracted OTP" column FIRST. If it has a value (a badge/highlighted code), that is the OTP — use it directly. This is the most reliable source.
+7. If the "Extracted OTP" column is empty (shows a dash "—"), then read the "Body Text" column and extract the code manually. It can be a 4-10 character code that is either purely numeric (e.g. 123456), purely alphabetic (e.g. RvnyAyws), or alphanumeric (e.g. Ab3xK9). It is often near words like "code", "OTP", "verification", "verify", "security code".
+8. Remember the OTP code.
+9. Switch back to the first browser tab (the application page).
+10. Output the OTP code as your final result in this exact format: OTP_CODE=<the code>
 
 IMPORTANT:
-- If no matching row is found, refresh the page and try again (up to 3 times with a few seconds wait between each).
-- The most recent matching row (highest ID) is the correct one.
+- IGNORE any "No inbound emails found" or "0 records" message on the page — it may be a UI glitch. Always click Refresh and look at the actual table rows.
+- If no matching row is found after refreshing, wait 10 seconds, click Refresh again, and check the table again. Repeat up to 5 times.
+- ALWAYS match by "Live App Queue ID" = "${applicationId}" first. This ensures you get the OTP for the correct application.
 - ALWAYS check the "Extracted OTP" column first — it already has the code extracted for you.
 - Do NOT enter the OTP on the application page yet — just extract and output it.`
 }
@@ -542,9 +577,72 @@ export async function fillJobApplicationWithBrowserUse(
     let totalSteps = result.steps.length
     let liveUrl = result.live_url || session.liveUrl || null
 
+    // ─── CAPTCHA Pause (same session, human solves it) ───
+    if (applicationId && detectCaptchaFromResult(result)) {
+      console.log("[Browser Use] CAPTCHA detected. Pausing for human intervention...")
+
+      await supabase
+        .from("live_application_queue")
+        .update({ status: "awaiting_captcha", live_url: liveUrl })
+        .eq("id", applicationId)
+
+      await persistLog(applicationId, "info", `CAPTCHA detected. Session kept alive. Live URL: ${liveUrl || 'N/A'}. Waiting for human to solve it...`)
+      if (onStep) onStep({
+        status: "awaiting_captcha",
+        log: "CAPTCHA detected. The browser session is still live — a human operator can connect and solve the CAPTCHA.",
+        liveUrl,
+      })
+
+      // Poll indefinitely for status change — human will update status back to "processing" after solving
+      const captchaPollInterval = 10_000 // check every 10s
+
+      while (true) {
+        await new Promise(r => setTimeout(r, captchaPollInterval))
+
+        const { data: queueRow } = await supabase
+          .from("live_application_queue")
+          .select("status")
+          .eq("id", applicationId)
+          .single()
+
+        if (queueRow?.status === "processing") {
+          await persistLog(applicationId, "info", "CAPTCHA solved by human. Resuming automation...")
+          if (onStep) onStep({ status: "in_progress", log: "CAPTCHA solved. Resuming automation..." })
+          break
+        }
+      }
+
+      // After human solves CAPTCHA, create a new task in the same session to continue
+      const userJson = buildUserDataJson(userData)
+      const continuePrompt = `The CAPTCHA on this page has been solved by a human operator. The browser is still on the application page.
+
+Continue filling out the application form from where it was left off. Fill ONLY MANDATORY/REQUIRED fields.
+
+STEPS:
+1. Look at the current state of the form.
+2. If there are remaining required fields that are empty, fill them using the applicant data below.
+3. If the form has a "Next" / "Continue" button, click it and fill required fields on subsequent pages.
+4. Click "Submit" / "Apply" / "Send Application" on the final page.
+5. Wait for confirmation. DONE.
+
+APPLICANT DATA:
+${JSON.stringify(userJson, null, 2)}`
+
+      const continueRes = await buRequest("POST", "/tasks", {
+        task: continuePrompt,
+        session_id: sessionId,
+        vision: true,
+      })
+
+      const continueResult = await pollTaskUntilComplete(continueRes.id, onStep, applicationId)
+      result = continueResult
+      totalSteps += continueResult.steps.length
+      liveUrl = continueResult.live_url || liveUrl
+    }
+
     // ─── OTP Pause & Resume (same session, fetch from OTP Manager tab) ───
-    const outputText = typeof result.output === "string" ? result.output : JSON.stringify(result.output || "")
-    if (applicationId && detectOtpRequired(outputText)) {
+    const outputTextForOtp = typeof result.output === "string" ? result.output : JSON.stringify(result.output || "")
+    if (applicationId && detectOtpRequired(outputTextForOtp)) {
       console.log("[Browser Use] OTP detected. Session still alive. Fetching from OTP Manager tab...")
 
       await supabase
@@ -552,19 +650,18 @@ export async function fillJobApplicationWithBrowserUse(
         .update({ status: "awaiting_otp" })
         .eq("id", applicationId)
 
-      await persistLog(applicationId, "info", "OTP required. Waiting 120s for email to arrive before fetching...")
-      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Waiting 120 seconds for the email to arrive..." })
+      await persistLog(applicationId, "info", "OTP required. Waiting 10s for email to arrive before fetching...")
+      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Waiting 10 seconds for the email to arrive..." })
 
-      await new Promise(r => setTimeout(r, 120_000))
+      await new Promise(r => setTimeout(r, 10_000))
 
       const proxyEmail = userData.email || ""
-      const otpUserId = userId || ""
 
       // Step 1: Open OTP Manager tab, then fetch the OTP from it
       if (onStep) onStep({ status: "awaiting_otp", log: "Opening OTP Manager tab to fetch verification code..." })
       const openAndFetchPrompt = `STEP A: Open a new browser tab and navigate to ${OTP_MANAGER_URL}.
 STEP B: Once the page loads, follow these instructions:
-${buildOtpFetchPrompt(otpUserId, proxyEmail)}`
+${buildOtpFetchPrompt(applicationId, proxyEmail)}`
       const otpFetchRes = await buRequest("POST", "/tasks", {
         task: openAndFetchPrompt,
         session_id: sessionId,

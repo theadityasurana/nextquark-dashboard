@@ -64,7 +64,7 @@ export interface LiveApplicationQueue {
   job_url: string
   
   // Application status
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'awaiting_otp'
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'awaiting_otp' | 'awaiting_captcha'
   
   // OTP verification
   verification_otp?: string | null

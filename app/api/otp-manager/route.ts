@@ -34,7 +34,7 @@ function extractOtp(bodyText: string | null, bodyHtml: string | null): string | 
 export async function GET() {
   const { data, error } = await supabase
     .from('inbound_emails')
-    .select('id, user_id, proxy_address, from_email, body_text, body_html')
+    .select('id, user_id, proxy_address, from_email, body_text, body_html, live_application_queue_id')
     .order('id', { ascending: false })
     .limit(100)
 

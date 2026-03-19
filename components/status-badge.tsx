@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed" | "awaiting_otp" | "pending"
+type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed" | "awaiting_otp" | "awaiting_captcha" | "pending"
 
 const statusConfig: Record<StatusType, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
   queued: { label: "Queued", dotColor: "bg-warning", bgColor: "bg-warning/10", textColor: "text-warning" },
@@ -9,6 +9,7 @@ const statusConfig: Record<StatusType, { label: string; dotColor: string; bgColo
   completed: { label: "Completed", dotColor: "bg-success", bgColor: "bg-success/10", textColor: "text-success" },
   failed: { label: "Failed", dotColor: "bg-destructive", bgColor: "bg-destructive/10", textColor: "text-destructive" },
   awaiting_otp: { label: "Awaiting OTP", dotColor: "bg-orange-500", bgColor: "bg-orange-500/10", textColor: "text-orange-500" },
+  awaiting_captcha: { label: "CAPTCHA Required", dotColor: "bg-red-500", bgColor: "bg-red-500/10", textColor: "text-red-500" },
   active: { label: "Active", dotColor: "bg-success", bgColor: "bg-success/10", textColor: "text-success" },
   idle: { label: "Idle", dotColor: "bg-warning", bgColor: "bg-warning/10", textColor: "text-warning" },
   error: { label: "Error", dotColor: "bg-destructive", bgColor: "bg-destructive/10", textColor: "text-destructive" },
