@@ -518,8 +518,8 @@ function AgentCard({ agent, onRetry, retrying, setSelectedAgent, getStatusBadgeS
         )}
 
         <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1" title={agent.location}><Server className="h-3 w-3" /> {agent.location.split(',')[0]}</span>
-          <span className="flex items-center gap-1" title={agent.email}><Wifi className="h-3 w-3" /> {agent.email.split('@')[0]}</span>
+          <span className="flex items-center gap-1" title={agent.location || ''}><Server className="h-3 w-3" /> {agent.location?.split(',')[0] || 'N/A'}</span>
+          <span className="flex items-center gap-1" title={agent.email || ''}><Wifi className="h-3 w-3" /> {agent.email?.split('@')[0] || 'N/A'}</span>
           <span className="ml-auto">{new Date(agent.createdAt).toLocaleTimeString()}</span>
         </div>
       </CardContent>
