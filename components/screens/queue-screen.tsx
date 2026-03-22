@@ -124,7 +124,7 @@ export function QueueScreen() {
       timestamp: new Date().toLocaleTimeString(),
       level: "info",
       agentId: app.id,
-      message: `Starting Skyvern task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`,
+      message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`,
       applicationId: app.id,
     })
     
@@ -266,7 +266,7 @@ export function QueueScreen() {
         throw new Error('Task failed to start')
       }
     } catch (error) {
-      console.error('Skyvern task error:', error)
+      console.error('Task error:', error)
       addLog({
         id: `log-${Date.now()}-${Math.random()}`,
         timestamp: new Date().toLocaleTimeString(),

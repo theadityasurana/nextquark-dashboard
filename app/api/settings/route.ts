@@ -1,7 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
-import { clearCachedApiKey } from "@/lib/skyvern"
 import { clearCachedBrowserUseKey } from "@/lib/browser-use"
-import { clearProviderCache } from "@/lib/automation-provider"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -28,11 +26,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { skyvernApiKey, automationProvider, browserUseApiKey } = body
+    const { browserUseApiKey } = body
 
     const updateData: Record<string, any> = { id: 1 }
-    if (skyvernApiKey !== undefined) updateData.skyvernApiKey = skyvernApiKey
-    if (automationProvider !== undefined) updateData.automationProvider = automationProvider
     if (browserUseApiKey !== undefined) updateData.browserUseApiKey = browserUseApiKey
 
     const { data, error } = await supabase
@@ -43,10 +39,7 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    // Clear all caches so next request uses new values
-    clearCachedApiKey()
     clearCachedBrowserUseKey()
-    clearProviderCache()
 
     return Response.json({
       success: true,

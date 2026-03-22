@@ -351,11 +351,11 @@ export function AnalyticsScreen() {
                       <p className="text-sm font-medium truncate">{job.title}</p>
                       <p className="text-[10px] text-muted-foreground">{job.location}</p>
                     </div>
-  <div className="text-right">
-  <span className="text-sm font-bold">{(job.rightSwipes ?? 0).toLocaleString()}</span>
-  </div>
-  <div className="text-right">
-  <span className="text-sm font-bold text-primary">{(job.rightSwipes ?? 0).toLocaleString()}</span>
+                    <div className="text-right">
+                      <span className="text-sm font-bold">{job.totalApps.toLocaleString()}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-primary">{(job.rightSwipes ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-medium">{job.successRate}%</span>

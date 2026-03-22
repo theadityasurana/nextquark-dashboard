@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
         skills: agent.skills,
         experience: agent.experience,
         education: agent.education,
-        liveUrl: null, // Skyvern does not support live URLs
+        liveUrl: agent.live_url || null,
         recordingUrl: agent.recording_url,
       }
     }) || []

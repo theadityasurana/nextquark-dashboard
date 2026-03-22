@@ -105,7 +105,7 @@ export function ApplicationDetails({
                 title="Task Recording"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Playback of the completed Skyvern task</p>
+            <p className="text-xs text-muted-foreground mt-2">Playback of the completed task</p>
           </div>
         </div>
       )}
@@ -114,7 +114,7 @@ export function ApplicationDetails({
       {isStreaming && !recordingUrl && !application.recording_url && (
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-            <p className="text-xs text-yellow-600">Skyvern task is running... Recording will be available once the task completes. Check logs below for progress.</p>
+            <p className="text-xs text-yellow-600">Task is running... Recording will be available once the task completes. Check logs below for progress.</p>
           </div>
         </div>
       )}

@@ -49,7 +49,7 @@ function mapJob(j: Record<string, unknown>): Job {
     companyLinkedin: j.company_linkedin as string | undefined,
     status: j.status as string || "queued",
     totalApps: (j.total_apps as number) || 0,
-    rightSwipes: (j.right_swipes as number) || 0,
+    rightSwipes: (j.right_swipe as number) || (j.right_swipes as number) || 0,
     successRate: Number(j.success_rate) || 0,
     avgTime: j.avg_time as string || "-",
     postedAt: j.posted_at as string || new Date().toISOString().split("T")[0],

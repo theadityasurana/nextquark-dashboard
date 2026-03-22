@@ -69,7 +69,7 @@ export interface LiveApplicationQueue {
   // OTP verification
   verification_otp?: string | null
   
-  // Live stream URL (deprecated — Skyvern uses recordings instead)
+  // Live stream URL
   live_url?: string | null
   
   // Recording URL

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendEmail, getTemplate, renderTemplate, getProxyEmail } from '@/lib/email-service'
+import { sendEmail, getTemplate, renderTemplate, getUserEmails } from '@/lib/email-service'
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,14 +26,13 @@ export async function POST(req: NextRequest) {
       app_url: process.env.NEXT_PUBLIC_APP_URL || 'https://nextquark.com',
     })
 
-    const proxyEmail = await getProxyEmail(record.email)
+    const allEmails = await getUserEmails(record.id, record.email)
 
     const result = await sendEmail({
-      to: record.email,
+      to: allEmails,
       subject: template.subject,
       html,
       triggerType: 'welcome',
-      cc: proxyEmail,
     })
 
     console.log('Email send result:', result)

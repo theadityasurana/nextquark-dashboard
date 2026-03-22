@@ -7,20 +7,19 @@ const supabase = createClient(
 )
 
 interface EmailOptions {
-  to: string
+  to: string | string[]
   subject: string
   html: string
   triggerType: string
-  cc?: string
 }
 
-export async function sendEmail({ to, subject, html, triggerType, cc }: EmailOptions) {
+export async function sendEmail({ to, subject, html, triggerType }: EmailOptions) {
+  const recipients = Array.isArray(to) ? to.filter(Boolean).join(', ') : to
   try {
     console.log('Sending email with config:', {
       user: process.env.GMAIL_USER,
       hasPassword: !!process.env.GMAIL_APP_PASSWORD,
-      to,
-      cc,
+      to: recipients,
     })
 
     const transporter = nodemailer.createTransport({
@@ -33,15 +32,14 @@ export async function sendEmail({ to, subject, html, triggerType, cc }: EmailOpt
 
     await transporter.sendMail({
       from: `"NextQuark" <${process.env.GMAIL_USER}>`,
-      to,
-      cc,
+      to: recipients,
       subject,
       html,
     })
 
     try {
       await supabase.from('email_logs').insert({
-        recipient_email: to,
+        recipient_email: recipients,
         subject,
         trigger_type: triggerType,
         status: 'sent',
@@ -56,7 +54,7 @@ export async function sendEmail({ to, subject, html, triggerType, cc }: EmailOpt
 
     try {
       await supabase.from('email_logs').insert({
-        recipient_email: to,
+        recipient_email: recipients,
         subject,
         trigger_type: triggerType,
         status: 'failed',
@@ -81,26 +79,38 @@ export async function getTemplate(triggerType: string) {
   return data
 }
 
-export async function getProxyEmail(userEmail: string): Promise<string | undefined> {
-  console.log('=== getProxyEmail START ===')
-  console.log('Input userEmail:', userEmail)
+// Returns deduplicated list of emails for a user: auth email + profile email
+export async function getUserEmails(userId: string, profileEmail?: string): Promise<string[]> {
+  const emails: string[] = []
 
-  const { data: profile, error: profileError } = await supabase
+  const { data } = await supabase.auth.admin.getUserById(userId)
+  if (data?.user?.email) emails.push(data.user.email)
+
+  if (profileEmail) emails.push(profileEmail)
+
+  return [...new Set(emails.map((e) => e.toLowerCase()))]
+}
+
+export interface UserWithEmails {
+  id: string
+  email: string
+  first_name: string
+  all_emails: string[]
+}
+
+export async function getAllUsersWithEmails(): Promise<UserWithEmails[]> {
+  const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, proxy_email')
-    .eq('email', userEmail)
-    .single()
+    .select('id, email, first_name')
 
-  console.log('Profile lookup result:', {
-    userEmail,
-    profileFound: !!profile,
-    proxyEmail: profile?.proxy_email,
-    profileError: profileError?.message || null,
+  const { data: authData } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const authEmailMap = new Map((authData?.users || []).map((u) => [u.id, u.email]))
+
+  return (profiles || []).map((p) => {
+    const authEmail = authEmailMap.get(p.id)
+    const all = [authEmail, p.email].filter(Boolean) as string[]
+    return { ...p, all_emails: [...new Set(all.map((e) => e.toLowerCase()))] }
   })
-
-  const result = profile?.proxy_email || undefined
-  console.log('=== getProxyEmail END === Returning:', result)
-  return result
 }
 
 export function renderTemplate(template: string, variables: Record<string, string>) {

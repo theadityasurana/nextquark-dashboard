@@ -27,7 +27,7 @@ interface Agent {
   skills?: string[]
   experience?: any
   education?: any
-  liveUrl?: string // deprecated — Skyvern uses recordings
+  liveUrl?: string
   recordingUrl?: string
 }
 
@@ -328,10 +328,9 @@ export function AgentsScreen() {
                   </div>
                 )}
 
-                {/* Processing indicator */}
                 {selectedAgent.status === "processing" && !selectedAgent.recordingUrl && (
                   <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-                    <p className="text-xs text-yellow-600">Skyvern task is running... Recording will be available once the task completes.</p>
+                    <p className="text-xs text-yellow-600">Task is running... Recording will be available once the task completes.</p>
                   </div>
                 )}
 

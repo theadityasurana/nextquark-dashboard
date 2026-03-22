@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       salaryMax: userData.salary_max || null,
     }
 
-    console.log('FormData being sent to Skyvern:', JSON.stringify(formData, null, 2))
+    console.log('FormData being sent to automation:', JSON.stringify(formData, null, 2))
 
     if (stream) {
       return new Response(
