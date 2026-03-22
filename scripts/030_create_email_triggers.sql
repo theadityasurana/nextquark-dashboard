@@ -41,6 +41,7 @@ DECLARE
 BEGIN
   payload := json_build_object(
     'record', json_build_object(
+      'user_id', NEW.user_id,
       'email', NEW.email,
       'first_name', NEW.first_name,
       'job_title', NEW.job_title,

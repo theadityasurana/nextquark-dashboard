@@ -79,7 +79,7 @@ export async function getTemplate(triggerType: string) {
   return data
 }
 
-// Returns deduplicated list of emails for a user: auth email + profile email
+// Returns deduplicated list of emails for a user: auth email + profile email + proxy email
 export async function getUserEmails(userId: string, profileEmail?: string): Promise<string[]> {
   const emails: string[] = []
 
@@ -87,6 +87,13 @@ export async function getUserEmails(userId: string, profileEmail?: string): Prom
   if (data?.user?.email) emails.push(data.user.email)
 
   if (profileEmail) emails.push(profileEmail)
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('proxy_email')
+    .eq('id', userId)
+    .single()
+  if (profile?.proxy_email) emails.push(profile.proxy_email)
 
   return [...new Set(emails.map((e) => e.toLowerCase()))]
 }
