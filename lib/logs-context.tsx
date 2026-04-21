@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, ReactNode, useEffect } from "react"
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react"
 
 export interface AgentDetails {
   firstName: string
@@ -24,6 +24,7 @@ interface LogsContextType {
   agentDetailsMap: Record<string, AgentDetails>
   addLog: (log: LogEntry) => void
   clearLogs: () => void
+  refreshLogs: () => Promise<void>
 }
 
 const LogsContext = createContext<LogsContextType | undefined>(undefined)
@@ -32,8 +33,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [agentDetailsMap, setAgentDetailsMap] = useState<Record<string, AgentDetails>>({})
 
-  useEffect(() => {
-    const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
       try {
         const response = await fetch('/api/logs')
         const data = await response.json()
@@ -52,10 +52,11 @@ export function LogsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Failed to fetch logs:', error)
       }
-    }
-    
+    }, [])
+
+  useEffect(() => {
     fetchLogs()
-  }, [])
+  }, [fetchLogs])
 
   const addLog = (log: LogEntry) => {
     setLogs((prev) => [log, ...prev])
@@ -72,7 +73,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <LogsContext.Provider value={{ logs, agentDetailsMap, addLog, clearLogs }}>
+    <LogsContext.Provider value={{ logs, agentDetailsMap, addLog, clearLogs, refreshLogs: fetchLogs }}>
       {children}
     </LogsContext.Provider>
   )

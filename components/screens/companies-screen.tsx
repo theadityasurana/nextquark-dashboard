@@ -18,7 +18,7 @@ import { CITIES } from "@/lib/cities"
 import type { Company } from "@/lib/mock-data"
 import {
   Search, Plus, ChevronRight, Globe, ExternalLink, RefreshCw, BarChart3,
-  Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check
+  Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2
 } from "lucide-react"
 
 export function CompaniesScreen() {
@@ -26,6 +26,8 @@ export function CompaniesScreen() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
+  const [companiesPage, setCompaniesPage] = useState(1)
+  const COMPANIES_PER_PAGE = 12
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -37,7 +39,16 @@ export function CompaniesScreen() {
   const [newBenefit, setNewBenefit] = useState("")
   const [locationSearch, setLocationSearch] = useState("")
   const [editLocationSearch, setEditLocationSearch] = useState("")
+  const [companyJobsExpanded, setCompanyJobsExpanded] = useState<Record<string, boolean>>({})
+  const COMPANY_JOBS_LIMIT = 5
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ATS preview state
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewJobs, setPreviewJobs] = useState<any[]>([])
+  const [previewSelectedUrls, setPreviewSelectedUrls] = useState<Set<string>>(new Set())
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewCompany, setPreviewCompany] = useState<Company | null>(null)
 
   // Add company form state
   const [formData, setFormData] = useState({
@@ -61,6 +72,13 @@ export function CompaniesScreen() {
     const q = searchQuery.toLowerCase()
     return company.name.toLowerCase().includes(q) || company.industry.toLowerCase().includes(q)
   })
+
+  const totalFilteredCompanies = filteredCompanies.length
+  const totalPages = Math.ceil(totalFilteredCompanies / COMPANIES_PER_PAGE)
+  const paginatedCompanies = filteredCompanies.slice(
+    (companiesPage - 1) * COMPANIES_PER_PAGE,
+    companiesPage * COMPANIES_PER_PAGE
+  )
 
   const getCompanyJobs = (companyId: string) => {
     return jobs.filter((job) => job.companyId === companyId)
@@ -216,12 +234,12 @@ export function CompaniesScreen() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search companies..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <Input placeholder="Search companies..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCompaniesPage(1) }} />
       </div>
 
       {/* Companies Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredCompanies.map((company) => (
+        {paginatedCompanies.map((company) => (
           <Card key={company.id} className="bg-card border-border hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setSelectedCompany(company)}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-4">
@@ -264,6 +282,18 @@ export function CompaniesScreen() {
           </Card>
         ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Showing {((companiesPage - 1) * COMPANIES_PER_PAGE) + 1}-{Math.min(companiesPage * COMPANIES_PER_PAGE, totalFilteredCompanies)} of {totalFilteredCompanies}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={companiesPage === 1} onClick={() => setCompaniesPage(p => p - 1)}>Previous</Button>
+            <span className="text-xs text-muted-foreground">Page {companiesPage} of {totalPages}</span>
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={companiesPage === totalPages} onClick={() => setCompaniesPage(p => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
 
       {/* Add Company Dialog */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetForm() } }}>
@@ -749,7 +779,10 @@ export function CompaniesScreen() {
                   </div>
                   {getCompanyJobs(selectedCompany.id).length > 0 ? (
                     <div className="flex flex-col gap-2">
-                      {getCompanyJobs(selectedCompany.id).map((job) => (
+                      {(companyJobsExpanded[selectedCompany.id]
+                        ? getCompanyJobs(selectedCompany.id)
+                        : getCompanyJobs(selectedCompany.id).slice(0, COMPANY_JOBS_LIMIT)
+                      ).map((job) => (
                         <div
                           key={job.id}
                           className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-accent/30 transition-colors"
@@ -772,6 +805,18 @@ export function CompaniesScreen() {
                           </div>
                         </div>
                       ))}
+                      {getCompanyJobs(selectedCompany.id).length > COMPANY_JOBS_LIMIT && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs w-full"
+                          onClick={() => setCompanyJobsExpanded(prev => ({ ...prev, [selectedCompany.id]: !prev[selectedCompany.id] }))}
+                        >
+                          {companyJobsExpanded[selectedCompany.id]
+                            ? "Show Less"
+                            : `Show All ${getCompanyJobs(selectedCompany.id).length} Jobs`}
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-8 text-center">
@@ -783,45 +828,56 @@ export function CompaniesScreen() {
                 </div>
 
                 <div className="flex items-center gap-2 pt-2 border-t border-border">
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5 text-destructive hover:bg-destructive/10" onClick={async () => {
+                    if (!confirm(`Delete "${selectedCompany.name}" and all ${getCompanyJobs(selectedCompany.id).length} associated jobs? This cannot be undone.`)) return
+                    setIsSaving(true)
+                    try {
+                      const res = await fetch(`/api/companies?id=${selectedCompany.id}`, { method: "DELETE" })
+                      if (res.ok) {
+                        setSelectedCompany(null)
+                        await Promise.all([refreshJobs(), refreshCompanies()])
+                      } else {
+                        const data = await res.json()
+                        alert(`Failed to delete: ${data.error}`)
+                      }
+                    } catch (err) {
+                      alert(`Failed to delete company: ${err}`)
+                    } finally {
+                      setIsSaving(false)
+                    }
+                  }} disabled={isSaving}>
+                    <Trash2 className="h-3 w-3" /> {isSaving ? "Deleting..." : "Delete Company"}
+                  </Button>
                   {(selectedCompany as any).atsType && (selectedCompany as any).atsCompanyId ? (
                     <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={async () => {
-                      setIsSaving(true)
+                      setPreviewLoading(true)
+                      setPreviewCompany(selectedCompany)
                       try {
-                        console.log('Starting ATS sync for:', selectedCompany.name)
-                        const res = await fetch("/api/ats-sync", { 
-                          method: "POST", 
-                          headers: { "Content-Type": "application/json" }, 
-                          body: JSON.stringify({ 
+                        const res = await fetch("/api/ats-sync", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
                             companyId: selectedCompany.id,
                             atsType: (selectedCompany as any).atsType,
-                            atsCompanyId: (selectedCompany as any).atsCompanyId
-                          }) 
+                            atsCompanyId: (selectedCompany as any).atsCompanyId,
+                            preview: true,
+                          }),
                         })
-                        console.log('Response status:', res.status)
                         const data = await res.json()
-                        console.log('Response data:', data)
                         if (data.error) {
                           alert(`Error: ${data.error}`)
                         } else {
-                          alert(`${data.message}\nTotal found: ${data.totalFound}\nAdded: ${data.addedCount}`)
-                          // Refresh the data context instead of full page reload
-                          await Promise.all([refreshJobs(), refreshCompanies()])
-                          // Close and reopen the modal to show updated data
-                          const currentCompanyId = selectedCompany.id
-                          setSelectedCompany(null)
-                          setTimeout(() => {
-                            const updatedCompany = companies.find(c => c.id === currentCompanyId)
-                            if (updatedCompany) setSelectedCompany(updatedCompany)
-                          }, 500)
+                          setPreviewJobs(data.jobs || [])
+                          setPreviewSelectedUrls(new Set((data.jobs || []).map((j: any) => j.jobUrl)))
+                          setShowPreview(true)
                         }
                       } catch (err) {
-                        console.error('Sync error:', err)
-                        alert(`Failed to sync jobs from ATS: ${err}`)
+                        alert(`Failed to fetch jobs: ${err}`)
                       } finally {
-                        setIsSaving(false)
+                        setPreviewLoading(false)
                       }
-                    }} disabled={isSaving}>
-                      <Zap className="h-3 w-3" /> {isSaving ? "Syncing..." : `Sync from ${(selectedCompany as any).atsType}`}
+                    }} disabled={previewLoading || isSaving}>
+                      <Zap className="h-3 w-3" /> {previewLoading ? "Fetching..." : `Sync from ${(selectedCompany as any).atsType}`}
                     </Button>
                   ) : (
                     <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={async () => {
@@ -1087,6 +1143,119 @@ export function CompaniesScreen() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* ATS Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Zap className="h-5 w-5 text-primary" />
+              Preview Jobs — {previewCompany?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+            <span>{previewJobs.length} jobs found</span>
+            <div className="flex items-center gap-3">
+              <span>{previewSelectedUrls.size} selected</span>
+              <button
+                className="text-primary hover:underline"
+                onClick={() => setPreviewSelectedUrls(new Set(previewJobs.map((j) => j.jobUrl)))}
+              >Select all</button>
+              <button
+                className="text-primary hover:underline"
+                onClick={() => setPreviewSelectedUrls(new Set())}
+              >Deselect all</button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5 max-h-[55vh] overflow-y-auto">
+            {previewJobs.map((job) => (
+              <label
+                key={job.jobUrl}
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  previewSelectedUrls.has(job.jobUrl)
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border hover:bg-accent/30"
+                }`}
+              >
+                <Checkbox
+                  checked={previewSelectedUrls.has(job.jobUrl)}
+                  onCheckedChange={(checked) => {
+                    const next = new Set(previewSelectedUrls)
+                    checked ? next.add(job.jobUrl) : next.delete(job.jobUrl)
+                    setPreviewSelectedUrls(next)
+                  }}
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{job.title}</span>
+                    {job.isExisting ? (
+                      <Badge variant="secondary" className="text-[10px] shrink-0">Existing</Badge>
+                    ) : (
+                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] shrink-0">New</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
+                    <span>{job.type}</span>
+                    {job.departments && <span>{job.departments}</span>}
+                    <span>{job.salaryRange}</span>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <DialogFooter className="mt-3 gap-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowPreview(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+              disabled={previewSelectedUrls.size === 0 || isSaving}
+              onClick={async () => {
+                if (!previewCompany) return
+                setIsSaving(true)
+                try {
+                  const res = await fetch("/api/ats-sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      companyId: previewCompany.id,
+                      atsType: (previewCompany as any).atsType,
+                      atsCompanyId: (previewCompany as any).atsCompanyId,
+                      selectedJobUrls: Array.from(previewSelectedUrls),
+                    }),
+                  })
+                  const data = await res.json()
+                  if (data.error) {
+                    alert(`Error: ${data.error}`)
+                  } else {
+                    alert(`${data.message}`)
+                    setShowPreview(false)
+                    await Promise.all([refreshJobs(), refreshCompanies()])
+                    const cid = previewCompany.id
+                    setSelectedCompany(null)
+                    setTimeout(() => {
+                      const updated = companies.find((c) => c.id === cid)
+                      if (updated) setSelectedCompany(updated)
+                    }, 500)
+                  }
+                } catch (err) {
+                  alert(`Sync failed: ${err}`)
+                } finally {
+                  setIsSaving(false)
+                }
+              }}
+            >
+              <RefreshCw className="h-3 w-3" />
+              {isSaving ? "Syncing..." : `Sync ${previewSelectedUrls.size} Job${previewSelectedUrls.size !== 1 ? "s" : ""}`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -545,7 +545,18 @@ async function pollTaskUntilComplete(
 
     const taskData = await buRequest("GET", `/tasks/${taskId}`)
     const taskStatus = taskData.status
-    if (!liveUrl && taskData.live_url) liveUrl = taskData.live_url
+    if (!liveUrl && taskData.live_url) {
+      liveUrl = taskData.live_url
+      // Persist live_url to DB immediately on first availability
+      if (applicationId) {
+        supabase
+          .from("live_application_queue")
+          .update({ live_url: liveUrl })
+          .eq("id", applicationId)
+          .then(() => {})
+          .catch(() => {})
+      }
+    }
     const isTerminal = TERMINAL.includes(taskStatus)
 
     const steps = taskData.steps || []
@@ -642,10 +653,26 @@ export async function fillJobApplicationWithBrowserUse(
     if (applicationId) await persistLog(applicationId, "info", `Task ${taskId} created in session ${sessionId}. Polling...`)
     if (onStep) onStep({ step: 0, status: "in_progress", log: `Task ${taskId} created. Polling...`, taskId })
 
+    // Persist live_url to DB as soon as session is created (if available from session)
+    if (applicationId && session.liveUrl) {
+      await supabase
+        .from("live_application_queue")
+        .update({ live_url: session.liveUrl })
+        .eq("id", applicationId)
+    }
+
     // Poll until terminal (with portal-tuned intervals)
     let result = await pollTaskUntilComplete(taskId, onStep, applicationId, portalConfig)
     let totalSteps = result.steps.length
     let liveUrl = result.live_url || session.liveUrl || null
+
+    // Update live_url if we got it from polling and didn't have it from session
+    if (applicationId && liveUrl && !session.liveUrl) {
+      await supabase
+        .from("live_application_queue")
+        .update({ live_url: liveUrl })
+        .eq("id", applicationId)
+    }
 
     // ─── CAPTCHA Pause (same session, human solves it) ───
     if (applicationId && detectCaptchaFromResult(result)) {

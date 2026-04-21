@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 import { htmlToMarkdown } from "@/lib/html-converter"
-import { parseJobContent } from "@/lib/job-parser"
+import { parseJobContent, parseSalaryFromText, mapLeverCommitment, mapAshbyEmploymentType } from "@/lib/job-parser"
 
 function getAdminClient() {
   return createClient(
@@ -17,6 +17,30 @@ const ATS_APIS = {
   ashby: (companyId: string) => `https://api.ashbyhq.com/posting-api/job-board/${companyId}`,
 }
 
+function decodeAndSanitize(content: string): string {
+  let decoded = content
+  for (let i = 0; i < 3; i++) {
+    const temp = decoded
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+    if (temp === decoded) break
+    decoded = temp
+  }
+  return decoded
+    .replace(/<script[^>]*>.*?<\/script>/gi, "")
+    .replace(/<style[^>]*>.*?<\/style>/gi, "")
+    .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "")
+    .replace(/on\w+="[^"]*"/gi, "")
+    .replace(/on\w+='[^']*'/gi, "")
+    .trim()
+}
+
+function formatSalary(min: string, max: string): string {
+  if (min && max) return `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()}`
+  if (min) return `$${Number(min).toLocaleString()}+`
+  return "Not specified"
+}
+
 async function fetchGreenhouseJobs(companyId: string) {
   const url = ATS_APIS.greenhouse(companyId)
   console.log('Fetching from Greenhouse:', url)
@@ -28,11 +52,12 @@ async function fetchGreenhouseJobs(companyId: string) {
     throw new Error(`Greenhouse API returned ${response.status}: ${errorText}`)
   }
   const data = await response.json()
-  console.log('Greenhouse data:', JSON.stringify(data).substring(0, 200))
   const jobs = data.jobs || []
-  console.log('Found jobs:', jobs.length)
+  console.log('Greenhouse jobs found:', jobs.length, jobs[0]?.title ? `(first: ${jobs[0].title})` : '')
   
   return jobs.map((job: any) => {
+    const title = job.title || "Untitled Position"
+
     // Extract location from location object or offices array
     let location = "Remote"
     if (job.location?.name) {
@@ -41,16 +66,14 @@ async function fetchGreenhouseJobs(companyId: string) {
       location = job.offices.map((o: any) => o.name).join(", ")
     }
 
-    // Extract departments
     const departments = job.departments?.map((d: any) => d.name).join(", ") || ""
 
-    // Parse content for description and requirements
     let description = ""
     let detailedRequirements = ""
     let requirements: string[] = []
     let skills: string[] = []
     let benefits: string[] = []
-    let jobType = "Full-time"
+    let jobType = ""
     let experienceLevel = ""
     let salaryMin = ""
     let salaryMax = ""
@@ -58,73 +81,42 @@ async function fetchGreenhouseJobs(companyId: string) {
     let workAuthorization = null
     
     if (job.content) {
-      // Decode HTML entities (handles double encoding)
-      let decodedContent = job.content
-      // Decode multiple times to handle double/triple encoding
-      for (let i = 0; i < 3; i++) {
-        const temp = decodedContent
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&nbsp;/g, " ")
-        if (temp === decodedContent) break
-        decodedContent = temp
-      }
+      const sanitizedHtml = decodeAndSanitize(job.content)
       
-      // Sanitize HTML - remove dangerous tags but keep formatting
-      const sanitizedHtml = decodedContent
-        .replace(/<script[^>]*>.*?<\/script>/gi, "")
-        .replace(/<style[^>]*>.*?<\/style>/gi, "")
-        .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "")
-        .replace(/on\w+="[^"]*"/gi, "") // Remove inline event handlers
-        .replace(/on\w+='[^']*'/gi, "")
-        .trim()
-      
-      // Parse structured data from content
-      const parsed = parseJobContent(sanitizedHtml)
+      // Pass title for title-aware extraction
+      const parsed = parseJobContent(sanitizedHtml, title)
       requirements = parsed.requirements
       skills = parsed.skills
       benefits = parsed.benefits
-      jobType = parsed.jobType || "Full-time"
+      jobType = parsed.jobType || ""
       experienceLevel = parsed.experienceLevel || ""
       salaryMin = parsed.salaryMin || ""
       salaryMax = parsed.salaryMax || ""
       educationLevel = parsed.educationLevel || null
       workAuthorization = parsed.workAuthorization || null
       
-      // For brief description, strip HTML tags
-      const plainText = sanitizedHtml
-        .replace(/<[^>]*>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-      
+      const plainText = sanitizedHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       description = plainText.substring(0, 500)
-      // Convert HTML to Markdown for cross-platform compatibility
       detailedRequirements = htmlToMarkdown(sanitizedHtml)
     }
 
-    // Extract metadata
-    const metadata = job.metadata || []
-    
-    // Format salary range
-    let salaryRange = "Not specified"
-    if (salaryMin && salaryMax) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()} - $${Number(salaryMax).toLocaleString()}`
-    } else if (salaryMin) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()}+`
+    // Greenhouse metadata can contain salary info
+    for (const meta of (job.metadata || [])) {
+      if (!salaryMin && meta.value_type === "currency_range" && meta.value) {
+        salaryMin = meta.value.min_value?.toString() || ""
+        salaryMax = meta.value.max_value?.toString() || ""
+      }
     }
     
     return {
-      title: job.title || "Untitled Position",
+      title,
       location,
       jobUrl: job.absolute_url || "",
       description,
       detailedRequirements,
-      type: jobType,
+      type: jobType || "Full-time",
       experience: experienceLevel,
-      salaryRange,
+      salaryRange: formatSalary(salaryMin, salaryMax),
       requirements,
       skills,
       benefits,
@@ -147,106 +139,96 @@ async function fetchLeverJobs(companyId: string) {
     throw new Error(`Lever API returned ${response.status}: ${errorText}`)
   }
   const data = await response.json()
-  console.log('Lever data:', JSON.stringify(data).substring(0, 200))
-  console.log('Found jobs:', data?.length || 0)
+  console.log('Lever jobs found:', data?.length || 0)
   
   return (data || []).map((job: any) => {
-    console.log('Processing Lever job:', job.text, '- Has description:', !!job.description)
+    const title = job.text || "Untitled Position"
+    const categories = job.categories || {}
+
     let description = ""
     let detailedRequirements = ""
     let requirements: string[] = []
     let skills: string[] = []
     let benefits: string[] = []
-    let jobType = "Full-time"
+    let jobType = ""
     let experienceLevel = ""
     let salaryMin = ""
     let salaryMax = ""
     let educationLevel = null
     let workAuthorization = null
     
-    if (job.description) {
-      // Decode HTML entities (handles double encoding) - same as Greenhouse
-      let decodedContent = job.description
-      for (let i = 0; i < 3; i++) {
-        const temp = decodedContent
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&nbsp;/g, " ")
-        if (temp === decodedContent) break
-        decodedContent = temp
+    // Combine description + lists + additional for full content parsing
+    let fullHtml = ""
+    if (job.description) fullHtml += job.description
+    if (job.additional) fullHtml += " " + job.additional
+    // Lever lists contain structured sections like "What You'll Do", "Requirements"
+    if (job.lists && Array.isArray(job.lists)) {
+      for (const list of job.lists) {
+        fullHtml += `<h3>${list.text || ""}</h3><ul>`
+        if (list.content) {
+          // list.content can be string (HTML) or array
+          if (typeof list.content === "string") {
+            fullHtml += list.content
+          } else if (Array.isArray(list.content)) {
+            for (const item of list.content) {
+              const c = typeof item === "string" ? item : item?.content || ""
+              fullHtml += `<li>${c}</li>`
+            }
+          }
+        }
+        fullHtml += "</ul>"
       }
-      
-      // Sanitize HTML - remove dangerous tags but keep formatting
-      const sanitizedHtml = decodedContent
-        .replace(/<script[^>]*>.*?<\/script>/gi, "")
-        .replace(/<style[^>]*>.*?<\/style>/gi, "")
-        .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "")
-        .replace(/on\w+="[^"]*"/gi, "") // Remove inline event handlers
-        .replace(/on\w+='[^']*'/gi, "")
-        .trim()
-      
-      // Parse structured data from Lever description
-      const parsed = parseJobContent(sanitizedHtml)
+    }
+
+    if (fullHtml) {
+      const sanitizedHtml = decodeAndSanitize(fullHtml)
+      const parsed = parseJobContent(sanitizedHtml, title)
       requirements = parsed.requirements
       skills = parsed.skills
       benefits = parsed.benefits
-      jobType = parsed.jobType || job.categories?.commitment || "Full-time"
+      jobType = parsed.jobType || ""
       experienceLevel = parsed.experienceLevel || ""
       salaryMin = parsed.salaryMin || ""
       salaryMax = parsed.salaryMax || ""
       educationLevel = parsed.educationLevel || null
       workAuthorization = parsed.workAuthorization || null
       
-      // Strip HTML for brief description
-      const plainText = sanitizedHtml
-        .replace(/<[^>]*>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-      
+      const plainText = sanitizedHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       description = plainText.substring(0, 500)
       detailedRequirements = htmlToMarkdown(sanitizedHtml)
     }
-    
-    // Format salary range
-    let salaryRange = "Not specified"
-    if (salaryMin && salaryMax) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()} - $${Number(salaryMax).toLocaleString()}`
-    } else if (salaryMin) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()}+`
+
+    // Use Lever structured fields (higher priority than parsed)
+    // Job type from categories.commitment
+    const leverJobType = mapLeverCommitment(categories.commitment || "")
+    if (leverJobType) jobType = leverJobType
+
+    // Salary from additional field (Lever puts salary here, not in description)
+    if (!salaryMin && job.additional) {
+      const additionalSalary = parseSalaryFromText(job.additional)
+      if (additionalSalary) {
+        salaryMin = additionalSalary.min
+        salaryMax = additionalSalary.max
+      }
     }
-    
-    const result = {
-      title: job.text,
-      location: job.categories?.location || "Remote",
+
+    return {
+      title,
+      location: categories.location || "Remote",
       jobUrl: job.hostedUrl,
       description,
       detailedRequirements,
-      type: jobType,
+      type: jobType || "Full-time",
       experience: experienceLevel,
-      salaryRange,
+      salaryRange: formatSalary(salaryMin, salaryMax),
       requirements,
       skills,
       benefits,
-      departments: job.categories?.team || "",
+      departments: categories.team || "",
       educationLevel,
       workAuthorization,
       updatedAt: job.createdAt || new Date().toISOString(),
     }
-    
-    console.log('Lever job parsed:', {
-      title: result.title,
-      hasDescription: !!result.description,
-      hasDetailedReqs: !!result.detailedRequirements,
-      requirementsCount: result.requirements.length,
-      skillsCount: result.skills.length,
-      experience: result.experience,
-      salary: result.salaryRange
-    })
-    
-    return result
   })
 }
 
@@ -261,33 +243,22 @@ async function fetchAshbyJobs(companyId: string) {
     throw new Error(`Ashby API returned ${response.status}: ${errorText}`)
   }
   const data = await response.json()
-  console.log('Ashby raw response keys:', Object.keys(data))
-  console.log('Ashby data sample:', JSON.stringify(data).substring(0, 500))
   
-  // Ashby might return jobs in different structures
   const jobsList = data.jobs || data.postings || data.results || []
-  console.log('Found jobs:', jobsList.length)
-  
-  if (jobsList.length > 0) {
-    console.log('First job keys:', Object.keys(jobsList[0]))
-    console.log('First job sample:', JSON.stringify(jobsList[0]).substring(0, 300))
-  }
+  console.log('Ashby jobs found:', jobsList.length)
   
   return jobsList.map((job: any) => {
-    // Ashby might use different field names - check multiple possibilities
-    const jobTitle = job.title || job.name || job.position || "Untitled Position"
-    const jobLocation = job.location || job.locationName || job.office || "Remote"
+    const title = job.title || job.name || job.position || "Untitled Position"
     const jobUrl = job.jobUrl || job.applyUrl || job.url || job.link || ""
-    const descriptionContent = job.description || job.descriptionHtml || job.descriptionPlain || job.info?.description || ""
-    
-    console.log('Processing Ashby job:', jobTitle, '- Description length:', descriptionContent.length)
+    // Ashby provides descriptionHtml (rich) and descriptionPlain (text)
+    const descriptionContent = job.descriptionHtml || job.description || job.descriptionPlain || job.info?.description || ""
     
     let description = ""
     let detailedRequirements = ""
     let requirements: string[] = []
     let skills: string[] = []
     let benefits: string[] = []
-    let jobType = "Full-time"
+    let jobType = ""
     let experienceLevel = ""
     let salaryMin = ""
     let salaryMax = ""
@@ -295,68 +266,58 @@ async function fetchAshbyJobs(companyId: string) {
     let workAuthorization = null
     
     if (descriptionContent) {
-      // Decode HTML entities (handles double encoding) - same as Greenhouse
-      let decodedContent = descriptionContent
-      for (let i = 0; i < 3; i++) {
-        const temp = decodedContent
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&nbsp;/g, " ")
-        if (temp === decodedContent) break
-        decodedContent = temp
-      }
-      
-      // Sanitize HTML - remove dangerous tags but keep formatting
-      const sanitizedHtml = decodedContent
-        .replace(/<script[^>]*>.*?<\/script>/gi, "")
-        .replace(/<style[^>]*>.*?<\/style>/gi, "")
-        .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "")
-        .replace(/on\w+="[^"]*"/gi, "") // Remove inline event handlers
-        .replace(/on\w+='[^']*'/gi, "")
-        .trim()
-      
-      // Parse structured data from Ashby description
-      const parsed = parseJobContent(sanitizedHtml)
+      const sanitizedHtml = decodeAndSanitize(descriptionContent)
+      const parsed = parseJobContent(sanitizedHtml, title)
       requirements = parsed.requirements
       skills = parsed.skills
       benefits = parsed.benefits
-      jobType = parsed.jobType || job.employmentType || "Full-time"
+      jobType = parsed.jobType || ""
       experienceLevel = parsed.experienceLevel || ""
       salaryMin = parsed.salaryMin || ""
       salaryMax = parsed.salaryMax || ""
       educationLevel = parsed.educationLevel || null
       workAuthorization = parsed.workAuthorization || null
       
-      // Strip HTML for brief description
-      const plainText = sanitizedHtml
-        .replace(/<[^>]*>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-      
+      const plainText = sanitizedHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       description = plainText.substring(0, 500)
       detailedRequirements = htmlToMarkdown(sanitizedHtml)
     }
-    
-    // Format salary range
-    let salaryRange = "Not specified"
-    if (salaryMin && salaryMax) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()} - $${Number(salaryMax).toLocaleString()}`
-    } else if (salaryMin) {
-      salaryRange = `$${Number(salaryMin).toLocaleString()}+`
+
+    // Use Ashby structured fields (higher priority)
+    const ashbyJobType = mapAshbyEmploymentType(job.employmentType || "")
+    if (ashbyJobType) jobType = ashbyJobType
+
+    // Build location with remote/hybrid info
+    let location = job.location || job.locationName || job.office || "Remote"
+    if (job.isRemote && job.workplaceType) {
+      const wt = job.workplaceType.toLowerCase()
+      if (wt === "remote") location = location ? `${location} (Remote)` : "Remote"
+      else if (wt === "hybrid") location = location ? `${location} (Hybrid)` : "Hybrid"
+    } else if (job.isRemote) {
+      location = location ? `${location} (Remote)` : "Remote"
     }
-    
-    const result = {
-      title: jobTitle,
-      location: jobLocation,
-      jobUrl: jobUrl,
+
+    // Ashby compensation field
+    if (!salaryMin && job.compensation) {
+      const comp = job.compensation
+      if (comp.min && comp.max) {
+        salaryMin = comp.min.toString()
+        salaryMax = comp.max.toString()
+      } else if (comp.range) {
+        const compSalary = parseSalaryFromText(comp.range)
+        if (compSalary) { salaryMin = compSalary.min; salaryMax = compSalary.max }
+      }
+    }
+
+    return {
+      title,
+      location,
+      jobUrl,
       description,
       detailedRequirements,
-      type: jobType,
+      type: jobType || "Full-time",
       experience: experienceLevel,
-      salaryRange,
+      salaryRange: formatSalary(salaryMin, salaryMax),
       requirements,
       skills,
       benefits,
@@ -365,18 +326,6 @@ async function fetchAshbyJobs(companyId: string) {
       workAuthorization,
       updatedAt: job.publishedDate || job.postedAt || job.createdAt || new Date().toISOString(),
     }
-    
-    console.log('Ashby job parsed:', {
-      title: result.title,
-      hasDescription: !!result.description,
-      hasDetailedReqs: !!result.detailedRequirements,
-      requirementsCount: result.requirements.length,
-      skillsCount: result.skills.length,
-      experience: result.experience,
-      salary: result.salaryRange
-    })
-    
-    return result
   })
 }
 
@@ -384,13 +333,13 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getAdminClient()
     const body = await request.json()
-    const { companyId, atsType, atsCompanyId } = body
+    const { companyId, atsType, atsCompanyId, preview, selectedJobUrls } = body
 
     if (!companyId || !atsType || !atsCompanyId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    console.log('Starting ATS sync:', { companyId, atsType, atsCompanyId })
+    console.log('Starting ATS sync:', { companyId, atsType, atsCompanyId, preview: !!preview })
     
     // Fetch jobs from ATS API
     let jobs: any[] = []
@@ -410,9 +359,38 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Total jobs fetched:', jobs.length)
+
+    // Preview mode: return jobs with existing/new status without saving
+    if (preview) {
+      const { data: existingJobs } = await supabase
+        .from("jobs")
+        .select("job_url")
+        .eq("company_id", companyId)
+      const existingUrls = new Set((existingJobs || []).map((j) => j.job_url).filter(Boolean))
+
+      const previewJobs = jobs.map((job) => ({
+        title: job.title,
+        location: job.location,
+        jobUrl: job.jobUrl,
+        type: job.type,
+        salaryRange: job.salaryRange,
+        experience: job.experience,
+        departments: job.departments,
+        isExisting: existingUrls.has(job.jobUrl),
+      }))
+
+      return NextResponse.json({ preview: true, jobs: previewJobs, totalFound: jobs.length })
+    }
     
     if (jobs.length === 0) {
       return NextResponse.json({ addedCount: 0, totalFound: 0, message: "No jobs found from ATS API" })
+    }
+
+    // If selectedJobUrls provided, filter to only those jobs
+    if (selectedJobUrls && Array.isArray(selectedJobUrls)) {
+      const selectedSet = new Set(selectedJobUrls)
+      jobs = jobs.filter((job) => selectedSet.has(job.jobUrl))
+      console.log('Filtered to selected jobs:', jobs.length)
     }
 
     // Get company details
@@ -429,62 +407,79 @@ export async function POST(request: NextRequest) {
     // Get existing jobs to avoid duplicates
     const { data: existingJobs } = await supabase
       .from("jobs")
-      .select("job_url")
+      .select("id, job_url")
       .eq("company_id", companyId)
 
-    const existingUrls = new Set(existingJobs?.map((j) => j.job_url).filter(Boolean) || [])
+    const existingUrlMap = new Map(
+      (existingJobs || []).filter((j) => j.job_url).map((j) => [j.job_url, j.id])
+    )
 
     let addedCount = 0
+    let updatedCount = 0
 
-    // Insert new jobs
     for (const job of jobs) {
-      if (job.jobUrl && !existingUrls.has(job.jobUrl)) {
-        const jobId = `${company.logo_initial}-${String(Math.floor(Math.random() * 999)).padStart(3, "0")}`
+      if (!job.jobUrl) continue
 
-        const { error: insertError } = await supabase.from("jobs").insert({
+      const jobData = {
+        company_id: companyId,
+        company_name: company.name || "Unknown",
+        company_initial: company.logo_initial || "?",
+        title: job.title || "Untitled Position",
+        location: job.location || "Remote",
+        type: job.type || "Full-time",
+        salary_range: job.salaryRange || "Not specified",
+        experience: job.experience || "Not specified",
+        portal_url: job.jobUrl || "",
+        job_url: job.jobUrl || "",
+        company_website: company.website || null,
+        company_linkedin: company.linkedin_url || null,
+        description: job.description || "",
+        requirements: job.requirements || [],
+        skills: job.skills || [],
+        benefits: job.benefits || [],
+        detailed_requirements: job.detailedRequirements || job.departments || "",
+        education_level: job.educationLevel || null,
+        work_authorization: job.workAuthorization || null,
+      }
+
+      if (existingUrlMap.has(job.jobUrl)) {
+        const { error } = await supabase
+          .from("jobs")
+          .update(jobData)
+          .eq("company_id", companyId)
+          .eq("job_url", job.jobUrl)
+        if (error) {
+          console.error('Error updating job:', error)
+        } else {
+          updatedCount++
+        }
+      } else {
+        const jobId = `${company.logo_initial}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+        const { error } = await supabase.from("jobs").insert({
           id: jobId,
-          company_id: companyId,
-          company_name: company.name || "Unknown",
-          company_initial: company.logo_initial || "?",
-          title: job.title || "Untitled Position",
-          location: job.location || "Remote",
-          type: job.type || "Full-time",
-          salary_range: job.salaryRange || "Not specified",
-          experience: job.experience || "Not specified",
-          portal_url: job.jobUrl || "",
-          job_url: job.jobUrl || "",
-          company_website: company.website || null,
-          company_linkedin: company.linkedin_url || null,
+          ...jobData,
           status: "queued",
           total_apps: 0,
           right_swipes: 0,
           success_rate: 0,
           avg_time: "-",
           posted_at: new Date().toISOString().split("T")[0],
-          description: job.description || "",
-          requirements: job.requirements || [],
-          skills: job.skills || [],
-          benefits: job.benefits || [],
-          detailed_requirements: job.detailedRequirements || job.departments || "",
-          education_level: job.educationLevel || null,
-          work_authorization: job.workAuthorization || null,
         })
-
-        if (insertError) {
-          console.error('Error inserting job:', insertError)
+        if (error) {
+          console.error('Error inserting job:', error)
         } else {
-          console.log('Inserted job:', jobId, job.title)
           addedCount++
         }
       }
     }
     
-    console.log('Sync complete. Added:', addedCount)
+    console.log('Sync complete. Added:', addedCount, 'Updated:', updatedCount)
 
     return NextResponse.json({ 
-      addedCount, 
+      addedCount,
+      updatedCount,
       totalFound: jobs.length,
-      message: `Added ${addedCount} new jobs from ${atsType}` 
+      message: `Added ${addedCount} new jobs, updated ${updatedCount} existing jobs from ${atsType}` 
     })
   } catch (error) {
     console.error("ATS sync error:", error)

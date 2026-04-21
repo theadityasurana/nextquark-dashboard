@@ -3,7 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET() {
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase.from('live_application_queue').select('*')
+    const { data, error } = await supabase
+      .from('live_application_queue')
+      .select('*')
     
     console.log('Live queue data:', data)
     console.log('Live queue error:', error)
@@ -46,6 +48,8 @@ export async function PATCH(request: Request) {
     if (recording_url !== undefined) updateData.recording_url = recording_url
     if (status !== undefined) updateData.status = status
     if (verification_otp !== undefined) updateData.verification_otp = verification_otp
+    if (body.last_error !== undefined) updateData.last_error = body.last_error
+    if (body.attempt_count !== undefined) updateData.attempt_count = body.attempt_count
     
     const { error } = await supabase
       .from('live_application_queue')

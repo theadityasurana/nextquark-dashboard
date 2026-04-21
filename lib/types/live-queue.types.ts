@@ -75,6 +75,11 @@ export interface LiveApplicationQueue {
   // Recording URL
   recording_url?: string | null
   
+  // Retry
+  attempt_count: number
+  max_attempts: number
+  last_error?: string | null
+  
   // Metadata
   onboarding_data: Record<string, any>
   created_at: string

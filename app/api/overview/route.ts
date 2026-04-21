@@ -27,23 +27,16 @@ export async function GET(request: Request) {
       .from('jobs')
       .select('*', { count: 'exact', head: true })
 
-    // Get all applications
+    // Single query for all application data
     const { data: allApps } = await supabase
       .from('live_application_queue')
       .select('*')
 
-    // Get today's applications
-    const { data: todayApps } = await supabase
-      .from('live_application_queue')
-      .select('*')
-      .gte('created_at', today)
+    // Filter in JS instead of separate DB queries
+    const todayApps = allApps?.filter(a => a.created_at >= today) || []
 
-    // Get applications by time range for chart
     const chartStartTime = getTimeRange(chartRange)
-    const { data: chartData } = await supabase
-      .from('live_application_queue')
-      .select('created_at, status')
-      .gte('created_at', chartStartTime.toISOString())
+    const chartData = allApps?.filter(a => a.created_at >= chartStartTime.toISOString()) || []
 
     // Get logs
     const { data: logs } = await supabase
@@ -114,12 +107,9 @@ export async function GET(request: Request) {
       applicationsChart = Array.from(dailyMap.entries()).map(([time, count]) => ({ time, count }))
     }
 
-    // Top companies based on range
+    // Top companies based on range — filter from already-fetched data
     const companyStartTime = getTimeRange(companyRange)
-    const { data: companyApps } = await supabase
-      .from('live_application_queue')
-      .select('company_name, status')
-      .gte('created_at', companyStartTime.toISOString())
+    const companyApps = allApps?.filter(a => a.created_at >= companyStartTime.toISOString()) || []
     
     const companyMap = new Map<string, { count: number; completed: number }>()
     companyApps?.forEach(app => {
@@ -140,12 +130,9 @@ export async function GET(request: Request) {
       .sort((a, b) => b.appsToday - a.appsToday)
       .slice(0, 5)
 
-    // Agent status based on range
+    // Agent status based on range — filter from already-fetched data
     const agentStartTime = getTimeRange(agentRange)
-    const { data: agentApps } = await supabase
-      .from('live_application_queue')
-      .select('*')
-      .gte('created_at', agentStartTime.toISOString())
+    const agentApps = allApps?.filter(a => a.created_at >= agentStartTime.toISOString()) || []
     
     const processingApps = agentApps?.filter(a => a.status === 'processing') || []
     const completedApps = agentApps?.filter(a => a.status === 'completed') || []
@@ -219,12 +206,9 @@ export async function GET(request: Request) {
       successRate: u.total_apps > 0 ? ((u.successful_apps / u.total_apps) * 100).toFixed(1) : '0.0',
     })) || []
 
-    // Job insights based on range
+    // Job insights based on range — filter from already-fetched data
     const jobStartTime = getTimeRange(jobRange)
-    const { data: jobApps } = await supabase
-      .from('live_application_queue')
-      .select('job_id, job_title, company_name, status')
-      .gte('created_at', jobStartTime.toISOString())
+    const jobApps = allApps?.filter(a => a.created_at >= jobStartTime.toISOString()) || []
     
     const { data: jobs } = await supabase
       .from('jobs')

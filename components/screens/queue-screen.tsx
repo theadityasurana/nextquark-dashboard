@@ -32,7 +32,14 @@ export function QueueScreen() {
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
   const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
   const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
+
+  const [queuePage, setQueuePage] = useState(1)
+  const QUEUE_PER_PAGE = 10
   const prevPendingIdsRef = useRef<Set<string>>(new Set())
+  const autoStartTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
+  const processingCountRef = useRef(0)
+  const pendingQueueRef = useRef<LiveApplicationQueue[]>([])
+  const MAX_CONCURRENT = 3
   const { addLog } = useLogs()
 
   const handleSaveOtp = async (appId: string, otp: string) => {
@@ -105,7 +112,25 @@ export function QueueScreen() {
     }
   }
 
+  const processNext = () => {
+    while (processingCountRef.current < MAX_CONCURRENT && pendingQueueRef.current.length > 0) {
+      const next = pendingQueueRef.current.shift()!
+      startApplication(next)
+    }
+  }
+
+  const enqueueOrStart = (app: LiveApplicationQueue) => {
+    if (processingCountRef.current < MAX_CONCURRENT) {
+      startApplication(app)
+    } else {
+      if (!pendingQueueRef.current.some(a => a.id === app.id)) {
+        pendingQueueRef.current.push(app)
+      }
+    }
+  }
+
   const startApplication = async (app: LiveApplicationQueue) => {
+    processingCountRef.current++
     setIsStreaming(true)
     setRecordingUrl(null)
     
@@ -124,7 +149,7 @@ export function QueueScreen() {
       timestamp: new Date().toLocaleTimeString(),
       level: "info",
       agentId: app.id,
-      message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`,
+      message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${MAX_CONCURRENT} slots used)`,
       applicationId: app.id,
     })
     
@@ -173,20 +198,28 @@ export function QueueScreen() {
                   applicationId: app.id,
                 })
               }
+              if (data.status === "retrying") {
+                addLog({
+                  id: `log-${Date.now()}-${Math.random()}`,
+                  timestamp: new Date().toLocaleTimeString(),
+                  level: "warn",
+                  agentId: app.id,
+                  message: `Attempt ${data.attempt}/${data.maxAttempts} failed: ${data.error}. Will retry automatically...`,
+                  applicationId: app.id,
+                })
+                
+                setApplications(prev => prev.map(a => 
+                  a.id === app.id ? { ...a, status: 'pending' as const } : a
+                ))
+              }
               if (data.status === "error") {
                 addLog({
                   id: `log-${Date.now()}-${Math.random()}`,
                   timestamp: new Date().toLocaleTimeString(),
                   level: "error",
                   agentId: app.id,
-                  message: data.error || "An error occurred",
+                  message: `All ${data.maxAttempts || 1} attempts failed: ${data.error || "An error occurred"}`,
                   applicationId: app.id,
-                })
-                
-                await fetch('/api/live-queue', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: app.id, status: 'failed' })
                 })
                 
                 setApplications(prev => prev.map(a => 
@@ -275,18 +308,10 @@ export function QueueScreen() {
         message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         applicationId: app.id,
       })
-      
-      await fetch('/api/live-queue', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: app.id, status: 'failed' })
-      })
-      
-      setApplications(prev => prev.map(a => 
-        a.id === app.id ? { ...a, status: 'failed' as const } : a
-      ))
     } finally {
-      setIsStreaming(false)
+      processingCountRef.current--
+      setIsStreaming(processingCountRef.current > 0)
+      processNext()
     }
   }
 
@@ -306,23 +331,6 @@ export function QueueScreen() {
           const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing' || app.status === 'awaiting_otp' || app.status === 'awaiting_captcha').length
           
           setStats({ totalApps, successful, failed, inProgress })
-          
-          // Auto-start new pending applications
-          if (autoStart) {
-            const currentPending = data.filter((app: LiveApplicationQueue) => app.status === 'pending')
-            const currentPendingIds = new Set(currentPending.map((app: LiveApplicationQueue) => app.id))
-            
-            // Find new pending applications
-            const newPendingApps = currentPending.filter(
-              (app: LiveApplicationQueue) => !prevPendingIdsRef.current.has(app.id)
-            )
-            
-            newPendingApps.forEach((app: LiveApplicationQueue) => {
-              startApplication(app)
-            })
-            
-            prevPendingIdsRef.current = currentPendingIds
-          }
         }
       } catch (err) {
         console.error('Failed to fetch applications:', err)
@@ -330,9 +338,46 @@ export function QueueScreen() {
     }
     
     fetchApplications()
-    const interval = setInterval(fetchApplications, 5000)
+    const interval = setInterval(fetchApplications, 3000)
     return () => clearInterval(interval)
-  }, [autoStart])
+  }, [])
+
+  // Auto-start: when autoStart is ON, start pending apps after 4 seconds
+  useEffect(() => {
+    if (!autoStart) {
+      // Clear all pending timers when auto-start is turned off
+      Object.values(autoStartTimersRef.current).forEach(clearTimeout)
+      autoStartTimersRef.current = {}
+      return
+    }
+
+    const pendingApps = applications.filter(a => a.status === 'pending')
+
+    // Set timers for new pending apps
+    for (const app of pendingApps) {
+      if (!autoStartTimersRef.current[app.id]) {
+        autoStartTimersRef.current[app.id] = setTimeout(() => {
+          delete autoStartTimersRef.current[app.id]
+          enqueueOrStart(app)
+        }, 2000)
+      }
+    }
+
+    // Clean up timers for apps no longer pending
+    const pendingIds = new Set(pendingApps.map(a => a.id))
+    for (const id of Object.keys(autoStartTimersRef.current)) {
+      if (!pendingIds.has(id)) {
+        clearTimeout(autoStartTimersRef.current[id])
+        delete autoStartTimersRef.current[id]
+      }
+    }
+
+    return () => {
+      Object.values(autoStartTimersRef.current).forEach(clearTimeout)
+      autoStartTimersRef.current = {}
+    }
+  }, [autoStart, applications])
+
 
   const handleDelete = async (id: string) => {
     try {
@@ -362,6 +407,13 @@ export function QueueScreen() {
     return true
   })
 
+  const totalFilteredApps = filteredApps.length
+  const totalQueuePages = Math.ceil(totalFilteredApps / QUEUE_PER_PAGE)
+  const paginatedApps = filteredApps.slice(
+    (queuePage - 1) * QUEUE_PER_PAGE,
+    queuePage * QUEUE_PER_PAGE
+  )
+
   const pending = applications.filter((a) => a.status === "pending")
   const processing = applications.filter((a) => a.status === "processing")
   const completed = applications.filter((a) => a.status === "completed")
@@ -371,9 +423,12 @@ export function QueueScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
+          <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
+        </div>
+
       </div>
 
       {/* Start All Button & Auto-Start Toggle - Only show when on pending tab */}
@@ -387,14 +442,12 @@ export function QueueScreen() {
             <Power className={`h-4 w-4 ${autoStart ? 'text-green-500' : ''}`} />
             Auto Start: {autoStart ? 'ON' : 'OFF'}
           </Button>
-          {pending.length > 0 && (
+          {!autoStart && pending.length > 0 && (
             <Button
-              onClick={async () => {
+              onClick={() => {
                 setIsStartingAll(true)
                 for (const app of pending) {
-                  startApplication(app)
-                  // Small delay to avoid overwhelming the system
-                  await new Promise(resolve => setTimeout(resolve, 100))
+                  enqueueOrStart(app)
                 }
                 setIsStartingAll(false)
               }}
@@ -422,10 +475,10 @@ export function QueueScreen() {
             placeholder="Search applications..."
             className="pl-9 bg-card border-border"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
           />
         </div>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }}>
           <TabsList className="bg-card border border-border">
             <TabsTrigger value="all" className="text-xs">All ({applications.length})</TabsTrigger>
             <TabsTrigger value="pending" className="text-xs">Pending ({pending.length})</TabsTrigger>
@@ -447,7 +500,7 @@ export function QueueScreen() {
 
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredApps.map((app) => {
+        {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
           const createdDate = new Date(app.created_at).toLocaleString()
           
@@ -471,6 +524,18 @@ export function QueueScreen() {
                     <p className="text-[11px] text-muted-foreground">{app.job_title}</p>
                   </div>
                 </div>
+
+                {/* Retry indicator */}
+                {(app.attempt_count > 0) && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="outline" className={`text-[9px] gap-1 ${app.status === 'failed' ? 'text-destructive border-destructive/30' : 'text-orange-500 border-orange-500/30'}`}>
+                      Attempt {app.attempt_count}/{app.max_attempts || 2}
+                    </Badge>
+                    {app.last_error && app.status === 'pending' && (
+                      <span className="text-[9px] text-orange-500 truncate max-w-[180px]">Retrying...</span>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -552,6 +617,18 @@ export function QueueScreen() {
           )
         })}
       </div>
+
+      {/* Pagination */}
+      {totalQueuePages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Showing {((queuePage - 1) * QUEUE_PER_PAGE) + 1}-{Math.min(queuePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
+            <span className="text-xs text-muted-foreground">Page {queuePage} of {totalQueuePages}</span>
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={queuePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

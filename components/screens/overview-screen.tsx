@@ -2,10 +2,11 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
-import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users, Briefcase, Server } from "lucide-react"
+import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users, Briefcase, Server, RefreshCw } from "lucide-react"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export function OverviewScreen() {
@@ -15,23 +16,31 @@ export function OverviewScreen() {
   const [companyRange, setCompanyRange] = useState('24h')
   const [agentRange, setAgentRange] = useState('24h')
   const [jobRange, setJobRange] = useState('7d')
+  const [refreshing, setRefreshing] = useState(false)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/overview?chartRange=${chartRange}&companyRange=${companyRange}&agentRange=${agentRange}&jobRange=${jobRange}`)
+      const json = await res.json()
+      if (!json.error) {
+        setData(json)
+      }
+    } catch (err) {
+      console.error('Failed to fetch overview:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [chartRange, companyRange, agentRange, jobRange])
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`/api/overview?chartRange=${chartRange}&companyRange=${companyRange}&agentRange=${agentRange}&jobRange=${jobRange}`)
-        const json = await res.json()
-        setData(json)
-      } catch (err) {
-        console.error('Failed to fetch overview:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchData()
-    const interval = setInterval(fetchData, 5000)
-    return () => clearInterval(interval)
-  }, [chartRange, companyRange, agentRange, jobRange])
+  }, [fetchData])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchData()
+    setRefreshing(false)
+  }
 
   if (loading || !data) {
     return <div className="flex items-center justify-center h-96">Loading...</div>
@@ -52,9 +61,14 @@ export function OverviewScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time system health and key metrics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+          <p className="text-sm text-muted-foreground mt-1">Real-time system health and key metrics</p>
+        </div>
+        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+        </Button>
       </div>
 
       {/* Stats Grid */}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLogs } from "@/lib/logs-context"
-import { Search, Download, X } from "lucide-react"
+import { Search, Download, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const levelColors: Record<string, string> = {
@@ -22,10 +22,17 @@ const levelBg: Record<string, string> = {
 }
 
 export function LogsScreen() {
-  const { logs, agentDetailsMap } = useLogs()
+  const { logs, agentDetailsMap, refreshLogs } = useLogs()
   const [searchQuery, setSearchQuery] = useState("")
   const [levelFilter, setLevelFilter] = useState("all")
   const [agentFilter, setAgentFilter] = useState("all")
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await refreshLogs()
+    setRefreshing(false)
+  }
 
   const uniqueAgents = Array.from(new Set(logs.map((l) => l.agentId)))
 
@@ -83,6 +90,9 @@ export function LogsScreen() {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2 ml-auto">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs">
             <Download className="h-3 w-3" /> Download
           </Button>

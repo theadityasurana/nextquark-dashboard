@@ -27,11 +27,14 @@ export async function POST(request: Request) {
     console.log(`[auto-apply-queue] Email: ${app.email}`)
     console.log(`[auto-apply-queue] Resume: ${app.resume_url}`)
 
+    const currentAttempt = (app.attempt_count || 0) + 1
+
     await supabase
       .from('live_application_queue')
       .update({ 
         status: 'processing',
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
+        attempt_count: currentAttempt,
       })
       .eq('id', applicationId)
 
@@ -120,12 +123,17 @@ export async function POST(request: Request) {
 
               const processingTime = Date.now() - startTime
 
+              const maxAttempts = app.max_attempts || 2
+              const canRetry = !result.success && currentAttempt < maxAttempts
+              const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
+
               await supabase
                 .from('live_application_queue')
                 .update({
-                  status: result.success ? 'completed' : 'failed',
-                  completed_at: new Date().toISOString(),
+                  status: finalStatus,
+                  completed_at: result.success ? new Date().toISOString() : null,
                   error_message: result.error || null,
+                  last_error: result.error || null,
                   processing_time_ms: processingTime,
                   recording_url: result.recordingUrl || null,
                 })
@@ -144,19 +152,26 @@ export async function POST(request: Request) {
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : "Unknown error"
               
+              const maxAttempts = app.max_attempts || 2
+              const canRetry = currentAttempt < maxAttempts
+              const finalStatus = canRetry ? 'pending' : 'failed'
+
               await supabase
                 .from('live_application_queue')
                 .update({
-                  status: 'failed',
-                  completed_at: new Date().toISOString(),
+                  status: finalStatus,
+                  completed_at: canRetry ? null : new Date().toISOString(),
                   error_message: errorMsg,
+                  last_error: errorMsg,
                   processing_time_ms: Date.now() - startTime
                 })
                 .eq('id', applicationId)
 
               safeEnqueue(`data: ${JSON.stringify({
-                status: "error",
+                status: canRetry ? "retrying" : "error",
                 error: errorMsg,
+                attempt: currentAttempt,
+                maxAttempts,
               })}\n\n`)
               safeClose()
             }
@@ -183,12 +198,17 @@ export async function POST(request: Request) {
 
     const processingTime = Date.now() - startTime
 
+    const maxAttempts = app.max_attempts || 2
+    const canRetry = !result.success && currentAttempt < maxAttempts
+    const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
+
     await supabase
       .from('live_application_queue')
       .update({
-        status: result.success ? 'completed' : 'failed',
-        completed_at: new Date().toISOString(),
+        status: finalStatus,
+        completed_at: result.success ? new Date().toISOString() : (canRetry ? null : new Date().toISOString()),
         error_message: result.error || null,
+        last_error: result.error || null,
         processing_time_ms: processingTime,
         recording_url: result.recordingUrl || null,
       })
@@ -196,11 +216,13 @@ export async function POST(request: Request) {
 
     return Response.json({
       success: result.success,
-      message: result.success ? "Application submitted successfully" : "Application failed",
+      message: result.success ? "Application submitted successfully" : (canRetry ? `Attempt ${currentAttempt} failed, will retry` : "Application failed"),
       result: result.result,
       steps: result.steps,
       recordingUrl: result.recordingUrl,
       taskId: result.taskId,
+      attempt: currentAttempt,
+      maxAttempts,
     })
   } catch (error) {
     console.error("Auto-apply queue error:", error)

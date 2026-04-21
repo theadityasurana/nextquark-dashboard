@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
 import type { Company, Job, Application } from "@/lib/mock-data"
 import { mockApplications } from "@/lib/mock-data"
@@ -96,16 +96,33 @@ const fetcher = async (url: string) => {
       return []
     }
     const data = await res.json()
-    return Array.isArray(data) ? data : []
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.data)) return data.data
+    return []
   } catch (err) {
     console.log("[v0] fetcher exception for", url, err)
     return []
   }
 }
 
+const jobsFetcher = async (url: string) => {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return { data: [], total: 0 }
+    return await res.json()
+  } catch (err) {
+    console.log("[v0] jobsFetcher exception", err)
+    return { data: [], total: 0 }
+  }
+}
+
 interface DataContextType {
   companies: Company[]
   jobs: Job[]
+  totalJobs: number
+  jobsPage: number
+  hasMoreJobs: boolean
+  loadMoreJobs: () => void
   applications: Application[]
   setCompanies: (companies: Company[]) => void
   setJobs: (jobs: Job[]) => void
@@ -120,15 +137,34 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
 
+const JOBS_PER_PAGE = 20
+
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR("/api/companies", fetcher, {
+  const [jobsPage, setJobsPage] = useState(1)
+  const [accumulatedJobs, setAccumulatedJobs] = useState<Job[]>([])
+
+  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR("/api/companies?all=true", fetcher, {
     fallbackData: [],
     revalidateOnFocus: false,
   })
-  const { data: rawJobs, isLoading: loadingJobs } = useSWR("/api/jobs", fetcher, {
-    fallbackData: [],
-    revalidateOnFocus: false,
-  })
+  const { data: rawJobsResponse, isLoading: loadingJobs } = useSWR(
+    `/api/jobs?page=${jobsPage}&limit=${JOBS_PER_PAGE}`,
+    jobsFetcher,
+    {
+      fallbackData: { data: [], total: 0 },
+      revalidateOnFocus: false,
+    }
+  )
+
+  useEffect(() => {
+    const newJobs = (rawJobsResponse?.data || []).map(mapJob)
+    if (newJobs.length === 0) return
+    setAccumulatedJobs(prev => {
+      if (jobsPage === 1) return newJobs
+      const existingIds = new Set(prev.map((j: Job) => j.id))
+      return [...prev, ...newJobs.filter((j: Job) => !existingIds.has(j.id))]
+    })
+  }, [rawJobsResponse, jobsPage])
   const { data: rawApplications, isLoading: loadingApplications } = useSWR("/api/applications/queue", async (url) => {
     const res = await fetch(url)
     if (!res.ok) return []
@@ -137,18 +173,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, {
     fallbackData: [],
     revalidateOnFocus: false,
+    refreshInterval: 600000,
   })
 
   const companies: Company[] = Array.isArray(rawCompanies) ? rawCompanies.map(mapCompany) : []
-  const jobs: Job[] = Array.isArray(rawJobs) ? rawJobs.map(mapJob) : []
+  const totalJobs = rawJobsResponse?.total || 0
+  const jobs = accumulatedJobs
+  const hasMoreJobs = jobs.length < totalJobs
   const applications: Application[] = Array.isArray(rawApplications) ? rawApplications.map(mapApplication) : []
 
   const setCompanies = useCallback(() => {
-    globalMutate("/api/companies")
+    globalMutate("/api/companies?all=true")
   }, [])
 
   const setJobs = useCallback(() => {
-    globalMutate("/api/jobs")
+    setJobsPage(1)
+    setAccumulatedJobs([])
+    globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/jobs?'), undefined, { revalidate: true })
   }, [])
 
   const setApplications = useCallback(() => {}, [])
@@ -166,7 +207,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const raw = await res.json()
       const mapped = mapCompany(raw)
-      globalMutate("/api/companies")
+      globalMutate("/api/companies?all=true")
       return mapped
     } catch (err) {
       console.error("Error adding company:", err)
@@ -189,8 +230,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const raw = await res.json()
       const mapped = mapJob(raw)
-      globalMutate("/api/jobs")
-      globalMutate("/api/companies")
+      setAccumulatedJobs(prev => [mapped, ...prev])
+      globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/jobs?'), undefined, { revalidate: true })
+      globalMutate("/api/companies?all=true")
       return mapped
     } catch (err) {
       console.error("Error adding job:", err)
@@ -211,7 +253,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const raw = await res.json()
       const mapped = mapJob(raw)
-      globalMutate("/api/jobs")
+      setAccumulatedJobs(prev => prev.map(j => j.id === id ? mapped : j))
+      globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/jobs?'), undefined, { revalidate: false })
       return mapped
     } catch (err) {
       console.error("Error updating job:", err)
@@ -220,11 +263,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshCompanies = useCallback(() => {
-    globalMutate("/api/companies")
+    globalMutate("/api/companies?all=true")
+  }, [])
+
+  const loadMoreJobs = useCallback(() => {
+    setJobsPage(prev => prev + 1)
   }, [])
 
   const refreshJobs = useCallback(() => {
-    globalMutate("/api/jobs")
+    setJobsPage(1)
+    setAccumulatedJobs([])
+    globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/jobs?'), undefined, { revalidate: true })
   }, [])
 
   return (
@@ -232,6 +281,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       value={{
         companies,
         jobs,
+        totalJobs,
+        jobsPage,
+        hasMoreJobs,
+        loadMoreJobs,
         applications,
         setCompanies,
         setJobs,

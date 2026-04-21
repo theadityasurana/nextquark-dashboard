@@ -8,34 +8,53 @@ function getAdminClient() {
   )
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = getAdminClient()
-  const { data, error } = await supabase
+  const { searchParams } = new URL(request.url)
+  
+  const page = parseInt(searchParams.get("page") || "1")
+  const limit = parseInt(searchParams.get("limit") || "12")
+  const all = searchParams.get("all") === "true"
+  const from = (page - 1) * limit
+
+  let query = supabase
     .from("companies")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
+
+  if (!all) {
+    query = query.range(from, from + limit - 1)
+  }
+
+  const { data, error, count } = await query
 
   if (error) {
     console.log("[v0] GET /api/companies error:", error.message)
-    return NextResponse.json([])
+    return NextResponse.json({ data: [], total: 0 })
   }
 
-  // Get actual job counts for each company
-  const companiesWithJobCounts = await Promise.all(
-    (data || []).map(async (company) => {
-      const { count } = await supabase
+  if (!data || data.length === 0) {
+    return NextResponse.json({ data: [], total: count || 0 })
+  }
+
+  // Get job counts for all companies using individual count queries (avoids 1000 row limit)
+  const countMap = new Map<string, number>()
+  await Promise.all(
+    data.map(async (company) => {
+      const { count: jobCount } = await supabase
         .from("jobs")
         .select("*", { count: "exact", head: true })
         .eq("company_id", company.id)
-      
-      return {
-        ...company,
-        total_jobs: count || 0
-      }
+      countMap.set(company.id, jobCount || 0)
     })
   )
 
-  return NextResponse.json(companiesWithJobCounts)
+  const companiesWithJobCounts = data.map(company => ({
+    ...company,
+    total_jobs: countMap.get(company.id) || 0
+  }))
+
+  return NextResponse.json({ data: companiesWithJobCounts, total: count || 0 })
 }
 
 export async function POST(request: NextRequest) {
@@ -86,6 +105,32 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 })
   }
 
+  // Get company name before deleting (needed for tables that reference by name)
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name")
+    .eq("id", id)
+    .single()
+
+  // Get all job IDs for this company (needed for queue cleanup)
+  const { data: companyJobs } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("company_id", id)
+
+  // Delete from live_application_queue (references job_id FK + company_id)
+  if (companyJobs && companyJobs.length > 0) {
+    const jobIds = companyJobs.map((j) => j.id)
+    await supabase.from("live_application_queue").delete().in("job_id", jobIds)
+  }
+  await supabase.from("live_application_queue").delete().eq("company_id", id)
+
+  // Delete from performance_metrics (references company_name)
+  if (company?.name) {
+    await supabase.from("performance_metrics").delete().eq("company_name", company.name)
+  }
+
+  // Delete company (jobs cascade automatically via FK)
   const { error } = await supabase.from("companies").delete().eq("id", id)
 
   if (error) {

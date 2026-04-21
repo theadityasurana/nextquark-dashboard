@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const applicationId = request.nextUrl.searchParams.get('applicationId')
     
-    let query = supabase.from('application_logs').select('*').order('timestamp', { ascending: false })
+    let query = supabase.from('application_logs').select('*').order('timestamp', { ascending: false }).limit(15)
     
     if (applicationId) {
       query = query.eq('application_id', applicationId)

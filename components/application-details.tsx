@@ -8,7 +8,7 @@ import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.t
 import { useLogs, LogEntry } from "@/lib/logs-context"
 import { 
   User as UserIcon, Heart, Shield, ExternalLink, FileText, 
-  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal
+  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw
 } from "lucide-react"
 
 interface ApplicationDetailsProps {
@@ -85,6 +85,12 @@ export function ApplicationDetails({
           >
             {isStreaming ? 'Processing...' : 'Start Application'}
           </Button>
+          {application.attempt_count > 0 && (
+            <Badge variant="outline" className="text-[10px] gap-1">
+              <RotateCcw className="h-2.5 w-2.5" />
+              Attempt {application.attempt_count}/{application.max_attempts || 2}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -115,6 +121,33 @@ export function ApplicationDetails({
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
             <p className="text-xs text-yellow-600">Task is running... Recording will be available once the task completes. Check logs below for progress.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Retry Info */}
+      {application.attempt_count > 0 && application.last_error && (
+        <div className="px-6 py-4 border-b border-border">
+          <div className={`rounded-lg border p-4 ${
+            application.status === 'failed' 
+              ? 'border-destructive/30 bg-destructive/5' 
+              : 'border-orange-500/30 bg-orange-500/5'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+                application.status === 'failed' ? 'text-destructive' : 'text-orange-600'
+              }`}>
+                <RotateCcw className="h-3 w-3" />
+                {application.status === 'failed' 
+                  ? `Failed after ${application.attempt_count} attempt${application.attempt_count > 1 ? 's' : ''}` 
+                  : `Attempt ${application.attempt_count} failed — retrying`
+                }
+              </h4>
+              <Badge variant="outline" className="text-[10px]">
+                {application.attempt_count}/{application.max_attempts || 2} attempts used
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">{application.last_error}</p>
           </div>
         </div>
       )}
@@ -236,7 +269,7 @@ export function ApplicationDetails({
                 <p className="text-[10px] text-muted-foreground mt-1">
                   {exp.jobLocation} • {exp.employmentType} • {exp.workMode}
                 </p>
-                {exp.skills.length > 0 && (
+                {exp.skills?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {exp.skills.map((skill) => (
                       <Badge key={skill} variant="secondary" className="text-[9px] h-4">{skill}</Badge>

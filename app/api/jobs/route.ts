@@ -8,36 +8,37 @@ function getAdminClient() {
   )
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = getAdminClient()
+  const { searchParams } = new URL(request.url)
   
-  // Remove the default 1000 row limit by fetching all jobs
-  let allJobs: any[] = []
-  let from = 0
-  const batchSize = 1000
-  
-  while (true) {
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(from, from + batchSize - 1)
+  const page = parseInt(searchParams.get("page") || "1")
+  const limit = parseInt(searchParams.get("limit") || "20")
+  const companyId = searchParams.get("companyId")
+  const all = searchParams.get("all") === "true"
+  const from = (page - 1) * limit
 
-    if (error) {
-      console.log("[v0] GET /api/jobs error:", error.message)
-      return NextResponse.json([])
-    }
+  let query = supabase
+    .from("jobs")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
 
-    if (!data || data.length === 0) break
-    
-    allJobs = allJobs.concat(data)
-    
-    if (data.length < batchSize) break
-    
-    from += batchSize
+  if (companyId) {
+    query = query.eq("company_id", companyId)
   }
 
-  return NextResponse.json(allJobs)
+  if (!all) {
+    query = query.range(from, from + limit - 1)
+  }
+
+  const { data, error, count } = await query
+
+  if (error) {
+    console.log("[v0] GET /api/jobs error:", error.message)
+    return NextResponse.json({ data: [], total: 0 })
+  }
+
+  return NextResponse.json({ data: data || [], total: count || 0 })
 }
 
 export async function POST(request: NextRequest) {

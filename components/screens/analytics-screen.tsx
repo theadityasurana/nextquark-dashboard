@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useData } from "@/lib/data-context"
 import {
   Download, TrendingUp, TrendingDown, Building2, Briefcase, Users, MousePointerClick,
-  ArrowUpDown, ArrowUp, ArrowDown, Filter
+  ArrowUpDown, ArrowUp, ArrowDown, Filter, RefreshCw
 } from "lucide-react"
 import {
   Area,
@@ -26,13 +26,86 @@ type SortField = "title" | "applications" | "rightSwipes" | "successRate"
 type SortDirection = "asc" | "desc"
 type MetricView = "all" | "jobs" | "applications" | "rightSwipes"
 
+interface AnalyticsJob {
+  id: string
+  companyId: string
+  companyName: string
+  companyInitial: string
+  title: string
+  location: string
+  rightSwipes: number
+  successRate: number
+  totalApps: number
+  createdAt: string
+}
+
+interface AnalyticsApp {
+  id: string
+  jobId: string
+  companyId: string
+  status: string
+  createdAt: string
+}
+
 export function AnalyticsScreen() {
-  const { companies, jobs, applications } = useData()
+  const { companies } = useData()
+  const [jobs, setJobs] = useState<AnalyticsJob[]>([])
+  const [applications, setApplications] = useState<AnalyticsApp[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("all")
   const [sortField, setSortField] = useState<SortField>("rightSwipes")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [metricView, setMetricView] = useState<MetricView>("all")
+  const [jobsTablePage, setJobsTablePage] = useState(1)
+  const [companySwipesPage, setCompanySwipesPage] = useState(1)
+  const [companyJobsPage, setCompanyJobsPage] = useState(1)
+  const ANALYTICS_PER_PAGE = 10
+
+  const fetchAnalytics = async () => {
+    try {
+      const res = await fetch('/api/analytics')
+      const data = await res.json()
+      if (data.jobs) {
+        setJobs(data.jobs.map((j: any) => ({
+          id: j.id,
+          companyId: j.company_id,
+          companyName: j.company_name,
+          companyInitial: j.company_initial || j.company_name?.charAt(0) || '',
+          title: j.title,
+          location: j.location,
+          rightSwipes: j.right_swipes || 0,
+          successRate: j.success_rate || 0,
+          totalApps: j.total_apps || 0,
+          createdAt: j.created_at,
+        })))
+      }
+      if (data.applications) {
+        setApplications(data.applications.map((a: any) => ({
+          id: a.id,
+          jobId: a.job_id,
+          companyId: a.company_id,
+          status: a.status,
+          createdAt: a.created_at,
+        })))
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAnalytics()
+  }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchAnalytics()
+    setRefreshing(false)
+  }
 
   // Filtered data based on selected company
   const filteredJobs = useMemo(() => {
@@ -45,7 +118,7 @@ export function AnalyticsScreen() {
     return applications.filter((app) => app.companyId === selectedCompanyId)
   }, [selectedCompanyId, applications])
 
-  // Sorted jobs for the table
+  // Sorted jobs for the table (descending by default)
   const sortedJobs = useMemo(() => {
     return [...filteredJobs].sort((a, b) => {
       let comparison = 0
@@ -67,6 +140,13 @@ export function AnalyticsScreen() {
     })
   }, [filteredJobs, sortField, sortDirection])
 
+  // Paginated jobs for the table
+  const totalJobsTablePages = Math.ceil(sortedJobs.length / ANALYTICS_PER_PAGE)
+  const paginatedSortedJobs = sortedJobs.slice(
+    (jobsTablePage - 1) * ANALYTICS_PER_PAGE,
+    jobsTablePage * ANALYTICS_PER_PAGE
+  )
+
   // Summary statistics
   const totalJobsListed = filteredJobs.length
   const totalApplications = filteredApplications.length
@@ -76,7 +156,7 @@ export function AnalyticsScreen() {
     ? (filteredJobs.reduce((sum, job) => sum + job.successRate, 0) / filteredJobs.length).toFixed(1)
     : "0"
 
-  // Per-company breakdown for the overview chart
+  // Per-company breakdown for the overview chart (sorted descending by rightSwipes)
   const companyBreakdown = useMemo(() => {
     const map = new Map<string, { name: string; jobs: number; applications: number; rightSwipes: number }>()
     companies.forEach((c) => {
@@ -93,6 +173,18 @@ export function AnalyticsScreen() {
     })
     return Array.from(map.values()).sort((a, b) => b.rightSwipes - a.rightSwipes)
   }, [companies, jobs, applications])
+
+  // Paginated company breakdowns
+  const totalCompanySwipesPages = Math.ceil(companyBreakdown.length / ANALYTICS_PER_PAGE)
+  const paginatedCompanySwipes = companyBreakdown.slice(
+    (companySwipesPage - 1) * ANALYTICS_PER_PAGE,
+    companySwipesPage * ANALYTICS_PER_PAGE
+  )
+  const totalCompanyJobsPages = Math.ceil(companyBreakdown.length / ANALYTICS_PER_PAGE)
+  const paginatedCompanyJobs = companyBreakdown.slice(
+    (companyJobsPage - 1) * ANALYTICS_PER_PAGE,
+    companyJobsPage * ANALYTICS_PER_PAGE
+  )
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId)
 
@@ -137,6 +229,7 @@ export function AnalyticsScreen() {
       setSortField(field)
       setSortDirection("desc")
     }
+    setJobsTablePage(1)
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -145,6 +238,10 @@ export function AnalyticsScreen() {
   }
 
   const barColors = ["oklch(0.65 0.2 145)", "oklch(0.65 0.15 250)", "oklch(0.7 0.15 55)", "oklch(0.55 0.2 25)", "oklch(0.6 0.18 300)", "oklch(0.7 0.12 180)"]
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-96">Loading analytics...</div>
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -155,6 +252,9 @@ export function AnalyticsScreen() {
           <p className="text-sm text-muted-foreground mt-1">Detailed analytics and reporting across companies and jobs</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs">
             <Download className="h-3 w-3" /> Export
           </Button>
@@ -173,7 +273,7 @@ export function AnalyticsScreen() {
             {/* Company Selector */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Company</span>
-              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+              <Select value={selectedCompanyId} onValueChange={(v) => { setSelectedCompanyId(v); setJobsTablePage(1); setCompanySwipesPage(1); setCompanyJobsPage(1) }}>
                 <SelectTrigger className="w-[200px] bg-accent/30 border-border h-9 text-xs">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
@@ -334,7 +434,7 @@ export function AnalyticsScreen() {
 
             {/* Table Body */}
             <div className="divide-y divide-border max-h-[400px] overflow-auto">
-              {sortedJobs.map((job) => {
+              {paginatedSortedJobs.map((job) => {
                 const jobApps = applications.filter((a) => a.jobId === job.id)
                 return (
                   <div
@@ -375,6 +475,17 @@ export function AnalyticsScreen() {
                 </div>
               )}
             </div>
+            {/* Jobs Table Pagination */}
+            {totalJobsTablePages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                <span className="text-xs text-muted-foreground">Showing {((jobsTablePage - 1) * ANALYTICS_PER_PAGE) + 1}-{Math.min(jobsTablePage * ANALYTICS_PER_PAGE, sortedJobs.length)} of {sortedJobs.length}</span>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="text-xs h-7" disabled={jobsTablePage === 1} onClick={() => setJobsTablePage(p => p - 1)}>Previous</Button>
+                  <span className="text-xs text-muted-foreground">Page {jobsTablePage} of {totalJobsTablePages}</span>
+                  <Button size="sm" variant="outline" className="text-xs h-7" disabled={jobsTablePage === totalJobsTablePages} onClick={() => setJobsTablePage(p => p + 1)}>Next</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -388,18 +499,19 @@ export function AnalyticsScreen() {
               <CardTitle className="text-sm font-medium">Right Swipes by Company</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2">
-                {companyBreakdown.map((entry, i) => {
+              <div className="flex flex-col gap-3">
+                {paginatedCompanySwipes.map((entry, i) => {
                   const maxSwipes = companyBreakdown[0]?.rightSwipes || 1
                   const width = (entry.rightSwipes / maxSwipes) * 100
+                  const globalIndex = (companySwipesPage - 1) * ANALYTICS_PER_PAGE + i
                   return (
                     <div key={entry.name} className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}.</span>
+                      <span className="text-xs text-muted-foreground w-4 shrink-0">{globalIndex + 1}.</span>
                       <span className="text-sm font-medium w-20 shrink-0 truncate">{entry.name}</span>
                       <div className="flex-1 h-5 rounded-full bg-accent/50 overflow-hidden">
                         <div
                           className="h-full rounded-full"
-                          style={{ width: `${width}%`, backgroundColor: barColors[i % barColors.length] }}
+                          style={{ width: `${width}%`, backgroundColor: barColors[globalIndex % barColors.length] }}
                         />
                       </div>
                       <span className="text-sm font-medium w-16 text-right shrink-0">{entry.rightSwipes.toLocaleString()}</span>
@@ -407,6 +519,16 @@ export function AnalyticsScreen() {
                   )
                 })}
               </div>
+              {totalCompanySwipesPages > 1 && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                  <span className="text-xs text-muted-foreground">{companyBreakdown.length} companies</span>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="text-xs h-6" disabled={companySwipesPage === 1} onClick={() => setCompanySwipesPage(p => p - 1)}>Prev</Button>
+                    <span className="text-xs text-muted-foreground">{companySwipesPage}/{totalCompanySwipesPages}</span>
+                    <Button size="sm" variant="outline" className="text-xs h-6" disabled={companySwipesPage === totalCompanySwipesPages} onClick={() => setCompanySwipesPage(p => p + 1)}>Next</Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -416,13 +538,14 @@ export function AnalyticsScreen() {
               <CardTitle className="text-sm font-medium">Jobs Listed per Company</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2">
-                {companyBreakdown.map((entry, i) => {
+              <div className="flex flex-col gap-3">
+                {paginatedCompanyJobs.map((entry, i) => {
                   const maxJobs = Math.max(...companyBreakdown.map((e) => e.jobs))
                   const width = (entry.jobs / maxJobs) * 100
+                  const globalIndex = (companyJobsPage - 1) * ANALYTICS_PER_PAGE + i
                   return (
                     <div key={entry.name} className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}.</span>
+                      <span className="text-xs text-muted-foreground w-4 shrink-0">{globalIndex + 1}.</span>
                       <span className="text-sm font-medium w-20 shrink-0 truncate">{entry.name}</span>
                       <div className="flex-1 h-5 rounded-full bg-accent/50 overflow-hidden">
                         <div
@@ -435,6 +558,16 @@ export function AnalyticsScreen() {
                   )
                 })}
               </div>
+              {totalCompanyJobsPages > 1 && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                  <span className="text-xs text-muted-foreground">{companyBreakdown.length} companies</span>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="text-xs h-6" disabled={companyJobsPage === 1} onClick={() => setCompanyJobsPage(p => p - 1)}>Prev</Button>
+                    <span className="text-xs text-muted-foreground">{companyJobsPage}/{totalCompanyJobsPages}</span>
+                    <Button size="sm" variant="outline" className="text-xs h-6" disabled={companyJobsPage === totalCompanyJobsPages} onClick={() => setCompanyJobsPage(p => p + 1)}>Next</Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

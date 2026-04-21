@@ -14,14 +14,16 @@ import { StatusBadge } from "@/components/status-badge"
 import { useData } from "@/lib/data-context"
 import type { Job } from "@/lib/mock-data"
 import { LOCATIONS, EDUCATION_QUALIFICATIONS, WORK_MODES, WORK_AUTHORIZATION } from "@/lib/locations"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Search, Plus, Upload, ChevronRight, ExternalLink, Copy, Edit2, Pause, Trash2,
   Link, Globe, Linkedin, Briefcase, MapPin, DollarSign, Clock, GraduationCap,
-  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Zap, Loader, ChevronsUpDown
+  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Zap, Loader, ChevronsUpDown, RefreshCw, Building2
 } from "lucide-react"
 
 export function JobsScreen() {
-  const { companies, jobs, addJob, updateJob, isLoading } = useData()
+  const { companies, jobs, totalJobs, hasMoreJobs, loadMoreJobs, addJob, updateJob, isLoading } = useData()
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
@@ -34,6 +36,12 @@ export function JobsScreen() {
   const [isScraping, setIsScraping] = useState(false)
   const [scrapedJobs, setScrapedJobs] = useState<any[]>([])
   const [currentJobIndex, setCurrentJobIndex] = useState(0)
+
+  // ATS preview state
+  const [showAtsPreview, setShowAtsPreview] = useState(false)
+  const [atsPreviewJobs, setAtsPreviewJobs] = useState<any[]>([])
+  const [atsPreviewSelected, setAtsPreviewSelected] = useState<Set<string>>(new Set())
+  const [atsPreviewLoading, setAtsPreviewLoading] = useState(false)
 
   // Temp inputs for array fields during add
   const [newRequirement, setNewRequirement] = useState("")
@@ -269,24 +277,32 @@ export function JobsScreen() {
           <p className="text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{jobs.length} total</Badge>
+          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{totalJobs} total</Badge>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
-            setIsSaving(true)
+            setAtsPreviewLoading(true)
             try {
-              const res = await fetch("/api/ats-sync-all", { method: "POST" })
+              const res = await fetch("/api/ats-sync-all", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ preview: true }),
+              })
               const data = await res.json()
               if (data.error) {
                 alert(`Error: ${data.error}`)
               } else {
-                alert(`${data.message}\n\nDetails:\n${data.results?.map((r: any) => `${r.company}: ${r.added || 0} jobs`).join('\n') || ''}`)  
+                setAtsPreviewJobs(data.jobs || [])
+                // Pre-select ALL jobs (new + existing) for unified sync
+                const allUrls = new Set((data.jobs || []).map((j: any) => j.jobUrl))
+                setAtsPreviewSelected(allUrls)
+                setShowAtsPreview(true)
               }
             } catch (err) {
-              alert("Failed to sync ATS jobs")
+              alert("Failed to fetch ATS jobs")
             } finally {
-              setIsSaving(false)
+              setAtsPreviewLoading(false)
             }
-          }} disabled={isSaving}>
-            <Zap className="h-3 w-3" /> {isSaving ? "Syncing ATS..." : "Sync All ATS"}
+          }} disabled={atsPreviewLoading}>
+            <Zap className="h-3 w-3" /> {atsPreviewLoading ? "Fetching..." : "Sync All ATS"}
           </Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
             setIsSaving(true)
@@ -374,6 +390,13 @@ export function JobsScreen() {
               </div>
             )}
           </div>
+          {hasMoreJobs && !searchQuery && (
+            <div className="flex justify-center py-4 border-t border-border">
+              <Button variant="outline" size="sm" className="text-xs" onClick={loadMoreJobs}>
+                Load More ({jobs.length} of {totalJobs})
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1294,6 +1317,222 @@ export function JobsScreen() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== ATS SYNC ALL PREVIEW DIALOG ========== */}
+      <Dialog open={showAtsPreview} onOpenChange={setShowAtsPreview}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Zap className="h-5 w-5 text-primary" />
+              ATS Sync Preview
+            </DialogTitle>
+          </DialogHeader>
+
+          {(() => {
+            const newJobs = atsPreviewJobs.filter((j) => !j.isExisting)
+            const existingJobs = atsPreviewJobs.filter((j) => j.isExisting)
+            const selectedNewCount = newJobs.filter((j) => atsPreviewSelected.has(j.jobUrl)).length
+            const selectedExistingCount = existingJobs.filter((j) => atsPreviewSelected.has(j.jobUrl)).length
+            const allSelected = atsPreviewSelected.size === atsPreviewJobs.length
+
+            return (
+              <>
+                {/* Unified top bar */}
+                <div className="flex items-center justify-between rounded-lg border border-border bg-accent/20 p-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">{atsPreviewJobs.length} jobs found across all companies</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {newJobs.length} new · {existingJobs.length} existing · {atsPreviewSelected.size} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs gap-1.5"
+                      onClick={() => {
+                        if (allSelected) {
+                          setAtsPreviewSelected(new Set())
+                        } else {
+                          setAtsPreviewSelected(new Set(atsPreviewJobs.map((j) => j.jobUrl)))
+                        }
+                      }}
+                    >
+                      {allSelected ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                      {allSelected ? "Deselect All" : "Select All"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                      disabled={atsPreviewSelected.size === 0 || isSaving}
+                      onClick={async () => {
+                        setIsSaving(true)
+                        try {
+                          const selected = atsPreviewJobs
+                            .filter((j) => atsPreviewSelected.has(j.jobUrl))
+                            .map((j) => ({ companyId: j.companyId, jobUrl: j.jobUrl }))
+                          const res = await fetch("/api/ats-sync-all", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ selectedJobUrls: selected }),
+                          })
+                          const data = await res.json()
+                          if (data.error) {
+                            alert(`Error: ${data.error}`)
+                          } else {
+                            alert(data.message)
+                            setShowAtsPreview(false)
+                          }
+                        } catch (err) {
+                          alert(`Sync failed: ${err}`)
+                        } finally {
+                          setIsSaving(false)
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      {isSaving ? "Syncing..." : `Sync All ${atsPreviewSelected.size} Jobs`}
+                    </Button>
+                  </div>
+                </div>
+
+                <Tabs defaultValue="new" className="mt-2">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="new" className="flex-1 gap-1.5">
+                      <Plus className="h-3 w-3" /> New Jobs
+                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] ml-1">{newJobs.length}</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="existing" className="flex-1 gap-1.5">
+                      <RefreshCw className="h-3 w-3" /> Existing Jobs
+                      <Badge variant="secondary" className="text-[10px] ml-1">{existingJobs.length}</Badge>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="new" className="mt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-muted-foreground">These jobs will be added to your database</p>
+                      <div className="flex items-center gap-3 text-xs">
+                        <button className="text-primary hover:underline" onClick={() => {
+                          const next = new Set(atsPreviewSelected)
+                          newJobs.forEach((j) => next.add(j.jobUrl))
+                          setAtsPreviewSelected(next)
+                        }}>Select all new</button>
+                        <button className="text-primary hover:underline" onClick={() => {
+                          const next = new Set(atsPreviewSelected)
+                          newJobs.forEach((j) => next.delete(j.jobUrl))
+                          setAtsPreviewSelected(next)
+                        }}>Deselect all new</button>
+                      </div>
+                    </div>
+                    {newJobs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Check className="h-8 w-8 text-green-500 mb-2" />
+                        <p className="text-sm text-muted-foreground">All jobs are already synced!</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto">
+                        {newJobs.map((job) => (
+                          <label
+                            key={job.jobUrl}
+                            className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                              atsPreviewSelected.has(job.jobUrl) ? "border-green-500/40 bg-green-500/5" : "border-border hover:bg-accent/30"
+                            }`}
+                          >
+                            <Checkbox
+                              checked={atsPreviewSelected.has(job.jobUrl)}
+                              onCheckedChange={(checked) => {
+                                const next = new Set(atsPreviewSelected)
+                                checked ? next.add(job.jobUrl) : next.delete(job.jobUrl)
+                                setAtsPreviewSelected(next)
+                              }}
+                              className="mt-0.5"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium truncate">{job.title}</span>
+                                <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] shrink-0">New</Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                                <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
+                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
+                                <span>{job.type}</span>
+                                {job.salaryRange !== "Not specified" && <span>{job.salaryRange}</span>}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="existing" className="mt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-muted-foreground">These jobs already exist and will be updated with fresh data if selected</p>
+                      <div className="flex items-center gap-3 text-xs">
+                        <button className="text-primary hover:underline" onClick={() => {
+                          const next = new Set(atsPreviewSelected)
+                          existingJobs.forEach((j) => next.add(j.jobUrl))
+                          setAtsPreviewSelected(next)
+                        }}>Select all</button>
+                        <button className="text-primary hover:underline" onClick={() => {
+                          const next = new Set(atsPreviewSelected)
+                          existingJobs.forEach((j) => next.delete(j.jobUrl))
+                          setAtsPreviewSelected(next)
+                        }}>Deselect all</button>
+                      </div>
+                    </div>
+                    {existingJobs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Briefcase className="h-8 w-8 text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">All jobs are new!</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto">
+                        {existingJobs.map((job) => (
+                          <label
+                            key={job.jobUrl}
+                            className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                              atsPreviewSelected.has(job.jobUrl) ? "border-primary/40 bg-primary/5" : "border-border hover:bg-accent/30"
+                            }`}
+                          >
+                            <Checkbox
+                              checked={atsPreviewSelected.has(job.jobUrl)}
+                              onCheckedChange={(checked) => {
+                                const next = new Set(atsPreviewSelected)
+                                checked ? next.add(job.jobUrl) : next.delete(job.jobUrl)
+                                setAtsPreviewSelected(next)
+                              }}
+                              className="mt-0.5"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium truncate">{job.title}</span>
+                                <Badge variant="secondary" className="text-[10px] shrink-0">Existing</Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                                <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
+                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
+                                <span>{job.type}</span>
+                                {job.salaryRange !== "Not specified" && <span>{job.salaryRange}</span>}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+
+                <DialogFooter className="mt-3">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowAtsPreview(false)}>
+                    Cancel
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 

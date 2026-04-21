@@ -40,7 +40,7 @@ interface AgentStats {
   successRate: string
   avgProcessingTime: string
 }
-import { Plus, Settings, BarChart3, Eye, Pause, Play, RotateCcw, ScrollText, Cpu, HardDrive, Wifi, Server } from "lucide-react"
+import { Plus, Settings, BarChart3, Eye, Pause, Play, RotateCcw, ScrollText, Cpu, HardDrive, Wifi, Server, RefreshCw } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -60,20 +60,30 @@ export function AgentsScreen() {
     avgProcessingTime: '0m'
   })
   const [loading, setLoading] = useState(true)
+  const [agentsPage, setAgentsPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalFiltered, setTotalFiltered] = useState(0)
+  const AGENTS_PER_PAGE = 10
   const [configureOpen, setConfigureOpen] = useState(false)
   const [performanceOpen, setPerformanceOpen] = useState(false)
   const [addAgentOpen, setAddAgentOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [logs, setLogs] = useState<any[]>([])
   const [logsOpen, setLogsOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   const fetchAgents = async () => {
       try {
-        const response = await fetch('/api/agents')
+        const statusParam = activeTab !== 'all' ? `&status=${activeTab}` : ''
+        const response = await fetch(`/api/agents?page=${agentsPage}&limit=${AGENTS_PER_PAGE}${statusParam}`)
         const data = await response.json()
         if (data.agents) {
           setAgents(data.agents)
           setStats(data.stats)
+          if (data.pagination) {
+            setTotalPages(data.pagination.totalPages)
+            setTotalFiltered(data.pagination.total)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch agents:', error)
@@ -85,9 +95,13 @@ export function AgentsScreen() {
   useEffect(() => {
     
     fetchAgents()
-    const interval = setInterval(fetchAgents, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  }, [agentsPage, activeTab])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchAgents()
+    setRefreshing(false)
+  }
 
   const getStatusBadgeStatus = (status: string) => {
     if (status === 'processing') return 'active'
@@ -150,19 +164,12 @@ export function AgentsScreen() {
       fetchLogs(selectedAgent.id)
       const interval = setInterval(() => {
         fetchLogs(selectedAgent.id)
-      }, 2000)
+      }, 5000)
       return () => clearInterval(interval)
     }
   }, [selectedAgent])
 
-  const filteredAgents = agents.filter(agent => {
-    if (activeTab === 'all') return true
-    if (activeTab === 'active') return agent.status === 'processing'
-    if (activeTab === 'idle') return agent.status === 'pending'
-    if (activeTab === 'completed') return agent.status === 'completed'
-    if (activeTab === 'error') return agent.status === 'failed'
-    return true
-  })
+  const filteredAgents = agents
 
   return (
     <div className="flex flex-col gap-6">
@@ -172,6 +179,9 @@ export function AgentsScreen() {
           <p className="text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setConfigureOpen(true)}>
             <Settings className="h-3 w-3" /> Configure
           </Button>
@@ -185,7 +195,7 @@ export function AgentsScreen() {
       </div>
 
       {/* Stats as Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setAgentsPage(1) }} className="w-full">
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="all" className="text-xs">
             All <Badge variant="secondary" className="ml-1.5">{stats.total}</Badge>
@@ -289,6 +299,18 @@ export function AgentsScreen() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Showing {((agentsPage - 1) * AGENTS_PER_PAGE) + 1}-{Math.min(agentsPage * AGENTS_PER_PAGE, totalFiltered)} of {totalFiltered}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={agentsPage === 1} onClick={() => setAgentsPage(p => p - 1)}>Previous</Button>
+            <span className="text-xs text-muted-foreground">Page {agentsPage} of {totalPages}</span>
+            <Button size="sm" variant="outline" className="text-xs h-7" disabled={agentsPage === totalPages} onClick={() => setAgentsPage(p => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
 
       {/* Agent Detail / Live View Modal */}
       <Dialog open={!!selectedAgent} onOpenChange={(open) => {
