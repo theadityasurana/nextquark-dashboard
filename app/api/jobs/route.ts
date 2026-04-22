@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { normalizeExperienceLevel } from "@/lib/job-parser"
 
 function getAdminClient() {
   return createClient(
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     location: body.location || "Remote",
     type: body.type || "Full-time",
     salary_range: body.salary_range || "Not specified",
-    experience: body.experience || "Not specified",
+    experience: normalizeExperienceLevel(body.experience),
     portal_url: body.portal_url || "",
     job_url: body.job_url || "",
     company_website: body.company_website || null,
@@ -152,7 +153,7 @@ export async function PATCH(request: NextRequest) {
 
   for (const [key, value] of Object.entries(updates)) {
     if (key in keyMap) {
-      dbUpdates[keyMap[key]] = value
+      dbUpdates[keyMap[key]] = key === "experience" ? normalizeExperienceLevel(value as string) : value
     }
   }
 

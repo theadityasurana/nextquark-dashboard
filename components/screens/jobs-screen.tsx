@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 
 export function JobsScreen() {
-  const { companies, jobs, totalJobs, hasMoreJobs, loadMoreJobs, addJob, updateJob, isLoading } = useData()
+  const { companies, jobs, totalJobs, hasMoreJobs, loadMoreJobs, addJob, updateJob, refreshJobs, isLoading } = useData()
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
@@ -42,6 +42,12 @@ export function JobsScreen() {
   const [atsPreviewJobs, setAtsPreviewJobs] = useState<any[]>([])
   const [atsPreviewSelected, setAtsPreviewSelected] = useState<Set<string>>(new Set())
   const [atsPreviewLoading, setAtsPreviewLoading] = useState(false)
+
+  // Cleanup stale jobs state
+  const [showCleanupPreview, setShowCleanupPreview] = useState(false)
+  const [staleJobs, setStaleJobs] = useState<any[]>([])
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Temp inputs for array fields during add
   const [newRequirement, setNewRequirement] = useState("")
@@ -291,7 +297,6 @@ export function JobsScreen() {
                 alert(`Error: ${data.error}`)
               } else {
                 setAtsPreviewJobs(data.jobs || [])
-                // Pre-select ALL jobs (new + existing) for unified sync
                 const allUrls = new Set((data.jobs || []).map((j: any) => j.jobUrl))
                 setAtsPreviewSelected(allUrls)
                 setShowAtsPreview(true)
@@ -303,6 +308,29 @@ export function JobsScreen() {
             }
           }} disabled={atsPreviewLoading}>
             <Zap className="h-3 w-3" /> {atsPreviewLoading ? "Fetching..." : "Sync All ATS"}
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={async () => {
+            setCleanupLoading(true)
+            try {
+              const res = await fetch("/api/cleanup-jobs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ preview: true }),
+              })
+              const data = await res.json()
+              if (data.error) {
+                alert(`Error: ${data.error}`)
+              } else {
+                setStaleJobs(data.staleJobs || [])
+                setShowCleanupPreview(true)
+              }
+            } catch (err) {
+              alert("Failed to check for stale jobs")
+            } finally {
+              setCleanupLoading(false)
+            }
+          }} disabled={cleanupLoading}>
+            <Trash2 className="h-3 w-3" /> {cleanupLoading ? "Checking..." : "Delete Non-Existing"}
           </Button>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
             setIsSaving(true)
@@ -1533,6 +1561,89 @@ export function JobsScreen() {
               </>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ========== CLEANUP STALE JOBS DIALOG ========== */}
+      <Dialog open={showCleanupPreview} onOpenChange={setShowCleanupPreview}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Delete Non-Existing Jobs
+            </DialogTitle>
+          </DialogHeader>
+
+          {staleJobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Check className="h-8 w-8 text-green-500 mb-2" />
+              <p className="text-sm font-medium">All jobs are up to date!</p>
+              <p className="text-xs text-muted-foreground mt-1">No stale jobs found across ATS-integrated companies.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">{staleJobs.length} jobs no longer exist on company portals</span>
+                  <span className="text-[11px] text-muted-foreground">These jobs will be permanently deleted from your database.</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto mt-2">
+                {staleJobs.map((job) => (
+                  <div key={job.id} className="flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                    <Trash2 className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium truncate block">{job.title}</span>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                        <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
+                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
+                        <span>{job.type}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <DialogFooter className="mt-3 gap-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowCleanupPreview(false)}>
+              Cancel
+            </Button>
+            {staleJobs.length > 0 && (
+              <Button
+                size="sm"
+                className="text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-1.5"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true)
+                  try {
+                    const res = await fetch("/api/cleanup-jobs", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ preview: false }),
+                    })
+                    const data = await res.json()
+                    if (data.error) {
+                      alert(`Error: ${data.error}`)
+                    } else {
+                      alert(data.message)
+                      setShowCleanupPreview(false)
+                      refreshJobs()
+                    }
+                  } catch (err) {
+                    alert("Failed to delete stale jobs")
+                  } finally {
+                    setIsDeleting(false)
+                  }
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+                {isDeleting ? "Deleting..." : `Delete ${staleJobs.length} Jobs`}
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

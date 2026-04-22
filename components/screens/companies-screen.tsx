@@ -65,6 +65,7 @@ export function CompaniesScreen() {
     companyType: "",
     atsType: "",
     atsCompanyId: "",
+    logoUrl: "",
   })
 
   const filteredCompanies = companies.filter((company) => {
@@ -100,7 +101,7 @@ export function CompaniesScreen() {
     setFormData({
       name: "", description: "", website: "", careersUrl: "",
       linkedinUrl: "", industry: "", size: "", locations: [], portalType: "", benefits: [], companyType: "",
-      atsType: "", atsCompanyId: "",
+      atsType: "", atsCompanyId: "", logoUrl: "",
     })
     setLogoPreview(null)
     setLogoFile(null)
@@ -187,6 +188,8 @@ export function CompaniesScreen() {
       } catch (err) {
         console.error("Logo upload failed:", err)
       }
+    } else if (formData.logoUrl.trim()) {
+      logoUrl = formData.logoUrl.trim()
     }
 
     const result = await addCompany({
@@ -345,6 +348,17 @@ export function CompaniesScreen() {
                   onChange={handleLogoUpload}
                 />
               </div>
+              {!logoFile && !logoPreview && (
+                <div className="flex items-center gap-2 w-full">
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <Input
+                    placeholder="Paste logo URL (e.g. https://logo.clearbit.com/uber.com)"
+                    className="bg-accent/30 border-border text-xs flex-1"
+                    value={formData.logoUrl}
+                    onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Company Name */}

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 import { htmlToMarkdown } from "@/lib/html-converter"
-import { parseJobContent, parseSalaryFromText, mapLeverCommitment, mapAshbyEmploymentType } from "@/lib/job-parser"
+import { parseJobContent, parseSalaryFromText, mapLeverCommitment, mapAshbyEmploymentType, normalizeExperienceLevel } from "@/lib/job-parser"
 
 function getAdminClient() {
   return createClient(
@@ -428,7 +428,7 @@ export async function POST(request: NextRequest) {
         location: job.location || "Remote",
         type: job.type || "Full-time",
         salary_range: job.salaryRange || "Not specified",
-        experience: job.experience || "Not specified",
+        experience: normalizeExperienceLevel(job.experience),
         portal_url: job.jobUrl || "",
         job_url: job.jobUrl || "",
         company_website: company.website || null,
