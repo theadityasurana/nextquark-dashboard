@@ -41,7 +41,7 @@ function mapJob(j: Record<string, unknown>): Job {
     title: j.title as string,
     location: j.location as string || "Remote",
     type: j.type as string || "Full-time",
-    salaryRange: j.salary_range as string || "Not specified",
+    salaryRange: j.salary_range as string || "Competitive salary",
     experience: j.experience as string || "Not specified",
     portalUrl: j.portal_url as string || "",
     jobUrl: j.job_url as string || "",

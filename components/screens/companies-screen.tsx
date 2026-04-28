@@ -575,7 +575,7 @@ export function CompaniesScreen() {
                 <Zap className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold">ATS Integration (Optional)</h3>
               </div>
-              <p className="text-xs text-muted-foreground">If this company uses Greenhouse, Lever, or Ashby, you can automatically sync jobs from their ATS API</p>
+              <p className="text-xs text-muted-foreground">If this company uses Greenhouse, Lever, Ashby, or SmartRecruiters, you can automatically sync jobs from their ATS API</p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
@@ -588,6 +588,7 @@ export function CompaniesScreen() {
                       <SelectItem value="greenhouse">Greenhouse</SelectItem>
                       <SelectItem value="lever">Lever</SelectItem>
                       <SelectItem value="ashby">Ashby</SelectItem>
+                      <SelectItem value="smartrecruiters">SmartRecruiters</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -610,6 +611,7 @@ export function CompaniesScreen() {
                     {formData.atsType === "greenhouse" && `https://api.greenhouse.io/v1/boards/${formData.atsCompanyId}/jobs`}
                     {formData.atsType === "lever" && `https://api.lever.co/v0/postings/${formData.atsCompanyId}`}
                     {formData.atsType === "ashby" && `https://api.ashbyhq.com/posting-api/job-board/${formData.atsCompanyId}`}
+                    {formData.atsType === "smartrecruiters" && `https://api.smartrecruiters.com/v1/companies/${formData.atsCompanyId}/postings`}
                   </span>
                 </div>
               )}

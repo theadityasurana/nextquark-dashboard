@@ -27,7 +27,7 @@ export const PORTAL_PATTERNS: PortalPattern[] = [
   {
     name: "SmartRecruiters",
     urlPatterns: [/smartrecruiters\.com/],
-    supportsDirectApi: false,
+    supportsDirectApi: true,
     getApplyUrl: (url) => url,
   },
   {

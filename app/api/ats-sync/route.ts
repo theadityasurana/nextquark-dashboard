@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
 import { htmlToMarkdown } from "@/lib/html-converter"
-import { parseJobContent, parseSalaryFromText, mapLeverCommitment, mapAshbyEmploymentType, normalizeExperienceLevel } from "@/lib/job-parser"
+import { parseJobContent, parseSalaryFromText, mapLeverCommitment, mapAshbyEmploymentType, mapSmartRecruitersEmploymentType, normalizeExperienceLevel, normalizeJobType } from "@/lib/job-parser"
 
 function getAdminClient() {
   return createClient(
@@ -15,6 +15,7 @@ const ATS_APIS = {
   greenhouse: (companyId: string) => `https://boards-api.greenhouse.io/v1/boards/${companyId}/jobs?content=true`,
   lever: (companyId: string) => `https://api.lever.co/v0/postings/${companyId}?mode=json`,
   ashby: (companyId: string) => `https://api.ashbyhq.com/posting-api/job-board/${companyId}`,
+  smartrecruiters: (companyId: string) => `https://api.smartrecruiters.com/v1/companies/${companyId}/postings`,
 }
 
 function decodeAndSanitize(content: string): string {
@@ -38,7 +39,7 @@ function decodeAndSanitize(content: string): string {
 function formatSalary(min: string, max: string): string {
   if (min && max) return `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()}`
   if (min) return `$${Number(min).toLocaleString()}+`
-  return "Not specified"
+  return "Competitive salary"
 }
 
 async function fetchGreenhouseJobs(companyId: string) {
@@ -329,11 +330,151 @@ async function fetchAshbyJobs(companyId: string) {
   })
 }
 
+async function fetchSmartRecruitersJobs(companyId: string) {
+  // Step 1: Paginate through all listings (API returns max 100 per page)
+  const baseUrl = ATS_APIS.smartrecruiters(companyId)
+  const jobsList: any[] = []
+  let offset = 0
+  const limit = 100
+
+  while (true) {
+    const url = `${baseUrl}?offset=${offset}&limit=${limit}`
+    console.log('Fetching from SmartRecruiters:', url)
+    const response = await fetch(url)
+    console.log('SmartRecruiters response status:', response.status)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('SmartRecruiters API error:', errorText)
+      throw new Error(`SmartRecruiters API returned ${response.status}: ${errorText}`)
+    }
+    const data = await response.json()
+    const page = data.content || data.postings || []
+    jobsList.push(...page)
+
+    const totalFound = data.totalFound ?? 0
+    offset += page.length
+    console.log(`SmartRecruiters page fetched: ${page.length} jobs (${offset}/${totalFound})`)
+
+    if (page.length === 0 || offset >= totalFound) break
+  }
+
+  console.log('SmartRecruiters total jobs found:', jobsList.length)
+
+  // Step 2: Fetch individual posting details in batches of 10 to avoid rate limits
+  const BATCH_SIZE = 10
+  const results: any[] = []
+
+  for (let i = 0; i < jobsList.length; i += BATCH_SIZE) {
+    const batch = jobsList.slice(i, i + BATCH_SIZE)
+    const batchResults = await Promise.all(
+      batch.map(async (job: any) => {
+      const title = job.name || job.title || "Untitled Position"
+      const jobUrl = job.ref || job.applyUrl || ""
+
+      // Location
+      let location = "Remote"
+      if (job.location) {
+        const loc = job.location
+        const parts = [loc.city, loc.region, loc.country].filter(Boolean)
+        if (parts.length) location = parts.join(", ")
+        if (loc.remote) location = location !== "Remote" ? `${location} (Remote)` : "Remote"
+      }
+
+      let description = ""
+      let detailedRequirements = ""
+      let requirements: string[] = []
+      let skills: string[] = []
+      let benefits: string[] = []
+      let jobType = ""
+      let experienceLevel = ""
+      let salaryMin = ""
+      let salaryMax = ""
+      let educationLevel = null
+      let workAuthorization = null
+
+      // Fetch individual posting detail for full jobAd sections
+      let jobDetail = job
+      if (job.id) {
+        try {
+          const detailUrl = `https://api.smartrecruiters.com/v1/companies/${companyId}/postings/${job.id}`
+          const detailRes = await fetch(detailUrl)
+          if (detailRes.ok) {
+            jobDetail = await detailRes.json()
+          }
+        } catch (err) {
+          console.error(`Failed to fetch detail for job ${job.id}:`, err)
+        }
+      }
+
+      // Combine all jobAd sections for full parsing
+      let fullHtml = ""
+      if (jobDetail.jobAd?.sections) {
+        for (const section of Object.values(jobDetail.jobAd.sections) as any[]) {
+          if (section?.text) fullHtml += section.text + " "
+        }
+      }
+
+      if (fullHtml) {
+        const sanitizedHtml = decodeAndSanitize(fullHtml)
+        const parsed = parseJobContent(sanitizedHtml, title)
+        requirements = parsed.requirements
+        skills = parsed.skills
+        benefits = parsed.benefits
+        jobType = parsed.jobType || ""
+        experienceLevel = parsed.experienceLevel || ""
+        salaryMin = parsed.salaryMin || ""
+        salaryMax = parsed.salaryMax || ""
+        educationLevel = parsed.educationLevel || null
+        workAuthorization = parsed.workAuthorization || null
+
+        const plainText = sanitizedHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+        description = plainText.substring(0, 500)
+        detailedRequirements = htmlToMarkdown(sanitizedHtml)
+      }
+
+      // Structured fields from SmartRecruiters (higher priority than parsed)
+      const srType = jobDetail.typeOfEmployment?.label || jobDetail.typeOfEmployment
+      if (typeof srType === "string" && srType) jobType = mapSmartRecruitersEmploymentType(srType)
+
+      if (jobDetail.experienceLevel?.label) experienceLevel = jobDetail.experienceLevel.label
+
+      // Compensation from structured field
+      if (!salaryMin && jobDetail.compensation) {
+        salaryMin = jobDetail.compensation.min?.value?.toString() || ""
+        salaryMax = jobDetail.compensation.max?.value?.toString() || ""
+      }
+
+      return {
+        title,
+        location,
+        jobUrl,
+        description,
+        detailedRequirements,
+        type: jobType || "Full-time",
+        experience: experienceLevel,
+        salaryRange: formatSalary(salaryMin, salaryMax),
+        requirements,
+        skills,
+        benefits,
+        departments: jobDetail.department?.label || "",
+        educationLevel,
+        workAuthorization,
+        updatedAt: jobDetail.releasedDate || jobDetail.updatedOn || new Date().toISOString(),
+      }
+    })
+  )
+  results.push(...batchResults)
+  }
+
+  return results
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = getAdminClient()
     const body = await request.json()
-    const { companyId, atsType, atsCompanyId, preview, selectedJobUrls } = body
+    const { companyId, atsType, atsCompanyId: rawAtsCompanyId, preview, selectedJobUrls } = body
+    const atsCompanyId = rawAtsCompanyId?.trim()
 
     if (!companyId || !atsType || !atsCompanyId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -350,6 +491,8 @@ export async function POST(request: NextRequest) {
         jobs = await fetchLeverJobs(atsCompanyId)
       } else if (atsType === "ashby") {
         jobs = await fetchAshbyJobs(atsCompanyId)
+      } else if (atsType === "smartrecruiters") {
+        jobs = await fetchSmartRecruitersJobs(atsCompanyId)
       } else {
         return NextResponse.json({ error: "Invalid ATS type" }, { status: 400 })
       }
@@ -426,8 +569,8 @@ export async function POST(request: NextRequest) {
         company_initial: company.logo_initial || "?",
         title: job.title || "Untitled Position",
         location: job.location || "Remote",
-        type: job.type || "Full-time",
-        salary_range: job.salaryRange || "Not specified",
+        type: normalizeJobType(job.type),
+        salary_range: job.salaryRange || "Competitive salary",
         experience: normalizeExperienceLevel(job.experience),
         portal_url: job.jobUrl || "",
         job_url: job.jobUrl || "",

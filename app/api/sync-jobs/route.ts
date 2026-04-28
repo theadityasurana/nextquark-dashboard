@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
-import { normalizeExperienceLevel } from "@/lib/job-parser"
+import { normalizeExperienceLevel, normalizeJobType } from "@/lib/job-parser"
 
 function getAdminClient() {
   return createClient(
@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
               company_initial: company.logo_initial || "?",
               title: job.title || "Untitled Position",
               location: job.location || "Remote",
-              type: job.type || "Full-time",
-              salary_range: job.salaryMin && job.salaryMax ? `${job.salaryMin} - ${job.salaryMax}` : "Not specified",
+              type: normalizeJobType(job.type),
+              salary_range: job.salaryMin && job.salaryMax ? `${job.salaryMin} - ${job.salaryMax}` : "Competitive salary",
               experience: normalizeExperienceLevel(job.experience),
               portal_url: company.careers_url || "",
               job_url: job.jobUrl || "",

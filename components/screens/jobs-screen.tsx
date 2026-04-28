@@ -560,12 +560,15 @@ export function JobsScreen() {
                     <SelectValue placeholder="Select level" />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-border">
-                    <SelectItem value="Entry Level (0-1 years)">Entry Level (0-1 years)</SelectItem>
-                    <SelectItem value="Junior (1-3 years)">Junior (1-3 years)</SelectItem>
-                    <SelectItem value="Mid-Level (3-5 years)">Mid-Level (3-5 years)</SelectItem>
-                    <SelectItem value="Senior (5-8 years)">Senior (5-8 years)</SelectItem>
-                    <SelectItem value="Lead (8+ years)">Lead (8+ years)</SelectItem>
-                    <SelectItem value="Principal/Staff (10+ years)">Principal/Staff (10+ years)</SelectItem>
+                    <SelectItem value="Internship">Internship</SelectItem>
+                    <SelectItem value="Entry Level">Entry Level (0-1 years)</SelectItem>
+                    <SelectItem value="Middle Level">Junior (1-3 years)</SelectItem>
+                    <SelectItem value="Senior Level">Senior (5-8 years)</SelectItem>
+                    <SelectItem value="Lead">Lead (8+ years)</SelectItem>
+                    <SelectItem value="Principal">Principal/Staff (10+ years)</SelectItem>
+                    <SelectItem value="Director">Director</SelectItem>
+                    <SelectItem value="VP">VP</SelectItem>
+                    <SelectItem value="C-Level">C-Level</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1128,12 +1131,15 @@ export function JobsScreen() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-card border-border">
-                        <SelectItem value="Entry Level (0-1 years)">Entry Level (0-1 years)</SelectItem>
-                        <SelectItem value="Junior (1-3 years)">Junior (1-3 years)</SelectItem>
-                        <SelectItem value="Mid-Level (3-5 years)">Mid-Level (3-5 years)</SelectItem>
-                        <SelectItem value="Senior (5-8 years)">Senior (5-8 years)</SelectItem>
-                        <SelectItem value="Lead (8+ years)">Lead (8+ years)</SelectItem>
-                        <SelectItem value="Principal/Staff (10+ years)">Principal/Staff (10+ years)</SelectItem>
+                        <SelectItem value="Internship">Internship</SelectItem>
+                        <SelectItem value="Entry Level">Entry Level (0-1 years)</SelectItem>
+                        <SelectItem value="Middle Level">Junior (1-3 years)</SelectItem>
+                        <SelectItem value="Senior Level">Senior (5-8 years)</SelectItem>
+                        <SelectItem value="Lead">Lead (8+ years)</SelectItem>
+                        <SelectItem value="Principal">Principal/Staff (10+ years)</SelectItem>
+                        <SelectItem value="Director">Director</SelectItem>
+                        <SelectItem value="VP">VP</SelectItem>
+                        <SelectItem value="C-Level">C-Level</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1486,7 +1492,7 @@ export function JobsScreen() {
                                 <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
                                 <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
                                 <span>{job.type}</span>
-                                {job.salaryRange !== "Not specified" && <span>{job.salaryRange}</span>}
+                                {job.salaryRange !== "Not specified" && job.salaryRange !== "Competitive salary" && <span>{job.salaryRange}</span>}
                               </div>
                             </div>
                           </label>
@@ -1543,7 +1549,7 @@ export function JobsScreen() {
                                 <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
                                 <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
                                 <span>{job.type}</span>
-                                {job.salaryRange !== "Not specified" && <span>{job.salaryRange}</span>}
+                                {job.salaryRange !== "Not specified" && job.salaryRange !== "Competitive salary" && <span>{job.salaryRange}</span>}
                               </div>
                             </div>
                           </label>
