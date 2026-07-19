@@ -57,7 +57,7 @@ async function main() {
   // So we'll test the Resend API fetch separately
   console.log("--- Testing Resend List API directly ---")
   
-  const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_2ZFLsY9X_JtbZwnxNj9Rm8WyxNL6nJK74"
+  const RESEND_API_KEY = process.env.RESEND_API_KEY
   
   const listRes = await fetch("https://api.resend.com/emails/receiving?limit=5", {
     headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
