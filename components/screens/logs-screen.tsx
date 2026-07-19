@@ -62,51 +62,53 @@ export function LogsScreen() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search logs..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        </div>
-        <Select value={levelFilter} onValueChange={setLevelFilter}>
-          <SelectTrigger className="w-[140px] bg-card border-border text-sm">
-            <SelectValue placeholder="All Levels" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Levels</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
-            <SelectItem value="warn">Warning</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-[280px] bg-card border-border text-sm">
-            <SelectValue placeholder="All Agents" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Agents</SelectItem>
-            {uniqueAgents.map((agent) => (
-              <SelectItem key={agent} value={agent}>{getAgentDisplayName(agent)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="flex items-center gap-2 ml-auto">
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-            <Download className="h-3 w-3" /> Download
-          </Button>
-          {(levelFilter !== "all" || agentFilter !== "all" || searchQuery) && (
-            <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery("") }}>
-              <X className="h-3 w-3" /> Clear
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search logs..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={levelFilter} onValueChange={setLevelFilter}>
+              <SelectTrigger className="w-[130px] bg-card border-border text-sm">
+                <SelectValue placeholder="All Levels" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Levels</SelectItem>
+                <SelectItem value="info">Info</SelectItem>
+                <SelectItem value="warn">Warning</SelectItem>
+                <SelectItem value="error">Error</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={agentFilter} onValueChange={setAgentFilter}>
+              <SelectTrigger className="w-[200px] sm:w-[280px] bg-card border-border text-sm">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {uniqueAgents.map((agent) => (
+                  <SelectItem key={agent} value={agent}>{getAgentDisplayName(agent)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
             </Button>
-          )}
-          <div className="flex items-center gap-1.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-            </span>
-            <span className="text-xs text-muted-foreground">Live</span>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+              <Download className="h-3 w-3" /> Download
+            </Button>
+            {(levelFilter !== "all" || agentFilter !== "all" || searchQuery) && (
+              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery("") }}>
+                <X className="h-3 w-3" /> Clear
+              </Button>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+              </span>
+              <span className="text-xs text-muted-foreground">Live</span>
+            </div>
           </div>
         </div>
       </div>

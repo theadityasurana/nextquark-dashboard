@@ -173,12 +173,12 @@ export function AgentsScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AI Agents</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">AI Agents</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
@@ -196,26 +196,28 @@ export function AgentsScreen() {
 
       {/* Stats as Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setAgentsPage(1) }} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="all" className="text-xs">
-            All <Badge variant="secondary" className="ml-1.5">{stats.total}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="active" className="text-xs">
-            Active <Badge variant="secondary" className="ml-1.5">{stats.active}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="idle" className="text-xs">
-            Idle <Badge variant="secondary" className="ml-1.5">{stats.idle}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="text-xs">
-            Completed <Badge variant="secondary" className="ml-1.5">{stats.completed}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="error" className="text-xs">
-            Error <Badge variant="secondary" className="ml-1.5">{stats.error}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="stats" className="text-xs">
-            Stats
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
+          <TabsList className="w-max sm:w-full sm:grid sm:grid-cols-6 inline-flex">
+            <TabsTrigger value="all" className="text-xs">
+              All <Badge variant="secondary" className="ml-1.5">{stats.total}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="active" className="text-xs">
+              Active <Badge variant="secondary" className="ml-1.5">{stats.active}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="idle" className="text-xs">
+              Idle <Badge variant="secondary" className="ml-1.5">{stats.idle}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="text-xs">
+              Done <Badge variant="secondary" className="ml-1.5">{stats.completed}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="error" className="text-xs">
+              Error <Badge variant="secondary" className="ml-1.5">{stats.error}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="text-xs">
+              Stats
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="all" className="mt-4">
           {loading ? (
@@ -288,7 +290,7 @@ export function AgentsScreen() {
         </TabsContent>
 
         <TabsContent value="stats" className="mt-4">
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
             <span className="text-muted-foreground">Total: <span className="text-foreground font-semibold">{stats.total}</span></span>
             <span className="text-muted-foreground">Active: <span className="text-success font-semibold">{stats.active}</span></span>
             <span className="text-muted-foreground">Idle: <span className="text-warning font-semibold">{stats.idle}</span></span>

@@ -62,7 +62,7 @@ export function OtpManagerScreen() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">OTP Manager</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">OTP Manager</h1>
         <p className="text-muted-foreground">View inbound emails and OTP codes</p>
       </div>
 
@@ -80,6 +80,7 @@ export function OtpManagerScreen() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -121,6 +122,7 @@ export function OtpManagerScreen() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

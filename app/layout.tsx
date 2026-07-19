@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { DashboardShell } from '@/components/dashboard-shell'
 import { DataProvider } from '@/lib/data-context'
 import { LogsProvider } from '@/lib/logs-context'
+import { PWARegister } from '@/components/pwa-register'
 import './globals.css'
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -12,6 +13,12 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jet
 export const metadata: Metadata = {
   title: 'NextQuark Admin Dashboard',
   description: 'Internal admin dashboard for monitoring AI-powered job applications',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'NextQuark Admin',
+  },
   icons: {
     icon: [
       {
@@ -32,8 +39,12 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#1a1a2e',
+  themeColor: '#0a0a0f',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
   userScalable: false,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({
@@ -51,6 +62,7 @@ export default function RootLayout({
             </DashboardShell>
           </LogsProvider>
         </DataProvider>
+        <PWARegister />
         <Analytics />
       </body>
     </html>

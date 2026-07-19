@@ -61,10 +61,10 @@ export function OverviewScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-sm text-muted-foreground mt-1">Real-time system health and key metrics</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Overview</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time system health and key metrics</p>
         </div>
         <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
@@ -73,36 +73,53 @@ export function OverviewScreen() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{stat.label}</span>
-                <stat.icon className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="mt-2">
-                <span className="text-3xl font-bold tracking-tight">{stat.value}</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-muted-foreground">{stat.sub}</span>
+        {stats.map((stat, idx) => {
+          const accents = [
+            "from-primary/20 to-primary/5 text-primary",
+            "from-chart-2/20 to-chart-2/5 text-chart-2",
+            "from-chart-3/20 to-chart-3/5 text-chart-3",
+            "from-success/20 to-success/5 text-success",
+            "from-destructive/20 to-destructive/5 text-destructive",
+            "from-chart-5/20 to-chart-5/5 text-chart-5",
+          ]
+          const accent = accents[idx % accents.length]
+          return (
+            <Card key={stat.label} className="hover-lift group overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{stat.label}</span>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${accent} ring-1 ring-border/40 transition-transform duration-200 group-hover:scale-110`}>
+                    <stat.icon className="h-4 w-4" />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="mt-3">
+                  <span className="text-3xl font-bold tracking-tight">{stat.value}</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground">{stat.sub}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* Total Jobs Card */}
-      <Card className="bg-card border-border">
+      <Card className="hover-lift relative overflow-hidden">
+        {/* Decorative gradient orb */}
+        <div aria-hidden className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-primary/10 blur-3xl" />
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Briefcase className="h-5 w-5 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-chart-2/10 ring-1 ring-primary/20">
+                <Briefcase className="h-5 w-5 text-primary" />
+              </div>
               <div>
                 <p className="text-sm font-medium">Total Jobs Listed</p>
                 <p className="text-[11px] text-muted-foreground">Across all companies</p>
               </div>
             </div>
-            <span className="text-2xl font-bold">{data.totalJobs?.toLocaleString() || 0}</span>
+            <span className="text-2xl font-bold text-gradient-primary">{data.totalJobs?.toLocaleString() || 0}</span>
           </div>
         </CardContent>
       </Card>
@@ -124,14 +141,19 @@ export function OverviewScreen() {
         <CardContent className="p-0">
           <div className="divide-y divide-border">
             {recentApps.map((app: any) => (
-              <div key={app.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-accent/50 transition-colors cursor-pointer">
-                <div className="flex items-center gap-3 min-w-0">
+              <div key={app.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-4 py-3 sm:py-2.5 hover:bg-accent/50 transition-colors cursor-pointer">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                   <span className="text-[11px] text-muted-foreground font-mono w-14 shrink-0">{app.startedAt !== "-" ? app.startedAt : app.createdAt}</span>
                   <span className="text-sm font-medium truncate">{app.userName}</span>
-                  <ArrowUpRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <span className="text-sm text-muted-foreground truncate">{app.companyName} - {app.jobTitle}</span>
+                  <ArrowUpRight className="h-3 w-3 text-muted-foreground shrink-0 hidden sm:block" />
+                  <span className="text-sm text-muted-foreground truncate hidden sm:inline">{app.companyName} - {app.jobTitle}</span>
                 </div>
-                <StatusBadge status={app.status} />
+                <div className="flex items-center gap-2 pl-16 sm:pl-0 min-w-0">
+                  <span className="text-xs text-muted-foreground truncate sm:hidden">{app.companyName} · {app.jobTitle}</span>
+                  <div className="ml-auto sm:ml-0 shrink-0">
+                    <StatusBadge status={app.status} />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -164,16 +186,23 @@ export function OverviewScreen() {
                 <AreaChart data={data.applicationsChart}>
                   <defs>
                     <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="oklch(0.65 0.2 145)" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="oklch(0.65 0.2 145)" stopOpacity={0} />
+                      <stop offset="0%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="time" tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} width={30} />
+                  <XAxis dataKey="time" tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} width={30} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }}
+                    contentStyle={{
+                      backgroundColor: "oklch(0.16 0.006 265)",
+                      border: "1px solid oklch(0.24 0.008 265)",
+                      borderRadius: "8px",
+                      fontSize: 12,
+                      color: "oklch(0.97 0.003 265)",
+                      boxShadow: "0 8px 24px -8px oklch(0 0 0 / 0.5)",
+                    }}
                   />
-                  <Area type="monotone" dataKey="count" stroke="oklch(0.65 0.2 145)" strokeWidth={2} fill="url(#areaGradient)" />
+                  <Area type="monotone" dataKey="count" stroke="oklch(0.7 0.18 270)" strokeWidth={2} fill="url(#areaGradient)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -229,13 +258,13 @@ export function OverviewScreen() {
           {data.portalHealth && data.portalHealth.length > 0 ? (
             <div className="divide-y divide-border">
               {data.portalHealth.map((portal: any, i: number) => (
-                <div key={i} className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <Server className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{portal.portalType}</span>
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Server className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium truncate">{portal.portalType}</span>
                     <StatusBadge status={portal.status} />
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 sm:gap-4 text-xs text-muted-foreground pl-7 sm:pl-0">
                     <span>Avg: {portal.avgResponseTime}ms</span>
                     <span className={portal.failureRate > 10 ? "text-destructive" : ""}>
                       Failures: {portal.failureRate}%

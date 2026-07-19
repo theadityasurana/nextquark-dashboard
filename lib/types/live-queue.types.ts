@@ -75,6 +75,9 @@ export interface LiveApplicationQueue {
   // Recording URL
   recording_url?: string | null
   
+  // Premium
+  is_premium: boolean
+  
   // Retry
   attempt_count: number
   max_attempts: number

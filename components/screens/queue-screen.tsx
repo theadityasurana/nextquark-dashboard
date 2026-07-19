@@ -10,12 +10,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { StatusBadge } from "@/components/status-badge"
 import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs } from "@/lib/logs-context"
 import {
-  Search, Eye, Trash2, Loader, Power, KeyRound, ShieldAlert, ExternalLink
+  Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink
 } from "lucide-react"
 
 export function QueueScreen() {
@@ -32,6 +33,7 @@ export function QueueScreen() {
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
   const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
   const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
+  const [premiumOnly, setPremiumOnly] = useState(false)
 
   const [queuePage, setQueuePage] = useState(1)
   const QUEUE_PER_PAGE = 10
@@ -351,7 +353,9 @@ export function QueueScreen() {
       return
     }
 
-    const pendingApps = applications.filter(a => a.status === 'pending')
+    const pendingApps = applications.filter(a => 
+      a.status === 'pending' && (!premiumOnly || a.is_premium)
+    )
 
     // Set timers for new pending apps
     for (const app of pendingApps) {
@@ -376,7 +380,7 @@ export function QueueScreen() {
       Object.values(autoStartTimersRef.current).forEach(clearTimeout)
       autoStartTimersRef.current = {}
     }
-  }, [autoStart, applications])
+  }, [autoStart, premiumOnly, applications])
 
 
   const handleDelete = async (id: string) => {
@@ -394,7 +398,9 @@ export function QueueScreen() {
   }
 
   const filteredApps = applications.filter((app) => {
-    if (activeTab !== "all" && app.status !== activeTab) return false
+    if (activeTab === "premium") {
+      if (!app.is_premium) return false
+    } else if (activeTab !== "all" && app.status !== activeTab) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const fullName = `${app.first_name} ${app.last_name}`.toLowerCase()
@@ -420,82 +426,89 @@ export function QueueScreen() {
   const failed = applications.filter((a) => a.status === "failed")
   const awaitingOtp = applications.filter((a) => a.status === "awaiting_otp")
   const awaitingCaptcha = applications.filter((a) => a.status === "awaiting_captcha")
+  const premiumApps = applications.filter((a) => a.is_premium)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
-          <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
 
       </div>
 
-      {/* Start All Button & Auto-Start Toggle - Only show when on pending tab */}
-      {activeTab === "pending" && (
-        <div className="flex justify-end gap-2">
+      {/* Controls: Start All, Auto-Start, Premium Only */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
+          <Switch checked={premiumOnly} onCheckedChange={setPremiumOnly} />
+          <span className="text-xs text-muted-foreground">Premium Only</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={autoStart} onCheckedChange={setAutoStart} />
+          <span className="text-xs text-muted-foreground">Auto Start</span>
+        </div>
+        {!autoStart && pending.length > 0 && (
           <Button
-            onClick={() => setAutoStart(!autoStart)}
-            variant={autoStart ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setIsStartingAll(true)
+              const appsToStart = premiumOnly ? pending.filter(a => a.is_premium) : pending
+              for (const app of appsToStart) {
+                enqueueOrStart(app)
+              }
+              setIsStartingAll(false)
+            }}
+            disabled={isStartingAll}
             className="gap-2"
           >
-            <Power className={`h-4 w-4 ${autoStart ? 'text-green-500' : ''}`} />
-            Auto Start: {autoStart ? 'ON' : 'OFF'}
+            {isStartingAll ? (
+              <>
+                <Loader className="h-4 w-4 animate-spin" />
+                Starting...
+              </>
+            ) : (
+              `Start All (${premiumOnly ? pending.filter(a => a.is_premium).length : pending.length})`
+            )}
           </Button>
-          {!autoStart && pending.length > 0 && (
-            <Button
-              onClick={() => {
-                setIsStartingAll(true)
-                for (const app of pending) {
-                  enqueueOrStart(app)
-                }
-                setIsStartingAll(false)
-              }}
-              disabled={isStartingAll}
-              className="gap-2"
-            >
-              {isStartingAll ? (
-                <>
-                  <Loader className="h-4 w-4 animate-spin" />
-                  Starting All...
-                </>
-              ) : (
-                `Start All (${pending.length})`
-              )}
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search applications..."
-            className="pl-9 bg-card border-border"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
-          />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search applications..."
+              className="pl-9 bg-card border-border"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5 sm:ml-auto">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+            </span>
+            <span className="text-xs text-muted-foreground">Auto-refresh: ON</span>
+          </div>
         </div>
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }}>
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="all" className="text-xs">All ({applications.length})</TabsTrigger>
-            <TabsTrigger value="pending" className="text-xs">Pending ({pending.length})</TabsTrigger>
-            <TabsTrigger value="processing" className="text-xs">Processing ({processing.length})</TabsTrigger>
-            <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
-            <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
-            <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
-            <TabsTrigger value="awaiting_captcha" className="text-xs">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
-          </TabsList>
+        {/* Tabs row — horizontal scroll on mobile */}
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }} className="w-full">
+          <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
+            <TabsList className="bg-card border border-border w-max sm:w-auto inline-flex">
+              <TabsTrigger value="all" className="text-xs">All ({applications.length})</TabsTrigger>
+              <TabsTrigger value="premium" className="text-xs">Premium ({premiumApps.length})</TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs">Pending ({pending.length})</TabsTrigger>
+              <TabsTrigger value="processing" className="text-xs">Processing ({processing.length})</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
+              <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
+              <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
+              <TabsTrigger value="awaiting_captcha" className="text-xs">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
+            </TabsList>
+          </div>
         </Tabs>
-        <div className="flex items-center gap-1.5 ml-auto">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-          </span>
-          <span className="text-xs text-muted-foreground">Auto-refresh: ON</span>
-        </div>
       </div>
 
       {/* Cards Grid */}
@@ -620,12 +633,12 @@ export function QueueScreen() {
 
       {/* Pagination */}
       {totalQueuePages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <span className="text-xs text-muted-foreground">Showing {((queuePage - 1) * QUEUE_PER_PAGE) + 1}-{Math.min(queuePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="text-xs h-7" disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
-            <span className="text-xs text-muted-foreground">Page {queuePage} of {totalQueuePages}</span>
-            <Button size="sm" variant="outline" className="text-xs h-7" disabled={queuePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
+          <div className="flex items-center justify-between sm:justify-end gap-2">
+            <Button size="sm" variant="outline" className="text-xs h-8" disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Page {queuePage} of {totalQueuePages}</span>
+            <Button size="sm" variant="outline" className="text-xs h-8" disabled={queuePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
           </div>
         </div>
       )}
@@ -648,7 +661,7 @@ export function QueueScreen() {
 
       {/* Application Detail Modal */}
       <Dialog open={!!selectedApp} onOpenChange={() => setSelectedApp(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-border p-0">
+        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
           <DialogTitle className="sr-only">Application Details</DialogTitle>
           {selectedApp && (
             <ApplicationDetails 

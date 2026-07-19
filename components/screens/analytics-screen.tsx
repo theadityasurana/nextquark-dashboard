@@ -237,7 +237,7 @@ export function AnalyticsScreen() {
     return sortDirection === "asc" ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
   }
 
-  const barColors = ["oklch(0.65 0.2 145)", "oklch(0.65 0.15 250)", "oklch(0.7 0.15 55)", "oklch(0.55 0.2 25)", "oklch(0.6 0.18 300)", "oklch(0.7 0.12 180)"]
+  const barColors = ["oklch(0.7 0.18 270)", "oklch(0.7 0.16 220)", "oklch(0.78 0.16 70)", "oklch(0.65 0.22 0)", "oklch(0.72 0.18 320)", "oklch(0.72 0.18 155)"]
 
   if (loading) {
     return <div className="flex items-center justify-center h-96">Loading analytics...</div>
@@ -416,11 +416,11 @@ export function AnalyticsScreen() {
           </CardHeader>
           <CardContent className="p-0">
             {/* Table Header */}
-            <div className="grid grid-cols-[1fr_2fr_100px_120px_100px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+            <div className="hidden sm:grid grid-cols-[1fr_2fr_100px_120px_100px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
               <button className="flex items-center gap-1 text-left" onClick={() => handleSort("title")}>
                 Company / Job <SortIcon field="title" />
               </button>
-              <span className="hidden sm:block">Title</span>
+              <span>Title</span>
               <button className="flex items-center gap-1 justify-end" onClick={() => handleSort("applications")}>
                 Apps <SortIcon field="applications" />
               </button>
@@ -439,7 +439,7 @@ export function AnalyticsScreen() {
                 return (
                   <div
                     key={job.id}
-                    className="grid grid-cols-[1fr_2fr_100px_120px_100px] gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center"
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_100px_120px_100px] gap-2 sm:gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center"
                   >
                     <div className="flex items-center gap-2">
                       <div className="flex h-6 w-6 items-center justify-center rounded bg-accent text-[10px] font-bold text-accent-foreground shrink-0">
@@ -447,23 +447,28 @@ export function AnalyticsScreen() {
                       </div>
                       <span className="text-xs font-medium truncate">{job.companyName}</span>
                     </div>
-                    <div className="hidden sm:block">
+                    <div>
                       <p className="text-sm font-medium truncate">{job.title}</p>
                       <p className="text-[10px] text-muted-foreground">{job.location}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center justify-between sm:block sm:text-right">
+                      <span className="text-xs text-muted-foreground sm:hidden">Apps: </span>
                       <span className="text-sm font-bold">{job.totalApps.toLocaleString()}</span>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center justify-between sm:block sm:text-right">
+                      <span className="text-xs text-muted-foreground sm:hidden">Right Swipes: </span>
                       <span className="text-sm font-bold text-primary">{(job.rightSwipes ?? 0).toLocaleString()}</span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-medium">{job.successRate}%</span>
-                      <div className="mt-1 h-1.5 rounded-full bg-accent/50 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-success/70"
-                          style={{ width: `${job.successRate}%` }}
-                        />
+                    <div className="flex items-center justify-between sm:block sm:text-right">
+                      <span className="text-xs text-muted-foreground sm:hidden">Success: </span>
+                      <div>
+                        <span className="text-sm font-medium">{job.successRate}%</span>
+                        <div className="mt-1 h-1.5 rounded-full bg-accent/50 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-success/70"
+                            style={{ width: `${job.successRate}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -585,14 +590,14 @@ export function AnalyticsScreen() {
                 <AreaChart data={rightSwipesOverWeek}>
                   <defs>
                     <linearGradient id="weekGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="oklch(0.65 0.2 145)" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="oklch(0.65 0.2 145)" stopOpacity={0} />
+                      <stop offset="0%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }} />
-                  <Area type="monotone" dataKey="count" stroke="oklch(0.65 0.2 145)" strokeWidth={2} fill="url(#weekGradient)" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip contentStyle={{ backgroundColor: "oklch(0.16 0.006 265)", border: "1px solid oklch(0.24 0.008 265)", borderRadius: "8px", fontSize: 12, color: "oklch(0.97 0.003 265)" }} />
+                  <Area type="monotone" dataKey="count" stroke="oklch(0.7 0.18 270)" strokeWidth={2} fill="url(#weekGradient)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -611,9 +616,9 @@ export function AnalyticsScreen() {
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={companyBreakdown.slice(0, 5)} layout="vertical">
-                    <XAxis type="number" tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }} formatter={(value: number) => [value.toLocaleString(), "Right Swipes"]} />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} width={80} />
+                    <Tooltip contentStyle={{ backgroundColor: "oklch(0.16 0.006 265)", border: "1px solid oklch(0.24 0.008 265)", borderRadius: "8px", fontSize: 12, color: "oklch(0.97 0.003 265)" }} formatter={(value: number) => [value.toLocaleString(), "Right Swipes"]} />
                     <Bar dataKey="rightSwipes" radius={[0, 4, 4, 0]}>
                       {companyBreakdown.slice(0, 5).map((_, index) => (
                         <Cell key={`cell-${index}`} fill={barColors[index % barColors.length]} />
@@ -633,9 +638,9 @@ export function AnalyticsScreen() {
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={peakHoursData}>
-                    <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} width={35} />
-                    <Tooltip contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }} />
+                    <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} width={35} />
+                    <Tooltip contentStyle={{ backgroundColor: "oklch(0.16 0.006 265)", border: "1px solid oklch(0.24 0.008 265)", borderRadius: "8px", fontSize: 12, color: "oklch(0.97 0.003 265)" }} />
                     <Bar dataKey="count" fill="oklch(0.65 0.15 250)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

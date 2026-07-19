@@ -364,12 +364,12 @@ export function EmailsScreen() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Email Manager</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Email Manager</h1>
         <p className="text-muted-foreground">Manage email templates and monitor sent emails</p>
       </div>
 
       <Tabs defaultValue="templates" className="space-y-4">
-        <TabsList className="flex flex-wrap">
+        <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
           <TabsTrigger value="profile-reminders">Profile Reminders</TabsTrigger>
@@ -601,7 +601,7 @@ export function EmailsScreen() {
               {incompleteUsers.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Click "Preview" to load users with incomplete profiles</p>
               ) : (
-                <Table>
+                <div className="overflow-x-auto"><Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Email</TableHead>
@@ -626,7 +626,7 @@ export function EmailsScreen() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                </Table></div>
               )}
             </CardContent>
           </Card>
@@ -647,7 +647,7 @@ export function EmailsScreen() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="overflow-x-auto"><Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Recipient</TableHead>
@@ -676,7 +676,7 @@ export function EmailsScreen() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
         </TabsContent>

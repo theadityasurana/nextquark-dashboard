@@ -7,7 +7,15 @@ function Card({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="card"
       className={cn(
-        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm',
+        // Base
+        'relative flex flex-col gap-6 rounded-xl border border-border/60 py-6',
+        // Surface — subtle gradient highlight from top
+        'bg-gradient-to-b from-card to-card/80 text-card-foreground',
+        // Inner top-edge highlight + soft shadow (Linear-style)
+        'shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04),0_1px_2px_0_oklch(0_0_0_/_0.3)]',
+        // Smooth hover transitions
+        'transition-[border-color,box-shadow,transform] duration-200',
+        'hover:border-border',
         className,
       )}
       {...props}

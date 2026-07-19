@@ -9,6 +9,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@browserbasehq/sdk": "^2.10.0",
+    "@browserbasehq/stagehand": "^3.3.0",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.15",
@@ -63,7 +65,9 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.0",
+    "resend": "^6.17.2",
     "sonner": "^1.7.1",
+    "svix": "^1.96.1",
     "swr": "^2.3.0",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",

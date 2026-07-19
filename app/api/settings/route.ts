@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { clearCachedBrowserUseKey } from "@/lib/browser-use"
+import { clearCachedBrowserbaseKeys } from "@/lib/browserbase"
+import { clearCachedProvider } from "@/lib/automation-provider"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -26,10 +28,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { browserUseApiKey } = body
+    const { browserUseApiKey, browserbaseApiKey, browserbaseProjectId, geminiApiKey, automationProvider } = body
 
     const updateData: Record<string, any> = { id: 1 }
     if (browserUseApiKey !== undefined) updateData.browserUseApiKey = browserUseApiKey
+    if (browserbaseApiKey !== undefined) updateData.browserbaseApiKey = browserbaseApiKey
+    if (browserbaseProjectId !== undefined) updateData.browserbaseProjectId = browserbaseProjectId
+    if (geminiApiKey !== undefined) updateData.geminiApiKey = geminiApiKey
+    if (automationProvider !== undefined) updateData.automationProvider = automationProvider
 
     const { data, error } = await supabase
       .from("settings")
@@ -39,7 +45,10 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
+    // Clear all caches so next run picks up new values
     clearCachedBrowserUseKey()
+    clearCachedBrowserbaseKeys()
+    clearCachedProvider()
 
     return Response.json({
       success: true,

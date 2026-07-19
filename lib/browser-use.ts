@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import axios from "axios"
 import { detectPortal } from "./portal-detector"
+import { fetchOtpViaApi } from "./otp-fetcher"
 
 export interface AutomationResponse {
   success: boolean
@@ -737,44 +738,48 @@ ${JSON.stringify(userJson, null, 2)}`
       liveUrl = continueResult.live_url || liveUrl
     }
 
-    // ─── OTP Pause & Resume (same session, fetch from OTP Manager tab) ───
+    // ─── OTP Pause & Resume (same session) ───
     const outputTextForOtp = typeof result.output === "string" ? result.output : JSON.stringify(result.output || "")
     if (applicationId && detectOtpRequired(outputTextForOtp)) {
-      console.log("[Browser Use] OTP detected. Session still alive. Fetching from OTP Manager tab...")
+      console.log("[Browser Use] OTP detected. Trying API-based fetch first...")
 
       await supabase
         .from("live_application_queue")
         .update({ status: "awaiting_otp" })
         .eq("id", applicationId)
 
-      await persistLog(applicationId, "info", "OTP required. Waiting 10s for email to arrive before fetching...")
-      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Waiting 10 seconds for the email to arrive..." })
-
-      await new Promise(r => setTimeout(r, 10_000))
+      await persistLog(applicationId, "info", "OTP required. Attempting API-based OTP fetch (webhook + Resend API)...")
+      if (onStep) onStep({ status: "awaiting_otp", log: "OTP verification required. Fetching via API..." })
 
       const proxyEmail = userData.email || ""
 
-      // Step 1: Open OTP Manager tab, then fetch the OTP from it
-      if (onStep) onStep({ status: "awaiting_otp", log: "Opening OTP Manager tab to fetch verification code..." })
-      const openAndFetchPrompt = `STEP A: Open a new browser tab and navigate to ${OTP_MANAGER_URL}.
+      // ── NEW METHOD: API-based OTP fetch (webhook fills DB, or Resend List API) ──
+      let otp = await fetchOtpViaApi(applicationId, proxyEmail, 45000)
+
+      // ── FALLBACK: Browser-based OTP fetch from admin panel ──
+      if (!otp) {
+        await persistLog(applicationId, "info", "API-based OTP fetch failed. Falling back to browser-based method...")
+        if (onStep) onStep({ status: "awaiting_otp", log: "API fetch failed. Falling back to browser-based OTP extraction..." })
+
+        const openAndFetchPrompt = `STEP A: Open a new browser tab and navigate to ${OTP_MANAGER_URL}.
 STEP B: Once the page loads, follow these instructions:
 ${buildOtpFetchPrompt(applicationId, proxyEmail)}`
-      const otpFetchRes = await buRequest("POST", "/tasks", {
-        task: openAndFetchPrompt,
-        session_id: sessionId,
-        vision: true, // OTP page needs vision to read the table
-      })
+        const otpFetchRes = await buRequest("POST", "/tasks", {
+          task: openAndFetchPrompt,
+          session_id: sessionId,
+          vision: true,
+        })
 
-      const otpFetchResult = await pollTaskUntilComplete(otpFetchRes.id, onStep, applicationId)
-      totalSteps += otpFetchResult.steps.length
+        const otpFetchResult = await pollTaskUntilComplete(otpFetchRes.id, onStep, applicationId)
+        totalSteps += otpFetchResult.steps.length
 
-      // Extract OTP from the agent's output
-      const otpOutput = typeof otpFetchResult.output === "string" ? otpFetchResult.output : JSON.stringify(otpFetchResult.output || "")
-      const otpMatch = otpOutput.match(/OTP_CODE=([A-Za-z0-9]{4,10})/)
-      const otp = otpMatch?.[1] || null
+        const otpOutput = typeof otpFetchResult.output === "string" ? otpFetchResult.output : JSON.stringify(otpFetchResult.output || "")
+        const otpMatch = otpOutput.match(/OTP_CODE=([A-Za-z0-9]{4,10})/)
+        otp = otpMatch?.[1] || null
+      }
 
       if (otp) {
-        await persistLog(applicationId, "info", `OTP extracted from admin panel: ${otp}`)
+        await persistLog(applicationId, "info", `OTP obtained: ${otp}`)
         if (onStep) onStep({ status: "in_progress", log: `OTP extracted: ${otp}. Entering on application page...` })
 
         await supabase
@@ -818,11 +823,11 @@ ${JSON.stringify(userJson, null, 2)}`
           .update({ verification_otp: null })
           .eq("id", applicationId)
       } else {
-        await persistLog(applicationId, "error", "Could not extract OTP from admin panel.")
-        if (onStep) onStep({ status: "error", log: "Failed to extract OTP from admin panel. Application failed." })
+        await persistLog(applicationId, "error", "Could not extract OTP via API or browser fallback.")
+        if (onStep) onStep({ status: "error", log: "Failed to extract OTP. Application failed." })
         return {
           success: false,
-          error: "OTP extraction failed. Could not find matching OTP in admin panel.",
+          error: "OTP extraction failed via both API and browser methods.",
           steps: totalSteps,
           recordingUrl: liveUrl,
           taskId,

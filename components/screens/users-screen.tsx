@@ -76,11 +76,11 @@ export function UsersScreen() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4 sm:gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage registered users from Supabase Authentication and app data</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Users</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage registered users from Supabase Authentication and app data</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
@@ -89,34 +89,38 @@ export function UsersScreen() {
         </div>
       </div>
 
-      {/* View Toggle */}
-      <div className="flex items-center gap-3">
-        <div className="flex rounded-lg border border-border overflow-hidden">
+      {/* View Toggle + Search + Actions */}
+      <div className="flex flex-col gap-3">
+        <div className="flex rounded-lg border border-border overflow-hidden self-stretch sm:self-start">
           <button
-            className={`px-4 py-2 text-xs font-medium transition-colors ${activeTab === "auth" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
+            className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "auth" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
             onClick={() => setActiveTab("auth")}
           >
             Supabase Auth Users
           </button>
           <button
-            className={`px-4 py-2 text-xs font-medium transition-colors ${activeTab === "app" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
+            className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "app" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
             onClick={() => setActiveTab("app")}
           >
             App Users (Mock)
           </button>
         </div>
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search users..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="relative flex-1 sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search users..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-2">
+            {activeTab === "auth" && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9" onClick={() => refreshAuth()}>
+                <RefreshCw className="h-3 w-3" /> Refresh
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9">
+              <Download className="h-3 w-3" /> Export CSV
+            </Button>
+          </div>
         </div>
-        {activeTab === "auth" && (
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => refreshAuth()}>
-            <RefreshCw className="h-3 w-3" /> Refresh
-          </Button>
-        )}
-        <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-          <Download className="h-3 w-3" /> Export CSV
-        </Button>
       </div>
 
       {/* Supabase Auth Users */}
@@ -328,7 +332,7 @@ export function UsersScreen() {
 
       {/* App User Detail Modal */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-border p-0">
+        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
           {selectedUser && (
             <UserProfileModal user={selectedUser} />
           )}
@@ -363,7 +367,7 @@ function UserProfileModal({ user }: { user: User }) {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           {[
             { label: "Total Apps", value: user.totalApps, color: "text-foreground" },
             { label: "Successful", value: user.successfulApps, color: "text-success" },
@@ -380,30 +384,32 @@ function UserProfileModal({ user }: { user: User }) {
 
       {/* Tabs Content */}
       <Tabs defaultValue="experience" className="flex-1">
-        <div className="px-6 pt-2 border-b border-border">
-          <TabsList className="bg-transparent gap-4 h-auto p-0">
-            <TabsTrigger value="experience" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <Briefcase className="h-3 w-3" /> Experience
-            </TabsTrigger>
-            <TabsTrigger value="education" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <GraduationCap className="h-3 w-3" /> Education
-            </TabsTrigger>
-            <TabsTrigger value="projects" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <FolderOpen className="h-3 w-3" /> Projects
-            </TabsTrigger>
-            <TabsTrigger value="resume" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <FileText className="h-3 w-3" /> Resume & Cover Letter
-            </TabsTrigger>
-            <TabsTrigger value="personal" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <UserIcon className="h-3 w-3" /> Personal Info
-            </TabsTrigger>
-            <TabsTrigger value="biodata" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5">
-              <FileText className="h-3 w-3" /> Overall Biodata
-            </TabsTrigger>
-          </TabsList>
+        <div className="px-4 sm:px-6 pt-2 border-b border-border">
+          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto scrollbar-hide">
+            <TabsList className="bg-transparent gap-4 h-auto p-0 w-max inline-flex">
+              <TabsTrigger value="experience" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <Briefcase className="h-3 w-3" /> Experience
+              </TabsTrigger>
+              <TabsTrigger value="education" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <GraduationCap className="h-3 w-3" /> Education
+              </TabsTrigger>
+              <TabsTrigger value="projects" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <FolderOpen className="h-3 w-3" /> Projects
+              </TabsTrigger>
+              <TabsTrigger value="resume" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <FileText className="h-3 w-3" /> Resume & Cover Letter
+              </TabsTrigger>
+              <TabsTrigger value="personal" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <UserIcon className="h-3 w-3" /> Personal Info
+              </TabsTrigger>
+              <TabsTrigger value="biodata" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-xs gap-1.5 whitespace-nowrap">
+                <FileText className="h-3 w-3" /> Overall Biodata
+              </TabsTrigger>
+            </TabsList>
+          </div>
         </div>
 
-        <div className="px-6 py-5">
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
           {/* Work Experience Tab */}
           <TabsContent value="experience" className="mt-0">
             <div className="flex flex-col gap-1">

@@ -218,10 +218,10 @@ export function CompaniesScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Companies</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{companies.length} total</Badge>
@@ -235,7 +235,7 @@ export function CompaniesScreen() {
         </div>
       </div>
 
-      <div className="relative max-w-sm">
+      <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input placeholder="Search companies..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCompaniesPage(1) }} />
       </div>

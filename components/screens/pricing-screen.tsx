@@ -5,7 +5,7 @@ import useSWR from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  Users, Crown, Gem, UserX, DollarSign, TrendingUp, ArrowUp, ArrowDown,
+  Users, Gem, UserX, DollarSign, TrendingUp,
 } from "lucide-react"
 import {
   Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie,
@@ -21,7 +21,7 @@ interface Profile {
   created_at: string
 }
 
-const PRICES = { pro: 20, premium: 79.99 }
+const PRICES = { weekly: 12.99, monthly: 49.99 }
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -37,45 +37,41 @@ export function PricingScreen() {
 
   const stats = useMemo(() => {
     const free = profiles.filter((p) => !p.subscription_type || p.subscription_type === "free")
-    const pro = profiles.filter((p) => p.subscription_type === "pro")
-    const premium = profiles.filter((p) => p.subscription_type === "premium")
-    const mrr = pro.length * PRICES.pro + premium.length * PRICES.premium
+    const premium = profiles.filter((p) => p.subscription_type === "premium" || p.subscription_type === "pro")
+    const mrr = premium.length * PRICES.monthly
     const arr = mrr * 12
-    const paidPct = profiles.length > 0 ? (((pro.length + premium.length) / profiles.length) * 100).toFixed(1) : "0"
-    return { total: profiles.length, free: free.length, pro: pro.length, premium: premium.length, mrr, arr, paidPct }
+    const paidPct = profiles.length > 0 ? ((premium.length / profiles.length) * 100).toFixed(1) : "0"
+    return { total: profiles.length, free: free.length, premium: premium.length, mrr, arr, paidPct }
   }, [profiles])
 
   const pieData = useMemo(() => [
     { name: "Free", value: stats.free, color: "oklch(0.6 0.02 260)" },
-    { name: "Pro", value: stats.pro, color: "oklch(0.65 0.2 145)" },
     { name: "Premium", value: stats.premium, color: "oklch(0.7 0.15 55)" },
   ], [stats])
 
   const revenueData = useMemo(() => [
-    { name: "Pro", revenue: stats.pro * PRICES.pro, users: stats.pro },
-    { name: "Premium", revenue: stats.premium * PRICES.premium, users: stats.premium },
+    { name: "Premium", revenue: stats.premium * PRICES.monthly, users: stats.premium },
   ], [stats])
 
   const signupTimeline = useMemo(() => {
-    const months = new Map<string, { free: number; pro: number; premium: number }>()
+    const months = new Map<string, { free: number; premium: number }>()
     profiles.forEach((p) => {
       const d = new Date(p.created_at)
       const key = `${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`
-      if (!months.has(key)) months.set(key, { free: 0, pro: 0, premium: 0 })
+      if (!months.has(key)) months.set(key, { free: 0, premium: 0 })
       const entry = months.get(key)!
       const type = p.subscription_type || "free"
-      if (type === "pro") entry.pro++
-      else if (type === "premium") entry.premium++
+      if (type === "premium" || type === "pro") entry.premium++
       else entry.free++
     })
     return Array.from(months.entries()).map(([month, data]) => ({ month, ...data }))
   }, [profiles])
 
   const paidUsers = useMemo(() =>
-    profiles.filter((p) => p.subscription_type === "pro" || p.subscription_type === "premium"),
+    profiles.filter((p) => p.subscription_type === "premium" || p.subscription_type === "pro"),
   [profiles])
 
-  const barColors = ["oklch(0.65 0.2 145)", "oklch(0.7 0.15 55)"]
+  const barColors = ["oklch(0.7 0.18 270)", "oklch(0.78 0.16 70)"]
 
   if (isLoading) {
     return (
@@ -118,20 +114,11 @@ export function PricingScreen() {
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Crown className="h-4 w-4 text-amber-500" />
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Pro ($20/mo)</span>
-            </div>
-            <span className="text-3xl font-bold tracking-tight">{stats.pro}</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
               <Gem className="h-4 w-4 text-violet-500" />
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Premium ($79.99/mo)</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Premium</span>
             </div>
             <span className="text-3xl font-bold tracking-tight">{stats.premium}</span>
+            <p className="text-[11px] text-muted-foreground mt-1">$12.99/wk · $49.99/mo</p>
           </CardContent>
         </Card>
 
@@ -163,7 +150,7 @@ export function PricingScreen() {
             <TrendingUp className="h-5 w-5 text-primary" />
             <div>
               <p className="text-sm font-medium">Paid Conversion Rate</p>
-              <p className="text-[11px] text-muted-foreground">{stats.pro + stats.premium} of {stats.total} users are on a paid plan</p>
+              <p className="text-[11px] text-muted-foreground">{stats.premium} of {stats.total} users are on a paid plan</p>
             </div>
           </div>
           <span className="text-2xl font-bold">{stats.paidPct}%</span>
@@ -196,7 +183,7 @@ export function PricingScreen() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }}
+                    contentStyle={{ backgroundColor: "oklch(0.16 0.006 265)", border: "1px solid oklch(0.24 0.008 265)", borderRadius: "8px", fontSize: 12, color: "oklch(0.97 0.003 265)" }}
                     formatter={(value: number, name: string) => [`${value} users`, name]}
                   />
                 </PieChart>
@@ -222,10 +209,10 @@ export function PricingScreen() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={revenueData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.6 0 0)" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `$${v}`} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "oklch(0.62 0.012 265)" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `$${v}`} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "oklch(0.17 0.005 260)", border: "1px solid oklch(0.25 0.005 260)", borderRadius: "8px", fontSize: 12, color: "oklch(0.95 0 0)" }}
+                    contentStyle={{ backgroundColor: "oklch(0.16 0.006 265)", border: "1px solid oklch(0.24 0.008 265)", borderRadius: "8px", fontSize: 12, color: "oklch(0.97 0.003 265)" }}
                     formatter={(value: number, name: string) => {
                       if (name === "revenue") return [`$${value.toFixed(2)}`, "Revenue"]
                       return [value, "Users"]
@@ -242,11 +229,7 @@ export function PricingScreen() {
             <div className="flex justify-center gap-6 mt-2">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full" style={{ backgroundColor: barColors[0] }} />
-                <span className="text-xs text-muted-foreground">Pro: ${(stats.pro * PRICES.pro).toFixed(2)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: barColors[1] }} />
-                <span className="text-xs text-muted-foreground">Premium: ${(stats.premium * PRICES.premium).toFixed(2)}</span>
+                <span className="text-xs text-muted-foreground">Premium: ${(stats.premium * PRICES.monthly).toFixed(2)}</span>
               </div>
             </div>
           </CardContent>
@@ -254,7 +237,7 @@ export function PricingScreen() {
       </div>
 
       {/* Revenue Per User Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Avg Revenue Per User</p>
@@ -265,15 +248,8 @@ export function PricingScreen() {
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Avg Revenue Per Paid User</p>
-            <span className="text-2xl font-bold">${(stats.pro + stats.premium) > 0 ? (stats.mrr / (stats.pro + stats.premium)).toFixed(2) : "0.00"}</span>
-            <p className="text-[11px] text-muted-foreground mt-1">across {stats.pro + stats.premium} paid users</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Premium to Pro Ratio</p>
-            <span className="text-2xl font-bold">{stats.pro > 0 ? (stats.premium / stats.pro).toFixed(2) : stats.premium > 0 ? "∞" : "0"}</span>
-            <p className="text-[11px] text-muted-foreground mt-1">{stats.premium} premium vs {stats.pro} pro</p>
+            <span className="text-2xl font-bold">${stats.premium > 0 ? (stats.mrr / stats.premium).toFixed(2) : "0.00"}</span>
+            <p className="text-[11px] text-muted-foreground mt-1">across {stats.premium} paid users</p>
           </CardContent>
         </Card>
       </div>
@@ -289,7 +265,7 @@ export function PricingScreen() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="grid grid-cols-[2fr_2fr_100px_100px_1fr_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_100px_100px_1fr_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
             <span>Name</span>
             <span>Email</span>
             <span>Plan</span>
@@ -299,10 +275,10 @@ export function PricingScreen() {
           </div>
           <div className="divide-y divide-border max-h-[400px] overflow-auto">
             {paidUsers.map((user) => {
-              const price = user.subscription_type === "premium" ? PRICES.premium : PRICES.pro
+              const price = PRICES.monthly
               const isExpired = user.subscription_end_date && new Date(user.subscription_end_date) < new Date()
               return (
-                <div key={user.id} className="grid grid-cols-[2fr_2fr_100px_100px_1fr_1fr] gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center">
+                <div key={user.id} className="grid grid-cols-1 md:grid-cols-[2fr_2fr_100px_100px_1fr_1fr] gap-2 md:gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center">
                   <div className="flex items-center gap-2">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground shrink-0">
                       {(user.full_name || user.email).charAt(0).toUpperCase()}
@@ -311,18 +287,11 @@ export function PricingScreen() {
                   </div>
                   <span className="text-sm text-muted-foreground truncate">{user.email}</span>
                   <div>
-                    <Badge
-                      variant="secondary"
-                      className={
-                        user.subscription_type === "premium"
-                          ? "bg-violet-500/15 text-violet-400 text-[10px]"
-                          : "bg-amber-500/15 text-amber-400 text-[10px]"
-                      }
-                    >
-                      {user.subscription_type === "premium" ? "Premium" : "Pro"}
+                    <Badge variant="secondary" className="bg-violet-500/15 text-violet-400 text-[10px]">
+                      Premium
                     </Badge>
                   </div>
-                  <span className="text-sm font-medium text-right">${price.toFixed(2)}</span>
+                  <span className="text-sm font-medium md:text-right">${price.toFixed(2)}</span>
                   <span className="text-xs text-muted-foreground">
                     {user.subscription_start_date ? new Date(user.subscription_start_date).toLocaleDateString() : "—"}
                   </span>
@@ -357,7 +326,7 @@ export function PricingScreen() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="grid grid-cols-[2fr_2fr_100px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_100px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
             <span>Name</span>
             <span>Email</span>
             <span>Plan</span>
@@ -367,7 +336,7 @@ export function PricingScreen() {
             {profiles.map((user) => {
               const type = user.subscription_type || "free"
               return (
-                <div key={user.id} className="grid grid-cols-[2fr_2fr_100px_1fr] gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center">
+                <div key={user.id} className="grid grid-cols-1 md:grid-cols-[2fr_2fr_100px_1fr] gap-2 md:gap-4 px-4 py-3 hover:bg-accent/30 transition-colors items-center">
                   <div className="flex items-center gap-2">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground shrink-0">
                       {(user.full_name || user.email).charAt(0).toUpperCase()}
@@ -379,14 +348,12 @@ export function PricingScreen() {
                     <Badge
                       variant="secondary"
                       className={
-                        type === "premium"
+                        type === "premium" || type === "pro"
                           ? "bg-violet-500/15 text-violet-400 text-[10px]"
-                          : type === "pro"
-                          ? "bg-amber-500/15 text-amber-400 text-[10px]"
                           : "bg-secondary text-secondary-foreground text-[10px]"
                       }
                     >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                      {type === "pro" || type === "premium" ? "Premium" : "Free"}
                     </Badge>
                   </div>
                   <span className="text-xs text-muted-foreground">
