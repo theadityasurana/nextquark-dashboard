@@ -279,6 +279,10 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
             </Card>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">Portal Success Rates</CardTitle>
                     <TooltipProvider>
                       <UITooltip>
                         <TooltipTrigger asChild>
