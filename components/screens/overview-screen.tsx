@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
-import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users, Briefcase, Server, RefreshCw } from "lucide-react"
+import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users, Briefcase, Server, RefreshCw, Plus, Minus, RotateCcw, Building2 } from "lucide-react"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { useEffect, useState, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -354,6 +354,59 @@ export function OverviewScreen() {
           ) : (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               No job data available for selected time range.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Job Sync Activity */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">Job Sync Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {/* Totals row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Companies Synced", value: data.syncActivity?.totals?.companiesSynced ?? 0, icon: Building2, color: "text-primary" },
+              { label: "Jobs Added", value: data.syncActivity?.totals?.added ?? 0, icon: Plus, color: "text-green-500" },
+              { label: "Jobs Updated", value: data.syncActivity?.totals?.updated ?? 0, icon: RotateCcw, color: "text-blue-500" },
+              { label: "Jobs Deleted", value: data.syncActivity?.totals?.deleted ?? 0, icon: Minus, color: "text-destructive" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3 rounded-lg bg-accent/40 px-3 py-2.5">
+                <item.icon className={`h-4 w-4 shrink-0 ${item.color}`} />
+                <div>
+                  <p className="text-lg font-bold">{item.value.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-company breakdown */}
+          {data.syncActivity?.byCompany?.length > 0 ? (
+            <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              <div className="hidden sm:grid grid-cols-4 px-3 py-2 bg-accent/30 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span className="col-span-1">Company</span>
+                <span className="text-center text-green-500">Added</span>
+                <span className="text-center text-blue-500">Updated</span>
+                <span className="text-center text-destructive">Deleted</span>
+              </div>
+              {data.syncActivity.byCompany.map((c: any) => (
+                <div key={c.name} className="grid grid-cols-2 sm:grid-cols-4 items-center px-3 py-2.5 hover:bg-accent/30 transition-colors gap-y-1">
+                  <div className="flex items-center gap-2 col-span-2 sm:col-span-1 min-w-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-accent text-[10px] font-bold">{c.initial}</div>
+                    <span className="text-xs font-medium truncate">{c.name}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-green-500"><span className="sm:hidden text-muted-foreground font-normal">Added: </span>{c.added > 0 ? `+${c.added}` : "—"}</span>
+                  <span className="text-xs font-semibold text-blue-500"><span className="sm:hidden text-muted-foreground font-normal">Updated: </span>{c.updated > 0 ? c.updated : "—"}</span>
+                  <span className="text-xs font-semibold text-destructive"><span className="sm:hidden text-muted-foreground font-normal">Deleted: </span>{c.deleted > 0 ? `-${c.deleted}` : "—"}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              No sync data yet. Syncs will appear here after the first scheduled run.
             </div>
           )}
         </CardContent>

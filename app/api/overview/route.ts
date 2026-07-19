@@ -239,6 +239,42 @@ export async function GET(request: Request) {
       .sort((a, b) => b.applications - a.applications)
       .slice(0, 5)
 
+    // Job sync activity from sync queue
+    const { data: syncResults } = await supabase
+      .from('job_sync_queue')
+      .select('company_id, status, synced_at, result')
+      .eq('status', 'done')
+      .order('synced_at', { ascending: false })
+      .limit(200)
+
+    const { data: syncCompanies } = await supabase
+      .from('companies')
+      .select('id, name, logo_initial')
+
+    const companyNameMap = new Map((syncCompanies || []).map(c => [c.id, { name: c.name, initial: c.logo_initial }]))
+
+    let totalAdded = 0, totalDeleted = 0, totalUpdated = 0
+    const syncByCompany = new Map<string, { name: string; initial: string; added: number; updated: number; deleted: number; syncedAt: string }>()
+
+    for (const row of syncResults || []) {
+      const r = row.result || {}
+      const added = r.added || 0
+      const updated = r.updated || 0
+      const deleted = r.deleted || 0
+      totalAdded += added
+      totalUpdated += updated
+      totalDeleted += deleted
+      const info = companyNameMap.get(row.company_id)
+      if (info && !syncByCompany.has(row.company_id)) {
+        syncByCompany.set(row.company_id, { name: info.name, initial: info.initial, added, updated, deleted, syncedAt: row.synced_at })
+      }
+    }
+
+    const syncActivity = {
+      totals: { added: totalAdded, updated: totalUpdated, deleted: totalDeleted, companiesSynced: syncByCompany.size },
+      byCompany: Array.from(syncByCompany.values()).sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted)).slice(0, 20),
+    }
+
     return Response.json({
       stats: {
         totalAll,
@@ -258,6 +294,7 @@ export async function GET(request: Request) {
       portalHealth,
       userActivity,
       jobInsights,
+      syncActivity,
       logs: logs?.map(log => ({
         id: log.id,
         timestamp: new Date(log.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),

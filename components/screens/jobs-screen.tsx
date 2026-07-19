@@ -430,7 +430,7 @@ export function JobsScreen() {
 
       {/* ========== ADD JOB DIALOG ========== */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetJobForm() } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Briefcase className="h-5 w-5 text-primary" />
@@ -834,7 +834,7 @@ export function JobsScreen() {
 
       {/* ========== JOB DETAIL / EDIT MODAL ========== */}
       <Dialog open={!!selectedJob} onOpenChange={() => { setSelectedJob(null); setIsEditing(false) }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           {selectedJob && !isEditing && (
             <>
               <DialogHeader>
@@ -853,7 +853,7 @@ export function JobsScreen() {
                 {/* Job Info */}
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Job Information</h3>
-                  <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">Job ID</span>
                     <span className="font-mono text-xs">#{selectedJob.id}</span>
                     <span className="text-muted-foreground">Type</span>
@@ -1356,7 +1356,7 @@ export function JobsScreen() {
 
       {/* ========== ATS SYNC ALL PREVIEW DIALOG ========== */}
       <Dialog open={showAtsPreview} onOpenChange={setShowAtsPreview}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-3xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Zap className="h-5 w-5 text-primary" />
@@ -1374,29 +1374,14 @@ export function JobsScreen() {
             return (
               <>
                 {/* Unified top bar */}
-                <div className="flex items-center justify-between rounded-lg border border-border bg-accent/20 p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-accent/20 p-3">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium">{atsPreviewJobs.length} jobs found across all companies</span>
                     <span className="text-[11px] text-muted-foreground">
                       {newJobs.length} new · {existingJobs.length} existing · {atsPreviewSelected.size} selected
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs gap-1.5"
-                      onClick={() => {
-                        if (allSelected) {
-                          setAtsPreviewSelected(new Set())
-                        } else {
-                          setAtsPreviewSelected(new Set(atsPreviewJobs.map((j) => j.jobUrl)))
-                        }
-                      }}
-                    >
-                      {allSelected ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                      {allSelected ? "Deselect All" : "Select All"}
-                    </Button>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
@@ -1572,7 +1557,7 @@ export function JobsScreen() {
 
       {/* ========== CLEANUP STALE JOBS DIALOG ========== */}
       <Dialog open={showCleanupPreview} onOpenChange={setShowCleanupPreview}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-destructive" />
@@ -1655,7 +1640,7 @@ export function JobsScreen() {
 
       {/* ========== ADD JOB BATCH DIALOG ========== */}
       <Dialog open={showBatchForm} onOpenChange={(open) => { if (!open) { setShowBatchForm(false); setBatchCompanyId(""); setBatchPortalUrl(""); setScrapedJobs([]); setCurrentJobIndex(0) } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Zap className="h-5 w-5 text-primary" />

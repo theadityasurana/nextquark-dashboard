@@ -240,7 +240,7 @@ export function UsersScreen() {
 
       {/* Supabase Auth User Detail Modal */}
       <Dialog open={!!selectedAuthUser} onOpenChange={() => setSelectedAuthUser(null)}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           {selectedAuthUser && (
             <>
               <DialogHeader>
@@ -257,7 +257,7 @@ export function UsersScreen() {
 
               <div className="flex flex-col gap-5 mt-2">
                 {/* Status Cards */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="rounded-lg bg-accent/50 p-3 text-center">
                     <div className="flex items-center justify-center mb-1">
                       {selectedAuthUser.confirmed ? (
@@ -332,7 +332,7 @@ export function UsersScreen() {
 
       {/* App User Detail Modal */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
-        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
+        <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto bg-card border-border p-0">
           {selectedUser && (
             <UserProfileModal user={selectedUser} />
           )}
@@ -346,28 +346,27 @@ function UserProfileModal({ user }: { user: User }) {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border">
-        <div className="flex items-start gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary shrink-0">
+      <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 border-b border-border">
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary shrink-0">
             {user.name.split(" ").map(n => n[0]).join("")}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-semibold">{user.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h2 className="text-base sm:text-xl font-semibold">{user.name}</h2>
               <StatusBadge status={user.status} />
             </div>
             <p className="text-sm text-muted-foreground">{user.headline}</p>
-            <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1"><Mail className="h-3 w-3" /> {user.email}</span>
               <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {user.phone}</span>
               <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {user.location}</span>
-              <span className="flex items-center gap-1"><LinkIcon className="h-3 w-3" /> {user.linkedinUrl}</span>
             </div>
           </div>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           {[
             { label: "Total Apps", value: user.totalApps, color: "text-foreground" },
             { label: "Successful", value: user.successfulApps, color: "text-success" },
@@ -655,7 +654,7 @@ function UserProfileModal({ user }: { user: User }) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex flex-wrap items-center gap-2 pt-2">
                 <Button size="sm" variant="outline" className="text-xs gap-1.5">
                   <Mail className="h-3 w-3" /> Email User
                 </Button>
@@ -694,8 +693,8 @@ function UserProfileModal({ user }: { user: User }) {
                 {/* Personal Information */}
                 <div className="mb-4">
                   <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <span className="text-muted-foreground">Gender</span><span className="font-medium col-span-2">{user.gender}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
+                    <span className="text-muted-foreground">Gender</span><span className="font-medium sm:col-span-2">{user.gender}</span>
                     <span className="text-muted-foreground">Ethnicity</span><span className="font-medium col-span-2">{user.ethnicity}</span>
                     <span className="text-muted-foreground">Disability</span><span className="font-medium col-span-2">{user.disabilityStatus}</span>
                     <span className="text-muted-foreground">Experience</span><span className="font-medium col-span-2">{user.experience}</span>
