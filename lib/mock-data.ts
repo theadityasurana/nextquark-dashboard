@@ -105,6 +105,8 @@ export interface Company {
   avgTime: string
   addedAt: string
   benefits?: string[]
+  lastSyncedAt?: string
+  syncStatus?: "never" | "success" | "failed" | "running"
 }
 
 export interface Job {

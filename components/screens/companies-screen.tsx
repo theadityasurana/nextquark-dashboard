@@ -18,8 +18,17 @@ import { CITIES } from "@/lib/cities"
 import type { Company } from "@/lib/mock-data"
 import {
   Search, Plus, ChevronRight, Globe, ExternalLink, RefreshCw, BarChart3,
-  Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2
+  Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2, AlertTriangle, Clock
 } from "lucide-react"
+
+function timeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 export function CompaniesScreen() {
   const { companies, jobs, addCompany, refreshJobs, refreshCompanies, isLoading } = useData()
@@ -278,8 +287,20 @@ export function CompaniesScreen() {
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{company.portalType}</span>
-                <span>Avg: {company.avgTime}</span>
+                <span className="flex items-center gap-1.5">
+                  {(company as any).syncStatus === "failed" && (
+                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                  )}
+                  {company.portalType}
+                </span>
+                {(company as any).atsType && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {(company as any).lastSyncedAt
+                      ? timeAgo((company as any).lastSyncedAt)
+                      : "never synced"}
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -783,6 +804,30 @@ export function CompaniesScreen() {
                     </div>
                   </div>
                 </div>
+
+                {(selectedCompany as any).atsType && (
+                  <div className="rounded-lg border border-border p-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Auto Sync</h3>
+                    <div className="grid grid-cols-2 gap-y-2 text-sm">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className="font-medium flex items-center gap-1.5">
+                        {(selectedCompany as any).syncStatus === "success" && <span className="h-2 w-2 rounded-full bg-green-500" />}
+                        {(selectedCompany as any).syncStatus === "failed" && <span className="h-2 w-2 rounded-full bg-yellow-500" />}
+                        {(selectedCompany as any).syncStatus === "running" && <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />}
+                        {(selectedCompany as any).syncStatus === "never" && <span className="h-2 w-2 rounded-full bg-muted-foreground" />}
+                        {(selectedCompany as any).syncStatus ?? "never"}
+                      </span>
+                      <span className="text-muted-foreground">Last synced</span>
+                      <span className="font-medium">
+                        {(selectedCompany as any).lastSyncedAt
+                          ? timeAgo((selectedCompany as any).lastSyncedAt)
+                          : "—"}
+                      </span>
+                      <span className="text-muted-foreground">ATS</span>
+                      <span className="font-medium capitalize">{(selectedCompany as any).atsType}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-3">

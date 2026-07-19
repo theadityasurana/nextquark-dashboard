@@ -60,23 +60,23 @@ export function ApplicationDetails({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold">Application Details</h2>
-            <Badge variant="outline" className="font-mono text-[10px]">{application.id}</Badge>
+      <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 border-b border-border">
+        <div className="flex flex-col gap-2 mb-3">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-base sm:text-lg font-semibold">Application Details</h2>
+            <Badge variant={
+              application.status === 'completed' ? 'default' : 
+              application.status === 'processing' ? 'secondary' : 
+              application.status === 'failed' ? 'destructive' : 'outline'
+            }>
+              {application.status}
+            </Badge>
           </div>
-          <Badge variant={
-            application.status === 'completed' ? 'default' : 
-            application.status === 'processing' ? 'secondary' : 
-            application.status === 'failed' ? 'destructive' : 'outline'
-          }>
-            {application.status}
-          </Badge>
+          <Badge variant="outline" className="font-mono text-[10px] w-fit truncate max-w-full">{application.id}</Badge>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 mt-4">
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <Button
             size="sm"
             className="text-xs gap-1.5"
@@ -153,14 +153,12 @@ export function ApplicationDetails({
       )}
 
       {/* Job Details */}
-      <div className="px-6 py-5 border-b border-border">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-border">
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Job Application Link</h4>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">{application.job_title} at {application.company_name}</p>
-            </div>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-semibold">{application.job_title} at {application.company_name}</p>
+            <div className="flex flex-wrap items-center gap-2">
               <a href={application.job_url} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="outline" className="text-xs gap-1.5">
                   <ExternalLink className="h-3 w-3" /> Application Portal
@@ -197,7 +195,7 @@ export function ApplicationDetails({
       </div>
 
       {/* Full Profile */}
-      <div className="px-6 py-5 flex flex-col gap-5">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-5">
         {/* User Header */}
         <div className="rounded-lg border border-border p-5 bg-foreground/5">
           <div className="text-center mb-4 pb-3 border-b border-border">
@@ -234,19 +232,19 @@ export function ApplicationDetails({
           {/* Personal Information */}
           <div className="mb-4">
             <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
-            <div className="grid grid-cols-3 gap-2 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
               <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" /> Gender</span>
-              <span className="font-medium col-span-2">{application.gender || 'Not specified'}</span>
+              <span className="font-medium sm:col-span-2">{application.gender || 'Not specified'}</span>
               <span className="text-muted-foreground flex items-center gap-1"><Heart className="h-3 w-3" /> Ethnicity</span>
-              <span className="font-medium col-span-2">{application.ethnicity}</span>
+              <span className="font-medium sm:col-span-2">{application.ethnicity}</span>
               <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Disability</span>
-              <span className="font-medium col-span-2">{application.disability_status}</span>
+              <span className="font-medium sm:col-span-2">{application.disability_status}</span>
               <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Veteran Status</span>
-              <span className="font-medium col-span-2">{application.veteran_status}</span>
+              <span className="font-medium sm:col-span-2">{application.veteran_status}</span>
               {application.work_authorization_status && (
                 <>
                   <span className="text-muted-foreground flex items-center gap-1"><FileText className="h-3 w-3" /> Work Authorization</span>
-                  <span className="font-medium col-span-2">{application.work_authorization_status}</span>
+                  <span className="font-medium sm:col-span-2">{application.work_authorization_status}</span>
                 </>
               )}
             </div>
@@ -403,7 +401,7 @@ export function ApplicationDetails({
           <Separator className="my-3" />
 
           {/* Application Stats */}
-          <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             {[
               { label: "Total Apps", value: stats.totalApps },
               { label: "Successful", value: stats.successful },

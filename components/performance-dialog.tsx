@@ -60,7 +60,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-full sm:max-w-6xl max-h-[92dvh] overflow-y-auto">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -71,12 +71,12 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-full max-w-full sm:max-w-6xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <DialogTitle>Performance Analytics</DialogTitle>
             <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -89,7 +89,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
         </DialogHeader>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
@@ -173,12 +173,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
         </div>
 
         <Tabs defaultValue="trends" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="trends">Trends</TabsTrigger>
-            <TabsTrigger value="performance">Performance</TabsTrigger>
-            <TabsTrigger value="errors">Errors</TabsTrigger>
-            <TabsTrigger value="utilization">Utilization</TabsTrigger>
-          </TabsList>
+          <div className="-mx-0 overflow-x-auto scrollbar-hide">
+            <TabsList className="grid w-max min-w-full grid-cols-4">
+              <TabsTrigger value="trends">Trends</TabsTrigger>
+              <TabsTrigger value="performance">Performance</TabsTrigger>
+              <TabsTrigger value="errors">Errors</TabsTrigger>
+              <TabsTrigger value="utilization">Utilization</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="trends" className="space-y-4 mt-4">
             <Card>
@@ -276,11 +278,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">Portal Performance</CardTitle>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <TooltipProvider>
                       <UITooltip>
                         <TooltipTrigger asChild>
@@ -372,7 +370,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
           </TabsContent>
 
           <TabsContent value="errors" className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -452,7 +450,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
           </TabsContent>
 
           <TabsContent value="utilization" className="space-y-4 mt-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">

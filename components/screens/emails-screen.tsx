@@ -369,16 +369,18 @@ export function EmailsScreen() {
       </div>
 
       <Tabs defaultValue="templates" className="space-y-4">
-        <TabsList className="flex flex-wrap h-auto gap-1">
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-          <TabsTrigger value="profile-reminders">Profile Reminders</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="settings">SMTP</TabsTrigger>
-        </TabsList>
+        <div className="-mx-0 overflow-x-auto scrollbar-hide">
+          <TabsList className="flex h-auto gap-1 w-max min-w-full">
+            <TabsTrigger value="templates">Templates</TabsTrigger>
+            <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+            <TabsTrigger value="profile-reminders">Profile Reminders</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+            <TabsTrigger value="settings">SMTP</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="templates" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-[280px_1fr]">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">Templates <InfoTip text="These are the HTML email templates stored in your database. Welcome and Application Submitted emails are sent automatically via Supabase DB triggers. All other templates are used by campaigns you trigger manually from this dashboard." /></CardTitle>
@@ -401,7 +403,7 @@ export function EmailsScreen() {
             {selectedTemplate && (
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle>{selectedTemplate.name}</CardTitle>
                       <CardDescription>Trigger: {selectedTemplate.trigger_type}</CardDescription>
@@ -458,7 +460,7 @@ export function EmailsScreen() {
             {/* Inactivity Nudge */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-base"><Moon className="h-4 w-4" /> Inactivity Nudge <InfoTip text="Manual trigger only. Click Preview to see users who haven't signed in for X days, then Send to email them. Tip: Run this weekly to re-engage dormant users." /></CardTitle>
                     <CardDescription>Users who haven't logged in recently</CardDescription>
@@ -495,7 +497,7 @@ export function EmailsScreen() {
             {/* Milestone Celebration */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2 text-base"><Trophy className="h-4 w-4" /> Milestone Celebration <InfoTip text="Manual trigger only. Preview shows users who applied to X+ jobs this month. Send to congratulate them. Tip: Run at the end of each month to celebrate active users." /></CardTitle>
                     <CardDescription>Users who hit application milestones this month</CardDescription>
@@ -580,7 +582,7 @@ export function EmailsScreen() {
         <TabsContent value="profile-reminders">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">Incomplete Profiles <InfoTip text="Manual trigger only. Preview shows users with less than 80% profile completion and what fields are missing. Send to nudge them to complete their profile. Tip: Run this a few days after a wave of new signups." /></CardTitle>
                   <CardDescription>Users with less than 80% profile completion</CardDescription>
@@ -635,7 +637,7 @@ export function EmailsScreen() {
         <TabsContent value="logs">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">Email Logs <InfoTip text="Shows all sent and failed emails across all trigger types — both automatic (welcome, application submitted) and manual (campaigns, reminders, broadcasts)." /></CardTitle>
                   <CardDescription>Recent email activity</CardDescription>
@@ -702,7 +704,7 @@ export function EmailsScreen() {
               
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-medium">Test Email Configuration</p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-col sm:flex-row">
                   <Input
                     type="email"
                     placeholder="Enter email to test"

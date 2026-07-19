@@ -102,7 +102,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -113,19 +113,21 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Agent Configuration</DialogTitle>
         </DialogHeader>
 
         <TooltipProvider>
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="timeouts">Timeouts</TabsTrigger>
-            <TabsTrigger value="browser">Browser</TabsTrigger>
-            <TabsTrigger value="behavior">Behavior</TabsTrigger>
-          </TabsList>
+          <div className="-mx-0 overflow-x-auto scrollbar-hide">
+            <TabsList className="grid w-max min-w-full grid-cols-4">
+              <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="timeouts">Timeouts</TabsTrigger>
+              <TabsTrigger value="browser">Browser</TabsTrigger>
+              <TabsTrigger value="behavior">Behavior</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="general" className="space-y-4 mt-4">
             <div className="space-y-2">
@@ -204,7 +206,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
             </div>
 
             {config.working_hours_enabled && (
-              <div className="grid grid-cols-2 gap-4 pl-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label>Start Time</Label>
@@ -263,7 +265,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
             </div>
 
             {config.rate_limit_enabled && (
-              <div className="grid grid-cols-2 gap-4 pl-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label>Delay (seconds)</Label>
@@ -424,7 +426,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label>Viewport Width</Label>

@@ -66,18 +66,20 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-full max-w-full sm:max-w-3xl max-h-[92dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Agent</DialogTitle>
           <p className="text-sm text-muted-foreground mt-2"><span className="font-semibold">⚠️ Current Implementation: SIMULATION MODE</span> - Creates agent metadata (configuration) and returns success message. Does NOT actually spin up infrastructure. <span className="font-semibold">❌ Not Fully Functional</span> - Saves configuration but doesn't provision real infrastructure. In production, this should: 1) Provision Docker container or VM, 2) Install browser automation software, 3) Configure with selected settings, 4) Register agent in system, 5) Start processing queue.</p>
         </DialogHeader>
 
         <Tabs defaultValue="basic" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="basic">Basic</TabsTrigger>
-            <TabsTrigger value="assignment">Assignment</TabsTrigger>
-            <TabsTrigger value="scaling">Auto-Scaling</TabsTrigger>
-          </TabsList>
+          <div className="-mx-0 overflow-x-auto scrollbar-hide">
+            <TabsList className="grid w-max min-w-full grid-cols-3">
+              <TabsTrigger value="basic">Basic</TabsTrigger>
+              <TabsTrigger value="assignment">Assignment</TabsTrigger>
+              <TabsTrigger value="scaling">Auto-Scaling</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="basic" className="space-y-4 mt-4">
             <div className="space-y-2">
@@ -134,7 +136,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label>CPU Limit (cores)</Label>

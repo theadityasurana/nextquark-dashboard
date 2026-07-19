@@ -322,12 +322,12 @@ export function AgentsScreen() {
           setLogs([])
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-full max-w-full sm:max-w-3xl max-h-[92dvh] overflow-y-auto bg-card border-border">
           {selectedAgent && (
             <>
               <DialogHeader>
-                <div className="flex items-center gap-2">
-                  <DialogTitle className="text-lg font-mono">{selectedAgent.id}</DialogTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  <DialogTitle className="text-base sm:text-lg font-mono break-all">{selectedAgent.id}</DialogTitle>
                   <StatusBadge status={getStatusBadgeStatus(selectedAgent.status)} />
                 </div>
               </DialogHeader>
@@ -342,11 +342,11 @@ export function AgentsScreen() {
                         <span className="h-2.5 w-2.5 rounded-full bg-warning" />
                         <span className="h-2.5 w-2.5 rounded-full bg-success" />
                       </div>
-                      <span className="text-[11px] text-muted-foreground ml-2">Task Recording - {selectedAgent.jobTitle}</span>
+                      <span className="text-[11px] text-muted-foreground ml-2 truncate">Task Recording - {selectedAgent.jobTitle}</span>
                     </div>
                     <iframe
                       src={selectedAgent.recordingUrl}
-                      className="w-full h-[400px] bg-background"
+                      className="w-full h-[250px] sm:h-[400px] bg-background"
                       title="Task Recording"
                     />
                   </div>
@@ -361,11 +361,11 @@ export function AgentsScreen() {
                 {/* Agent Details */}
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Application Details</h3>
-                  <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">User</span>
                     <span className="font-medium">{selectedAgent.firstName} {selectedAgent.lastName}</span>
                     <span className="text-muted-foreground">Email</span>
-                    <span className="text-xs">{selectedAgent.email}</span>
+                    <span className="text-xs break-all">{selectedAgent.email}</span>
                     <span className="text-muted-foreground">Phone</span>
                     <span className="text-xs">{selectedAgent.phone}</span>
                     <span className="text-muted-foreground">Location</span>
@@ -375,7 +375,7 @@ export function AgentsScreen() {
                     <span className="text-muted-foreground">Job Title</span>
                     <span className="font-medium">{selectedAgent.jobTitle}</span>
                     <span className="text-muted-foreground">Job URL</span>
-                    <a href={selectedAgent.jobUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">{selectedAgent.jobUrl}</a>
+                    <a href={selectedAgent.jobUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline break-all">{selectedAgent.jobUrl}</a>
                     <span className="text-muted-foreground">Resume</span>
                     <a href={selectedAgent.resumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">View Resume</a>
                     <span className="text-muted-foreground">Duration</span>

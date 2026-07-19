@@ -80,7 +80,34 @@ export function OtpManagerScreen() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {/* Mobile card view */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {emails.map((email) => (
+              <div key={email.id} className="rounded-lg border border-border p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] text-muted-foreground truncate">{email.id}</span>
+                  {email.extracted_otp ? (
+                    <Badge variant="default" className="font-mono text-sm shrink-0">{email.extracted_otp}</Badge>
+                  ) : (
+                    <span className="text-muted-foreground shrink-0">No OTP</span>
+                  )}
+                </div>
+                <div><span className="text-muted-foreground">From: </span><span className="font-mono break-all">{email.from_email}</span></div>
+                <div><span className="text-muted-foreground">Proxy: </span><span className="font-mono break-all">{email.proxy_address}</span></div>
+                {email.live_application_queue_id && (
+                  <div><span className="text-muted-foreground">Queue ID: </span><span className="font-mono break-all">{email.live_application_queue_id}</span></div>
+                )}
+                {email.body_text && (
+                  <div className="text-muted-foreground whitespace-pre-wrap break-words">{email.body_text}</div>
+                )}
+              </div>
+            ))}
+            {emails.length === 0 && !loading && (
+              <p className="text-center text-muted-foreground py-8 text-sm">No inbound emails found</p>
+            )}
+          </div>
+          {/* Desktop table view */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

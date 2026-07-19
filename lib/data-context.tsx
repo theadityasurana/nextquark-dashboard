@@ -29,6 +29,8 @@ function mapCompany(c: Record<string, unknown>): Company {
     benefits: (c.benefits as string[]) || [],
     atsType: c.ats_type as string | undefined,
     atsCompanyId: c.ats_company_id as string | undefined,
+    lastSyncedAt: c.last_synced_at as string | undefined,
+    syncStatus: (c.sync_status as string | undefined) || "never",
   } as any
 }
 
