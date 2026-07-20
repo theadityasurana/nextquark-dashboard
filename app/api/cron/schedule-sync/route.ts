@@ -28,23 +28,19 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date()
-  const midnight = new Date(now)
-  midnight.setHours(0, 0, 0, 0)
-
   const intervalMs = (24 * 60 * 60 * 1000) / companies.length
 
   const queueEntries = companies.map((company, index) => ({
     company_id: company.id,
-    scheduled_at: new Date(midnight.getTime() + intervalMs * index).toISOString(),
+    scheduled_at: new Date(now.getTime() + intervalMs * index).toISOString(),
     status: "pending",
   }))
 
-  // Remove today's pending entries to avoid duplicates before re-scheduling
+  // Remove all pending entries to avoid duplicates before re-scheduling
   await supabase
     .from("job_sync_queue")
     .delete()
     .eq("status", "pending")
-    .gte("scheduled_at", midnight.toISOString())
 
   const { error: insertError } = await supabase
     .from("job_sync_queue")
