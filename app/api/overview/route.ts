@@ -251,10 +251,11 @@ export async function GET(request: Request) {
       .from('companies')
       .select('id, name, logo_initial')
 
-    const companyNameMap = new Map((syncCompanies || []).map(c => [c.id, { name: c.name, initial: c.logo_initial }]))
+    const companyNameMap = new Map((syncCompanies || []).map(c => [c.id, { name: c.name, initial: c.logo_initial || c.name?.charAt(0)?.toUpperCase() || '?' }]))
 
     let totalAdded = 0, totalDeleted = 0, totalUpdated = 0
     const syncByCompany = new Map<string, { name: string; initial: string; added: number; updated: number; deleted: number; syncedAt: string }>()
+    const seenCompanyIds = new Set<string>()
 
     for (const row of syncResults || []) {
       const r = row.result || {}
@@ -264,14 +265,20 @@ export async function GET(request: Request) {
       totalAdded += added
       totalUpdated += updated
       totalDeleted += deleted
+      seenCompanyIds.add(row.company_id)
       const info = companyNameMap.get(row.company_id)
-      if (info && !syncByCompany.has(row.company_id)) {
-        syncByCompany.set(row.company_id, { name: info.name, initial: info.initial, added, updated, deleted, syncedAt: row.synced_at })
+      if (!syncByCompany.has(row.company_id)) {
+        syncByCompany.set(row.company_id, {
+          name: info?.name || row.company_id,
+          initial: info?.initial || '?',
+          added, updated, deleted,
+          syncedAt: row.synced_at
+        })
       }
     }
 
     const syncActivity = {
-      totals: { added: totalAdded, updated: totalUpdated, deleted: totalDeleted, companiesSynced: syncByCompany.size },
+      totals: { added: totalAdded, updated: totalUpdated, deleted: totalDeleted, companiesSynced: seenCompanyIds.size },
       byCompany: Array.from(syncByCompany.values()).sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted)).slice(0, 20),
     }
 
