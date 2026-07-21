@@ -661,7 +661,7 @@ export function QueueScreen() {
 
       {/* Application Detail Modal */}
       <Dialog open={!!selectedApp} onOpenChange={() => setSelectedApp(null)}>
-        <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto bg-card border-border p-0">
+        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
           <DialogTitle className="sr-only">Application Details</DialogTitle>
           {selectedApp && (
             <ApplicationDetails 

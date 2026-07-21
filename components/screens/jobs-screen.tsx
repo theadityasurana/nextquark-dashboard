@@ -282,7 +282,8 @@ export function JobsScreen() {
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Jobs</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="-mx-1 overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-2 px-1 w-max">
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{totalJobs} total</Badge>
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
             setAtsPreviewLoading(true)
@@ -362,6 +363,7 @@ export function JobsScreen() {
             <Plus className="h-3 w-3" /> Add Job
           </Button>
         </div>
+        </div>
       </div>
 
       <div className="relative w-full sm:max-w-sm">
@@ -430,7 +432,7 @@ export function JobsScreen() {
 
       {/* ========== ADD JOB DIALOG ========== */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetJobForm() } }}>
-        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-2xl bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Briefcase className="h-5 w-5 text-primary" />
@@ -834,7 +836,7 @@ export function JobsScreen() {
 
       {/* ========== JOB DETAIL / EDIT MODAL ========== */}
       <Dialog open={!!selectedJob} onOpenChange={() => { setSelectedJob(null); setIsEditing(false) }}>
-        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-2xl bg-card border-border">
           {selectedJob && !isEditing && (
             <>
               <DialogHeader>
@@ -1356,7 +1358,7 @@ export function JobsScreen() {
 
       {/* ========== ATS SYNC ALL PREVIEW DIALOG ========== */}
       <Dialog open={showAtsPreview} onOpenChange={setShowAtsPreview}>
-        <DialogContent className="w-full max-w-full sm:max-w-3xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-3xl bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Zap className="h-5 w-5 text-primary" />
@@ -1557,7 +1559,7 @@ export function JobsScreen() {
 
       {/* ========== CLEANUP STALE JOBS DIALOG ========== */}
       <Dialog open={showCleanupPreview} onOpenChange={setShowCleanupPreview}>
-        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-2xl bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-destructive" />
@@ -1640,7 +1642,7 @@ export function JobsScreen() {
 
       {/* ========== ADD JOB BATCH DIALOG ========== */}
       <Dialog open={showBatchForm} onOpenChange={(open) => { if (!open) { setShowBatchForm(false); setBatchCompanyId(""); setBatchPortalUrl(""); setScrapedJobs([]); setCurrentJobIndex(0) } }}>
-        <DialogContent className="w-full max-w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-2xl bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Zap className="h-5 w-5 text-primary" />

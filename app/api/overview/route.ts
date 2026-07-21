@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function getTimeRange(range: string) {
   const now = new Date()
@@ -239,15 +240,16 @@ export async function GET(request: Request) {
       .sort((a, b) => b.applications - a.applications)
       .slice(0, 5)
 
-    // Job sync activity from sync queue
-    const { data: syncResults } = await supabase
+    // Job sync activity from sync queue — needs admin client to bypass RLS
+    const adminSupabase = createAdminClient()
+    const { data: syncResults } = await adminSupabase
       .from('job_sync_queue')
       .select('company_id, status, synced_at, result')
       .eq('status', 'done')
       .order('synced_at', { ascending: false })
       .limit(200)
 
-    const { data: syncCompanies } = await supabase
+    const { data: syncCompanies } = await adminSupabase
       .from('companies')
       .select('id, name, logo_initial')
 

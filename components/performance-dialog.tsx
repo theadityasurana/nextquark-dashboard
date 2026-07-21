@@ -60,7 +60,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-full max-w-full sm:max-w-6xl max-h-[92dvh] overflow-y-auto">
+        <DialogContent className="sm:max-w-6xl">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -71,7 +71,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-full sm:max-w-6xl max-h-[92dvh] overflow-y-auto">
+      <DialogContent className="sm:max-w-6xl">
         <DialogHeader>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <DialogTitle>Performance Analytics</DialogTitle>

@@ -66,7 +66,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-full sm:max-w-3xl max-h-[92dvh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add New Agent</DialogTitle>
           <p className="text-sm text-muted-foreground mt-2"><span className="font-semibold">⚠️ Current Implementation: SIMULATION MODE</span> - Creates agent metadata (configuration) and returns success message. Does NOT actually spin up infrastructure. <span className="font-semibold">❌ Not Fully Functional</span> - Saves configuration but doesn't provision real infrastructure. In production, this should: 1) Provision Docker container or VM, 2) Install browser automation software, 3) Configure with selected settings, 4) Register agent in system, 5) Start processing queue.</p>

@@ -15,7 +15,6 @@ import {
   BarChart3,
   ScrollText,
   Settings,
-  Bell,
   ChevronLeft,
   LogOut,
   Menu,
@@ -284,13 +283,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </span>
                 <span className="text-[10px] font-medium text-success">System Online</span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                Queue: <span className="text-foreground font-semibold">47</span> pending
-              </span>
-              <span className="text-xs text-border">·</span>
-              <span className="text-xs text-muted-foreground">
-                Agents: <span className="text-success font-semibold">7</span> active
-              </span>
             </div>
           </div>
 
@@ -304,12 +296,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="text-[10px] font-medium text-success">Online</span>
             </div>
 
-            <Button variant="ghost" size="icon" className="relative h-9 w-9">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-background">
-                12
-              </span>
-            </Button>
+
           </div>
         </header>
 

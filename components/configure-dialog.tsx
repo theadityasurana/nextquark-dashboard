@@ -102,7 +102,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -113,7 +113,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Agent Configuration</DialogTitle>
         </DialogHeader>

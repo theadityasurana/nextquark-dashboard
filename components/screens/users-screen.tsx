@@ -240,7 +240,7 @@ export function UsersScreen() {
 
       {/* Supabase Auth User Detail Modal */}
       <Dialog open={!!selectedAuthUser} onOpenChange={() => setSelectedAuthUser(null)}>
-        <DialogContent className="w-full max-w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto bg-card border-border">
+        <DialogContent className="sm:max-w-xl bg-card border-border">
           {selectedAuthUser && (
             <>
               <DialogHeader>
@@ -332,7 +332,7 @@ export function UsersScreen() {
 
       {/* App User Detail Modal */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
-        <DialogContent className="w-full max-w-full sm:max-w-4xl max-h-[92dvh] overflow-y-auto bg-card border-border p-0">
+        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
           {selectedUser && (
             <UserProfileModal user={selectedUser} />
           )}
