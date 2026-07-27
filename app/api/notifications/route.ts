@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
-
 // In-memory store (persists across requests in the same process)
 // For production, store in Supabase instead
 const subscriptions: Set<string> = new Set()
+
+function initVapid() {
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  )
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
 
   // Subscribe
   if (body.action === "subscribe") {
+    initVapid()
     subscriptions.add(JSON.stringify(body.subscription))
     return NextResponse.json({ ok: true })
   }
 
   // Send notification (called internally)
   if (body.action === "send") {
+    initVapid()
     const { title, message, url, tag } = body
     const payload = JSON.stringify({ title, body: message, url, tag })
     const results = await Promise.allSettled(
