@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getAdminClient()
-  const since = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Count jobs added, updated, deleted in last 3 hours
   const [{ count: added }, { count: updated }, { count: deleted }] = await Promise.all([
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     body: JSON.stringify({
       action: "send",
       title: "Job Activity Summary",
-      message: `Last 3h: ${parts.join(", ")}`,
+      message: `Last 24h: ${parts.join(", ")}`,
       url: "/jobs",
       tag: "job-summary",
     }),
