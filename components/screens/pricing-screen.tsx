@@ -85,8 +85,8 @@ export function PricingScreen() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Pricing Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-1">Subscription breakdown, revenue metrics, and user insights</p>
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Pricing Analytics</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">Subscription breakdown, revenue metrics, and user insights</p>
       </div>
 
       {/* Summary Cards */}

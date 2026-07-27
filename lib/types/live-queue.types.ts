@@ -83,6 +83,9 @@ export interface LiveApplicationQueue {
   max_attempts: number
   last_error?: string | null
   
+  // Rejection
+  rejected_at?: string | null
+
   // Metadata
   onboarding_data: Record<string, any>
   created_at: string

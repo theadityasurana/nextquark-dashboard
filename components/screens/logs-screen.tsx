@@ -57,8 +57,8 @@ export function LogsScreen() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">System Logs</h1>
-        <p className="text-sm text-muted-foreground mt-1">View all system logs for debugging</p>
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">System Logs</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">View all system logs for debugging</p>
       </div>
 
       {/* Filters */}
@@ -81,7 +81,7 @@ export function LogsScreen() {
               </SelectContent>
             </Select>
             <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-[200px] sm:w-[280px] bg-card border-border text-sm">
+              <SelectTrigger className="w-[180px] sm:w-[280px] bg-card border-border text-sm">
                 <SelectValue placeholder="All Agents" />
               </SelectTrigger>
               <SelectContent>
@@ -144,11 +144,6 @@ export function LogsScreen() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <span className="text-xs text-muted-foreground">Showing {filteredLogs.length} of {logs.length} entries</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="text-xs h-7" disabled>Previous</Button>
-              <span className="text-xs text-muted-foreground">Page 1 of 1</span>
-              <Button size="sm" variant="outline" className="text-xs h-7" disabled>Next</Button>
-            </div>
           </div>
         </CardContent>
       </Card>

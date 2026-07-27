@@ -24,6 +24,21 @@ import {
   Globe,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+
+function NQLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        fill="currentColor"
+        d="M101.141 53H136.632C151.023 53 162.689 64.6662 162.689 79.0573V112.904H148.112V79.0573C148.112 78.7105 148.098 78.3662 148.072 78.0251L112.581 112.898C112.701 112.902 112.821 112.904 112.941 112.904H148.112V126.672H112.941C98.5504 126.672 86.5638 114.891 86.5638 100.5V66.7434H101.141V100.5C101.141 101.15 101.191 101.792 101.289 102.422L137.56 66.7816C137.255 66.7563 136.945 66.7434 136.632 66.7434H101.141V53Z"
+      />
+      <path
+        fill="currentColor"
+        d="M65.2926 124.136L14 66.7372H34.6355L64.7495 100.436V66.7372H80.1365V118.47C80.1365 126.278 70.4953 129.958 65.2926 124.136Z"
+      />
+    </svg>
+  )
+}
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet"
@@ -117,8 +132,8 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
       <div className={cn("relative flex items-center border-b border-sidebar-border/60 px-4 py-5", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed && (
           <div className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-chart-2 text-primary-foreground font-bold text-sm shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.2),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.4)]">
-              NQ
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-[oklch(0.13_0.006_265)] shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.08),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.3)] ring-1 ring-border/40">
+              <NQLogo className="h-5 w-5 text-primary" />
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight text-gradient">NextQuark</h1>
@@ -127,8 +142,8 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
           </div>
         )}
         {collapsed && (
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-chart-2 text-primary-foreground font-bold text-sm shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.2),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.4)]">
-            NQ
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-[oklch(0.13_0.006_265)] shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.08),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.3)] ring-1 ring-border/40">
+            <NQLogo className="h-5 w-5 text-primary" />
           </div>
         )}
         {onToggle && !collapsed && (
@@ -261,8 +276,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
             {/* Mobile title (visible only on small screens, replaces stats strip) */}
             <div className="flex items-center gap-2 md:hidden min-w-0">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-primary to-chart-2 text-primary-foreground font-bold text-[11px] shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.2)]">
-                NQ
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[oklch(0.13_0.006_265)] ring-1 ring-border/40">
+                <NQLogo className="h-4 w-4 text-primary" />
               </div>
               <span className="text-sm font-semibold tracking-tight truncate">NextQuark</span>
             </div>

@@ -322,7 +322,7 @@ export function AgentsScreen() {
           setLogs([])
         }
       }}>
-        <DialogContent className="sm:max-w-3xl bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
           {selectedAgent && (
             <>
               <DialogHeader>

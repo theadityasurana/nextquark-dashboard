@@ -1,0 +1,2 @@
+ALTER TABLE live_application_queue
+ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ DEFAULT NULL;

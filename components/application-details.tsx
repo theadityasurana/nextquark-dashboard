@@ -8,14 +8,16 @@ import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.t
 import { useLogs, LogEntry } from "@/lib/logs-context"
 import { 
   User as UserIcon, Heart, Shield, ExternalLink, FileText, 
-  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw
+  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw, Mail
 } from "lucide-react"
 
 interface ApplicationDetailsProps {
   application: LiveApplicationQueue
   stats: ApplicationStats
   onStartApplication?: () => void
+  onSendRejection?: () => void
   isStreaming?: boolean
+  isSendingRejection?: boolean
   recordingUrl?: string | null
 }
 
@@ -23,7 +25,9 @@ export function ApplicationDetails({
   application, 
   stats, 
   onStartApplication,
+  onSendRejection,
   isStreaming = false,
+  isSendingRejection = false,
   recordingUrl = null
 }: ApplicationDetailsProps) {
   const fullName = `${application.first_name} ${application.last_name}`
@@ -84,6 +88,16 @@ export function ApplicationDetails({
             disabled={isStreaming}
           >
             {isStreaming ? 'Processing...' : 'Start Application'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+            onClick={onSendRejection}
+            disabled={isSendingRejection}
+          >
+            <Mail className="h-3 w-3" />
+            {isSendingRejection ? 'Sending...' : 'Send Rejection Email'}
           </Button>
           {application.attempt_count > 0 && (
             <Badge variant="outline" className="text-[10px] gap-1">

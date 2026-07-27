@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/job-summary",
+      "schedule": "0 */3 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-rejected",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

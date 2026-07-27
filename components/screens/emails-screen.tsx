@@ -364,18 +364,18 @@ export function EmailsScreen() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Email Manager</h1>
-        <p className="text-muted-foreground">Manage email templates and monitor sent emails</p>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Email Manager</h1>
+        <p className="text-sm text-muted-foreground">Manage email templates and monitor sent emails</p>
       </div>
 
       <Tabs defaultValue="templates" className="space-y-4">
-        <div className="-mx-0 overflow-x-auto scrollbar-hide">
-          <TabsList className="flex h-auto gap-1 w-max min-w-full">
-            <TabsTrigger value="templates">Templates</TabsTrigger>
-            <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-            <TabsTrigger value="profile-reminders">Profile Reminders</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="settings">SMTP</TabsTrigger>
+        <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
+          <TabsList className="flex h-auto gap-1 w-max">
+            <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
+            <TabsTrigger value="campaigns" className="text-xs">Campaigns</TabsTrigger>
+            <TabsTrigger value="profile-reminders" className="text-xs">Profile Reminders</TabsTrigger>
+            <TabsTrigger value="logs" className="text-xs">Logs</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs">SMTP</TabsTrigger>
           </TabsList>
         </div>
 

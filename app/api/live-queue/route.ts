@@ -50,6 +50,7 @@ export async function PATCH(request: Request) {
     if (verification_otp !== undefined) updateData.verification_otp = verification_otp
     if (body.last_error !== undefined) updateData.last_error = body.last_error
     if (body.attempt_count !== undefined) updateData.attempt_count = body.attempt_count
+    if (body.rejected_at !== undefined) updateData.rejected_at = body.rejected_at
     
     const { error } = await supabase
       .from('live_application_queue')

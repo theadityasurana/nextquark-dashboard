@@ -7,6 +7,7 @@
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
   "orientation": "portrait-primary",
+  "permissions": ["notifications"],
   "icons": [
     {
       "src": "/applogo.png",

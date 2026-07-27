@@ -240,7 +240,14 @@ export function AnalyticsScreen() {
   const barColors = ["oklch(0.7 0.18 270)", "oklch(0.7 0.16 220)", "oklch(0.78 0.16 70)", "oklch(0.65 0.22 0)", "oklch(0.72 0.18 320)", "oklch(0.72 0.18 155)"]
 
   if (loading) {
-    return <div className="flex items-center justify-center h-96">Loading analytics...</div>
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading analytics...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -248,8 +255,8 @@ export function AnalyticsScreen() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">Detailed analytics and reporting across companies and jobs</p>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Analytics</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Detailed analytics and reporting across companies and jobs</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>

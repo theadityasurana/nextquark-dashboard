@@ -321,7 +321,7 @@ export function CompaniesScreen() {
 
       {/* Add Company Dialog */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetForm() } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Building2 className="h-5 w-5 text-primary" />
@@ -712,7 +712,7 @@ export function CompaniesScreen() {
 
       {/* Company Detail Modal */}
       <Dialog open={!!selectedCompany} onOpenChange={() => { setSelectedCompany(null); setIsEditing(false) }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
           {selectedCompany && !isEditing && (
             <>
               <DialogHeader>
@@ -1208,7 +1208,7 @@ export function CompaniesScreen() {
       </Dialog>
       {/* ATS Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Zap className="h-5 w-5 text-primary" />

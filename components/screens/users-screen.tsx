@@ -96,13 +96,13 @@ export function UsersScreen() {
             className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "auth" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
             onClick={() => setActiveTab("auth")}
           >
-            Supabase Auth Users
+            Auth Users
           </button>
           <button
             className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "app" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
             onClick={() => setActiveTab("app")}
           >
-            App Users (Mock)
+            App Users
           </button>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -116,7 +116,23 @@ export function UsersScreen() {
                 <RefreshCw className="h-3 w-3" /> Refresh
               </Button>
             )}
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9" onClick={() => {
+              const users = activeTab === "auth" ? filteredAuthUsers : filteredMockUsers
+              const headers = activeTab === "auth"
+                ? ["ID", "Email", "Provider", "Confirmed", "Last Sign In", "Created At"]
+                : ["ID", "Name", "Email", "Total Apps", "Successful", "Failed", "Last Active"]
+              const rows = activeTab === "auth"
+                ? (filteredAuthUsers as SupabaseAuthUser[]).map(u => [u.id, u.email, u.provider, u.confirmed ? "Yes" : "No", formatDate(u.last_sign_in_at), formatDate(u.created_at)])
+                : filteredMockUsers.map(u => [u.id, u.name, u.email, u.totalApps, u.successfulApps, u.failedApps, u.lastActive])
+              const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
+              const blob = new Blob([csv], { type: "text/csv" })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement("a")
+              a.href = url
+              a.download = `users-${activeTab}-${new Date().toISOString().slice(0,10)}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}>
               <Download className="h-3 w-3" /> Export CSV
             </Button>
           </div>
@@ -240,7 +256,7 @@ export function UsersScreen() {
 
       {/* Supabase Auth User Detail Modal */}
       <Dialog open={!!selectedAuthUser} onOpenChange={() => setSelectedAuthUser(null)}>
-        <DialogContent className="sm:max-w-xl bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-xl bg-card border-border">
           {selectedAuthUser && (
             <>
               <DialogHeader>
@@ -332,7 +348,7 @@ export function UsersScreen() {
 
       {/* App User Detail Modal */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
-        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
+        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-border p-0">
           {selectedUser && (
             <UserProfileModal user={selectedUser} />
           )}

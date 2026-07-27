@@ -15,8 +15,12 @@ import { StatusBadge } from "@/components/status-badge"
 import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs } from "@/lib/logs-context"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { DateRange } from "react-day-picker"
 import {
-  Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink
+  Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink, Mail, CalendarIcon
 } from "lucide-react"
 
 export function QueueScreen() {
@@ -29,6 +33,14 @@ export function QueueScreen() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
+  const [isSendingRejection, setIsSendingRejection] = useState(false)
+  const [isSendingRejectionAll, setIsSendingRejectionAll] = useState(false)
+  const [isSendingRejectionByCompany, setIsSendingRejectionByCompany] = useState(false)
+  const [selectedRejectCompany, setSelectedRejectCompany] = useState<string>("")
+  const [isSendingRejectionByUser, setIsSendingRejectionByUser] = useState(false)
+  const [selectedRejectUser, setSelectedRejectUser] = useState<string>("")
+  const [isSendingRejectionByDate, setIsSendingRejectionByDate] = useState(false)
+  const [rejectDateRange, setRejectDateRange] = useState<DateRange | undefined>(undefined)
   const [autoStart, setAutoStart] = useState(false)
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
   const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
@@ -383,6 +395,98 @@ export function QueueScreen() {
   }, [autoStart, premiumOnly, applications])
 
 
+  const sendRejectionForApp = async (app: LiveApplicationQueue) => {
+    await fetch('/api/email/rejection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        queueId: app.id,
+        userId: app.user_id,
+        profileEmail: app.email,
+        firstName: app.first_name,
+        jobTitle: app.job_title,
+        companyName: app.company_name,
+      }),
+    })
+  }
+
+  const handleSendRejection = async (app: LiveApplicationQueue) => {
+    setIsSendingRejection(true)
+    try {
+      await sendRejectionForApp(app)
+      setApplications(prev => prev.filter(a => a.id !== app.id))
+    } catch (err) {
+      console.error('Failed to send rejection email:', err)
+    } finally {
+      setIsSendingRejection(false)
+    }
+  }
+
+  const handleRejectAll = async () => {
+    setIsSendingRejectionAll(true)
+    try {
+      await Promise.all(applications.map(sendRejectionForApp))
+      setApplications([])
+    } catch (err) {
+      console.error('Failed to send rejection emails:', err)
+    } finally {
+      setIsSendingRejectionAll(false)
+    }
+  }
+
+  const handleRejectByCompany = async () => {
+    if (!selectedRejectCompany) return
+    setIsSendingRejectionByCompany(true)
+    try {
+      const targets = applications.filter(a => a.company_name === selectedRejectCompany)
+      await Promise.all(targets.map(sendRejectionForApp))
+      setApplications(prev => prev.filter(a => a.company_name !== selectedRejectCompany))
+      setSelectedRejectCompany("")
+    } catch (err) {
+      console.error('Failed to send rejection emails by company:', err)
+    } finally {
+      setIsSendingRejectionByCompany(false)
+    }
+  }
+
+  const handleRejectByUser = async () => {
+    if (!selectedRejectUser) return
+    setIsSendingRejectionByUser(true)
+    try {
+      const targets = applications.filter(a => a.user_id === selectedRejectUser)
+      await Promise.all(targets.map(sendRejectionForApp))
+      setApplications(prev => prev.filter(a => a.user_id !== selectedRejectUser))
+      setSelectedRejectUser("")
+    } catch (err) {
+      console.error('Failed to send rejection emails by user:', err)
+    } finally {
+      setIsSendingRejectionByUser(false)
+    }
+  }
+
+  const handleRejectByDate = async () => {
+    if (!rejectDateRange?.from) return
+    setIsSendingRejectionByDate(true)
+    try {
+      const from = rejectDateRange.from.getTime()
+      const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
+      const targets = applications.filter(a => {
+        const t = new Date(a.created_at).getTime()
+        return t >= from && t <= to
+      })
+      await Promise.all(targets.map(sendRejectionForApp))
+      setApplications(prev => prev.filter(a => {
+        const t = new Date(a.created_at).getTime()
+        return !(t >= from && t <= to)
+      }))
+      setRejectDateRange(undefined)
+    } catch (err) {
+      console.error('Failed to send rejection emails by date:', err)
+    } finally {
+      setIsSendingRejectionByDate(false)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       await fetch('/api/live-queue', {
@@ -471,6 +575,113 @@ export function QueueScreen() {
               `Start All (${premiumOnly ? pending.filter(a => a.is_premium).length : pending.length})`
             )}
           </Button>
+        )}
+        {applications.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+            onClick={handleRejectAll}
+            disabled={isSendingRejectionAll}
+          >
+            {isSendingRejectionAll ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+            {isSendingRejectionAll ? 'Sending...' : `Reject All (${applications.length})`}
+          </Button>
+        )}
+        {applications.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
+              <SelectTrigger className="h-9 text-xs w-44">
+                <SelectValue placeholder="Reject by company..." />
+              </SelectTrigger>
+              <SelectContent>
+                {[...new Set(applications.map(a => a.company_name))].sort().map(company => (
+                  <SelectItem key={company} value={company} className="text-xs">
+                    {company} ({applications.filter(a => a.company_name === company).length})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByCompany}
+              disabled={!selectedRejectCompany || isSendingRejectionByCompany}
+            >
+              {isSendingRejectionByCompany ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {isSendingRejectionByCompany ? 'Sending...' : 'Reject'}
+            </Button>
+          </div>
+        )}
+        {applications.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
+              <SelectTrigger className="h-9 text-xs w-44">
+                <SelectValue placeholder="Reject by user..." />
+              </SelectTrigger>
+              <SelectContent>
+                {[...new Map(applications.map(a => [a.user_id, a])).values()]
+                  .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
+                  .map(a => (
+                    <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
+                      {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id).length})
+                    </SelectItem>
+                  ))
+                }
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByUser}
+              disabled={!selectedRejectUser || isSendingRejectionByUser}
+            >
+              {isSendingRejectionByUser ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {isSendingRejectionByUser ? 'Sending...' : 'Reject'}
+            </Button>
+          </div>
+        )}
+        {applications.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 w-52 justify-start font-normal">
+                  <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
+                  {rejectDateRange?.from ? (
+                    rejectDateRange.to
+                      ? `${rejectDateRange.from.toLocaleDateString()} – ${rejectDateRange.to.toLocaleDateString()}`
+                      : rejectDateRange.from.toLocaleDateString()
+                  ) : 'Reject by date range...'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={rejectDateRange}
+                  onSelect={setRejectDateRange}
+                  numberOfMonths={2}
+                />
+              </PopoverContent>
+            </Popover>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByDate}
+              disabled={!rejectDateRange?.from || isSendingRejectionByDate}
+            >
+              {isSendingRejectionByDate ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {isSendingRejectionByDate ? 'Sending...' : (() => {
+                if (!rejectDateRange?.from) return 'Reject'
+                const from = rejectDateRange.from.getTime()
+                const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
+                const count = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to }).length
+                return `Reject (${count})`
+              })()}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -661,14 +872,16 @@ export function QueueScreen() {
 
       {/* Application Detail Modal */}
       <Dialog open={!!selectedApp} onOpenChange={() => setSelectedApp(null)}>
-        <DialogContent className="sm:max-w-4xl bg-card border-border p-0">
+        <DialogContent className="w-[95vw] max-w-4xl bg-card border-border p-0">
           <DialogTitle className="sr-only">Application Details</DialogTitle>
           {selectedApp && (
             <ApplicationDetails 
               application={selectedApp} 
               stats={stats}
               onStartApplication={() => startApplication(selectedApp)}
+              onSendRejection={() => handleSendRejection(selectedApp)}
               isStreaming={isStreaming}
+              isSendingRejection={isSendingRejection}
               recordingUrl={recordingUrl}
             />
           )}

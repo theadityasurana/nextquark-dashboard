@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
 import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users, Briefcase, Server, RefreshCw, Plus, Minus, RotateCcw, Building2 } from "lucide-react"
+import { SystemHealthPanel } from "@/components/system-health-panel"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { useEffect, useState, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -43,7 +44,14 @@ export function OverviewScreen() {
   }
 
   if (loading || !data) {
-    return <div className="flex items-center justify-center h-96">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading overview...</p>
+        </div>
+      </div>
+    )
   }
 
   const stats = [
@@ -70,6 +78,9 @@ export function OverviewScreen() {
           <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
         </Button>
       </div>
+
+      {/* System Health */}
+      <SystemHealthPanel />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
