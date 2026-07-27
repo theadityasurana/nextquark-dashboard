@@ -42,10 +42,8 @@ async function cmdStatus(chatId: number) {
 async function cmdReloadPostgrest(chatId: number) {
   await reply(chatId, '🔄 Reloading PostgREST schema cache...')
   const admin = createAdminClient()
-  // NOTIFY pgrst forces PostgREST to reload its schema cache
-  const { error } = await admin.rpc('reload_postgrest_schema' as any).catch(() => ({ error: null }))
-  // Fallback: direct SQL
-  const { error: sqlErr } = await admin.from('_pgrst_reserved' as any).select('*').limit(0).catch(() => ({ error: null }))
+  try { await admin.rpc('reload_postgrest_schema' as any) } catch {}
+  try { await admin.from('_pgrst_reserved' as any).select('*').limit(0) } catch {}
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/rpc/reload_postgrest_schema`, {
       method: 'POST',
@@ -59,16 +57,21 @@ async function cmdReloadPostgrest(chatId: number) {
 async function cmdKillLongQueries(chatId: number) {
   await reply(chatId, '🔍 Looking for long-running queries (>5 min)...')
   const admin = createAdminClient()
-  const { data, error } = await admin.rpc('kill_long_running_queries' as any).catch(() => ({ data: null, error: { message: 'RPC not available' } }))
+  let data: any = null
+  let error: any = null
+  try { const res = await admin.rpc('kill_long_running_queries' as any); data = res.data; error = res.error } catch { error = { message: 'RPC not available' } }
 
   if (error) {
-    // Try direct query via admin
-    const { data: queries, error: qErr } = await admin
-      .from('pg_stat_activity' as any)
-      .select('pid, query, state, query_start')
-      .eq('state', 'active')
-      .lt('query_start', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-      .catch(() => ({ data: null, error: { message: 'Cannot access pg_stat_activity directly' } }))
+    let queries: any = null
+    let qErr: any = null
+    try {
+      const res = await admin
+        .from('pg_stat_activity' as any)
+        .select('pid, query, state, query_start')
+        .eq('state', 'active')
+        .lt('query_start', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+      queries = res.data; qErr = res.error
+    } catch { qErr = { message: 'Cannot access pg_stat_activity directly' } }
 
     if (qErr || !queries || queries.length === 0) {
       await reply(chatId, '✅ No long-running queries found (>5 min), or unable to check directly.\n\nCheck manually:\nsupabase.com/dashboard/project/' + PROJECT_REF + '/database/query-performance')
