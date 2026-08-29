@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 
-type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed" | "awaiting_otp" | "awaiting_captcha" | "pending" | "blocked"
+export type StatusType = "queued" | "processing" | "completed" | "failed" | "active" | "idle" | "error" | "slow" | "down" | "paused" | "closed" | "awaiting_otp" | "awaiting_captcha" | "pending" | "blocked"
 
 const statusConfig: Record<StatusType, { label: string; dotColor: string; bgColor: string; textColor: string; borderColor: string; pulse?: boolean }> = {
   queued:           { label: "Queued",           dotColor: "bg-warning",          bgColor: "bg-warning/10",       textColor: "text-warning",          borderColor: "border-warning/20" },

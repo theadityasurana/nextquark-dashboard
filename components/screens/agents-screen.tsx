@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/status-badge"
+import type { StatusType } from "@/components/status-badge"
 import { ConfigureDialog } from "@/components/configure-dialog"
 import { PerformanceDialog } from "@/components/performance-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
@@ -103,7 +104,7 @@ export function AgentsScreen() {
     setRefreshing(false)
   }
 
-  const getStatusBadgeStatus = (status: string) => {
+  const getStatusBadgeStatus = (status: string): StatusType => {
     if (status === 'processing') return 'active'
     if (status === 'pending') return 'idle'
     if (status === 'failed') return 'error'
@@ -483,7 +484,7 @@ function AgentCard({ agent, onRetry, retrying, setSelectedAgent, getStatusBadgeS
   onRetry: (agent: Agent, e: React.MouseEvent) => void
   retrying: boolean
   setSelectedAgent: (agent: Agent) => void
-  getStatusBadgeStatus: (status: string) => string
+  getStatusBadgeStatus: (status: string) => StatusType
 }) {
   return (
     <Card
