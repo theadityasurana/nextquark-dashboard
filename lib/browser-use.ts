@@ -78,8 +78,9 @@ async function getApiKey(): Promise<string> {
     const { data } = await supabase.from("settings").select("browserUseApiKey").single()
     const dbKey = data?.browserUseApiKey
     cachedApiKey = envKey || dbKey || ""
-    console.log(`[Browser Use] API key source: ${envKey ? 'env var' : 'settings table'}, key starts with: ${cachedApiKey.substring(0, 6)}...`)
-    return cachedApiKey
+    const key = cachedApiKey as string
+    console.log(`[Browser Use] API key source: ${envKey ? 'env var' : 'settings table'}, key starts with: ${key.substring(0, 6)}...`)
+    return cachedApiKey as string
   } catch {
     cachedApiKey = process.env.BROWSER_USE_API_KEY || ""
     console.log(`[Browser Use] API key source: env var (settings fetch failed), key starts with: ${cachedApiKey.substring(0, 6)}...`)
@@ -518,8 +519,7 @@ async function pollTaskUntilComplete(
           .from("live_application_queue")
           .update({ live_url: liveUrl })
           .eq("id", applicationId)
-          .then(() => {})
-          .catch(() => {})
+          .then(() => {}, () => {})
       }
     }
     const isTerminal = TERMINAL.includes(taskStatus)

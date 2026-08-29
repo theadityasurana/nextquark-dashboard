@@ -30,10 +30,10 @@ export function htmlToMarkdown(html: string): string {
     .replace(/<ol[^>]*>/gi, "\n")
     .replace(/<\/ol>/gi, "\n")
     // Convert code blocks
-    .replace(/<pre[^>]*><code[^>]*>(.*?)<\/code><\/pre>/gis, "```\n$1\n```\n\n")
+    .replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, "```\n$1\n```\n\n")
     .replace(/<code[^>]*>(.*?)<\/code>/gi, "`$1`")
     // Convert blockquotes
-    .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, (match, content) => {
+    .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (match, content) => {
       return content.split('\n').map((line: string) => `> ${line}`).join('\n') + '\n\n'
     })
     // Convert horizontal rules

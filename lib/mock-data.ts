@@ -82,7 +82,7 @@ export interface User {
   inProgressApps: number
   lastActive: string
   joinedAt: string
-  status: "active" | "inactive"
+  status: "active" | "idle"
 }
 
 export interface Company {

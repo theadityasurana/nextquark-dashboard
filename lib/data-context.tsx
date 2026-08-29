@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
-import type { Company, Job, Application } from "@/lib/mock-data"
+import type { Company, Job, Application, ApplicationStatus } from "@/lib/mock-data"
 import { mockApplications } from "@/lib/mock-data"
 
 function mapCompany(c: Record<string, unknown>): Company {
@@ -49,7 +49,7 @@ function mapJob(j: Record<string, unknown>): Job {
     jobUrl: j.job_url as string || "",
     companyWebsite: j.company_website as string | undefined,
     companyLinkedin: j.company_linkedin as string | undefined,
-    status: j.status as string || "queued",
+    status: (j.status as "active" | "paused" | "closed" | "queued") || "queued",
     totalApps: (j.total_apps as number) || 0,
     rightSwipes: (j.right_swipe as number) || (j.right_swipes as number) || 0,
     successRate: Number(j.success_rate) || 0,
@@ -70,15 +70,15 @@ function mapApplication(a: Record<string, unknown>): Application {
   return {
     id: a.id as string,
     userId: a.user_id as string,
-    userName: a.user?.name as string || "",
-    userEmail: a.user?.email as string || "",
-    userPhone: a.user?.phone as string || "",
-    userLocation: a.user?.location as string || "",
+    userName: (a.user as any)?.name as string || "",
+    userEmail: (a.user as any)?.email as string || "",
+    userPhone: (a.user as any)?.phone as string || "",
+    userLocation: (a.user as any)?.location as string || "",
     companyId: a.company_id as string,
-    companyName: a.company?.name as string || "",
-    jobTitle: a.job?.title as string || "",
+    companyName: (a.company as any)?.name as string || "",
+    jobTitle: (a.job as any)?.title as string || "",
     jobId: a.job_id as string,
-    status: a.status as ApplicationStatus,
+    status: (a.status as ApplicationStatus) || "queued",
     agentId: a.agent_id as string | null,
     progressStep: (a.progress_step as number) || 0,
     totalSteps: (a.total_steps as number) || 5,
