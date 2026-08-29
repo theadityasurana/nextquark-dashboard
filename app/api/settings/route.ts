@@ -1,11 +1,10 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from '@/lib/supabase/admin'
 import { clearCachedBrowserUseKey } from "@/lib/browser-use"
 import { clearCachedBrowserbaseKeys } from "@/lib/browserbase"
+import { clearCachedKernelKey } from "@/lib/kernel"
 import { clearCachedProvider } from "@/lib/automation-provider"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+const supabase = createAdminClient()
 
 export async function GET() {
   try {
@@ -28,14 +27,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { browserUseApiKey, browserbaseApiKey, browserbaseProjectId, geminiApiKey, automationProvider } = body
+    const { browserUseApiKey, browserbaseApiKey, browserbaseProjectId, geminiApiKey, kernelApiKey, openAiApiKey, captchaSolverApiKey, automationProvider, ui_preferences } = body
 
     const updateData: Record<string, any> = { id: 1 }
     if (browserUseApiKey !== undefined) updateData.browserUseApiKey = browserUseApiKey
     if (browserbaseApiKey !== undefined) updateData.browserbaseApiKey = browserbaseApiKey
     if (browserbaseProjectId !== undefined) updateData.browserbaseProjectId = browserbaseProjectId
     if (geminiApiKey !== undefined) updateData.geminiApiKey = geminiApiKey
+    if (kernelApiKey !== undefined) updateData.kernelApiKey = kernelApiKey
+    if (openAiApiKey !== undefined) updateData.openAiApiKey = openAiApiKey
+    if (captchaSolverApiKey !== undefined) updateData.captchaSolverApiKey = captchaSolverApiKey
     if (automationProvider !== undefined) updateData.automationProvider = automationProvider
+    if (ui_preferences !== undefined) updateData.ui_preferences = ui_preferences
 
     const { data, error } = await supabase
       .from("settings")
@@ -48,6 +51,7 @@ export async function POST(request: Request) {
     // Clear all caches so next run picks up new values
     clearCachedBrowserUseKey()
     clearCachedBrowserbaseKeys()
+    clearCachedKernelKey()
     clearCachedProvider()
 
     return Response.json({

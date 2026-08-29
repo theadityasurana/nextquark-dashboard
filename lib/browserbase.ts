@@ -153,18 +153,107 @@ function detectCaptcha(text: string): boolean {
   return CAPTCHA_KEYWORDS.some(kw => lower.includes(kw))
 }
 
+// ─── Dropdown option resolver (same tiered logic as kernel.ts) ───
+const BB_SYNONYM_GROUPS: string[][] = [
+  ["united states","united states of america","usa","us","u s","u s a","america"],
+  ["united kingdom","uk","u k","great britain","britain"],
+  ["prefer not to say","prefer not to answer","decline to self identify","decline to answer",
+   "i do not wish to answer","i don t wish to answer","do not wish to disclose","i prefer not to answer"],
+]
+
+function bbNormalizeOption(s: string): string {
+  return s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function bbSynonymsOf(term: string): string[] {
+  return BB_SYNONYM_GROUPS.find(g => g.includes(term)) ?? [term]
+}
+
+function bbMatchOption(want: string, labels: string[]): number {
+  const w = bbNormalizeOption(want)
+  if (!w) return -1
+  const norm = labels.map(bbNormalizeOption)
+  let i = norm.indexOf(w); if (i >= 0) return i
+  const wSyn = bbSynonymsOf(w)
+  i = norm.findIndex(n => n.length > 0 && bbSynonymsOf(n).some(s => wSyn.includes(s))); if (i >= 0) return i
+  if (w === "yes" || w === "no") { i = norm.findIndex(n => n.split(" ")[0] === w); if (i >= 0) return i }
+  if (w.replace(/ /g, "").length <= 3) return -1
+  i = norm.findIndex(n => n.length > 0 && (n.startsWith(w) || w.startsWith(n))); if (i >= 0) return i
+  i = norm.findIndex(n => n.length > 0 && (n.includes(w) || w.includes(n))); if (i >= 0) return i
+  const toks = w.split(" ").filter(Boolean)
+  if (toks.length > 0) { i = norm.findIndex(n => n.length > 0 && toks.every(t => n.includes(t))); if (i >= 0) return i }
+  return -1
+}
+
+// ─── Human-like input behavior (ported from Tsenta's engine/human.ts) ───
+// Gaussian delays, typo simulation, and paste-vs-type decision based on content type.
+
+function gaussianRandom(mean: number, stdDev: number): number {
+  const u1 = Math.random(), u2 = Math.random()
+  return mean + Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * stdDev
+}
+
+function humanDelay(min: number, max: number): Promise<void> {
+  const mean = (min + max) / 2
+  const ms = Math.max(min, Math.min(max, gaussianRandom(mean, (max - min) / 4)))
+  return new Promise(r => setTimeout(r, ms))
+}
+
+// URLs and emails are always pasted (single input event); short text types; long text varies.
+function getInputBehavior(text: string): 'type' | 'paste' {
+  if (/^https?:\/\/|linkedin\.com|github\.com|@.*\./.test(text)) return 'paste'
+  if (text.length < 50) return 'type'
+  return Math.random() < 0.6 ? 'type' : 'paste'
+}
+
+async function humanFillField(page: any, locator: any, value: string): Promise<void> {
+  const behavior = getInputBehavior(value)
+  await locator.scrollIntoViewIfNeeded().catch(() => {})
+  if (behavior === 'paste') {
+    await locator.click()
+    await humanDelay(150, 350)
+    await locator.fill(value)
+    await humanDelay(100, 250)
+    return
+  }
+  // Type with gaussian delays and occasional typo correction
+  const TYPO_MAP: Record<string, string[]> = { a:['s','q'], e:['w','r'], i:['u','o'], o:['i','p'], s:['a','d'], t:['r','y'] }
+  await locator.click()
+  await humanDelay(80, 200)
+  // Select all + delete existing content
+  await page.keyboard.down('Meta'); await page.keyboard.press('a'); await page.keyboard.up('Meta')
+  await page.keyboard.press('Backspace')
+  for (const char of value) {
+    // 2% typo rate
+    if (Math.random() < 0.02) {
+      const typos = TYPO_MAP[char.toLowerCase()]
+      if (typos) {
+        await locator.press(typos[0])
+        await humanDelay(40, 100)
+        await locator.press('Backspace')
+        await humanDelay(30, 80)
+      }
+    }
+    await locator.press(char)
+    const delay = Math.max(30, gaussianRandom(80, 25))
+    await new Promise(r => setTimeout(r, delay))
+  }
+  await humanDelay(80, 200)
+}
+
 // ─── System prompt for the form-filling agent ───
 const FORM_FILLING_SYSTEM_PROMPT = `You are an expert job application form filler. Your job is to fill out job application forms quickly and accurately.
 
 BEHAVIOR RULES:
 - Fill ONLY required/mandatory fields (marked with *, "required", or that block submission). SKIP all optional fields.
 - For text inputs: click the field and type the value directly.
-- For dropdowns/selects: click to open, read the available options, then select the CLOSEST matching option using semantic matching. Never type into a dropdown.
-- For searchable dropdowns (location, country, etc.): click to open, type a few characters to filter, then click the matching suggestion.
+- For dropdowns/selects: click to open, read ALL available options, then select the CLOSEST matching option using semantic matching. Never type into a plain dropdown. If the exact value isn't present, pick the option whose meaning is closest (e.g. "United States of America" for "USA", "Yes, I am authorized" for "Yes").
+- For Yes/No dropdowns: match on the LEADING word only — "Yes" matches "Yes, I am authorized to work" but never matches "Norway".
+- For searchable dropdowns (location, country, etc.): click to open, type a few characters to filter, then click the matching suggestion. If the first search term yields no results, try a shorter prefix or a synonym.
+- For "How did you hear about us" / source dropdowns: always select "LinkedIn". If "LinkedIn" is not an available option, pick the closest match ("Indeed", "Job Board", "Internet", "Other").
 - For phone country code dropdowns: click the flag/code area, search for the country, select it, then type the phone number in the number field.
 - For checkboxes (agreements, acknowledgements): check them if required.
 - For radio buttons: select the most appropriate option based on the applicant data.
-- Use semantic matching — choose options that convey similar meaning even if exact wording differs.
 - NEVER re-fill a field that already has a value.
 - Dismiss any popups, cookie banners, or modals immediately.
 - After filling all required fields, click the Submit/Apply/Send Application button.
@@ -290,8 +379,9 @@ STEPS:
 
 WORKDAY QUIRKS:
 - MULTI-PAGE form. Always click "Next"/"Continue" after filling required fields on each page.
-- "Source" / "How did you hear" is often required — select "Job Board" or "Internet" from dropdown.
+- "Source" / "How did you hear" if required: select "LinkedIn" if available, otherwise "Indeed", then "Job Board", then "Internet", then "Other".
 - Uses many searchable dropdowns (country, state, degree) — always click to open first, type to filter, then select.
+- For dropdowns: read ALL available options before selecting. Choose the option whose meaning is closest to the target value, even if the wording differs (e.g. "United States of America" for "USA").
 - May require address fields — use Location: "${userData.location}".
 ${commonRules}
 ${applicantData}`
@@ -558,8 +648,6 @@ export async function fillJobApplicationWithBrowserbase(
         const resumeBuffer = Buffer.from(downloadRes.data)
         const resumeFileName = userData.resume.split("/").pop() || "resume.pdf"
 
-        // Find the actual input[type=file] element directly via Playwright (not observe)
-        // This avoids clicking buttons that open native file dialogs
         const fileInput = page.locator("input[type='file']")
         const fileInputCount = await fileInput.count()
         if (fileInputCount > 0) {
@@ -568,12 +656,23 @@ export async function fillJobApplicationWithBrowserbase(
             mimeType: "application/pdf",
             buffer: resumeBuffer,
           })
-          resumeUploaded = true
-          if (onStep) onStep({ step: 2, status: "in_progress", log: `Resume uploaded: ${resumeFileName}`, liveUrl })
-          if (applicationId) await persistLog(applicationId, "info", `Resume uploaded: ${resumeFileName}`)
+          // Verify the upload actually registered
+          const baseName = resumeFileName.replace(/\.[^.]+$/, "")
+          const verified = await (page as any).waitForFunction(
+            (name: string) => document.body.innerText.includes(name) ||
+              Array.from(document.querySelectorAll('input[type="file"]')).some((i: any) => i.files?.length > 0),
+            baseName,
+            { timeout: 5000 }
+          ).then(() => true).catch(() => false)
+          resumeUploaded = verified
+          if (resumeUploaded) {
+            if (onStep) onStep({ step: 2, status: "in_progress", log: `Resume uploaded and verified: ${resumeFileName}`, liveUrl })
+            if (applicationId) await persistLog(applicationId, "info", `Resume uploaded and verified: ${resumeFileName}`)
+          } else {
+            if (applicationId) await persistLog(applicationId, "warn", `Resume setInputFiles called but could not verify attachment: ${resumeFileName}`)
+          }
         }
       } catch (err) {
-        // Resume upload will be attempted by the agent as fallback
         console.log("[Browserbase] Direct resume upload failed, agent will handle it:", err instanceof Error ? err.message : "")
       }
     }
@@ -747,6 +846,37 @@ export async function fillJobApplicationWithBrowserbase(
         await persistLog(applicationId, "error", "Could not extract OTP via API or browser fallback.")
         if (onStep) onStep({ status: "error", log: "OTP extraction failed via both methods.", liveUrl })
         return { success: false, error: "OTP extraction failed via both API and browser methods.", steps: totalSteps, recordingUrl: liveUrl }
+      }
+    }
+
+    // ─── Post-agent validation error check (React portals: Greenhouse/Lever/Ashby) ───
+    // These portals validate in JS and don't set [required] on DOM elements, so the agent
+    // may have clicked Submit but the form rejected it. Extract the specific failing fields
+    // and run one targeted act() per field before declaring failure.
+    if (applicationId && !detectCaptcha(outputStr) && !detectOtp(outputStr)) {
+      const validationErrors = await page.evaluate(() => {
+        const clean = (s: string) => s.replace(/\s+/g, ' ').replace(/\s*\*\s*$/, '').trim().slice(0, 80)
+        const out = new Set<string>()
+        document.querySelectorAll('[aria-invalid="true"]').forEach((f: any) => {
+          const wrapper = f.closest('[class*="field"],[class*="question"],[class*="form-group"]')
+          const lab = wrapper?.querySelector('label,legend')?.textContent?.trim()
+          if (lab) out.add(clean(lab))
+        })
+        document.querySelectorAll('.error-message,.field-error,[class*="errorText"],[class*="error-text"]').forEach((e: any) => {
+          const wrapper = e.closest('[class*="field"],[class*="question"],[class*="form-group"]')
+          const lab = wrapper?.querySelector('label,legend')?.textContent?.trim()
+          if (lab) out.add(clean(lab))
+        })
+        return Array.from(out).slice(0, 6)
+      }).catch(() => [] as string[])
+
+      if (validationErrors.length > 0) {
+        await persistLog(applicationId, "warn", `Post-agent validation errors detected: ${validationErrors.join(', ')} — running targeted fix`)
+        if (onStep) onStep({ step: 4, status: "in_progress", log: `Fixing validation errors: ${validationErrors.join(', ')}`, liveUrl })
+        for (const fieldLabel of validationErrors) {
+          const fixInstruction = `The field labeled "${fieldLabel}" has a validation error. Find it, clear it, and fill it with the correct value for a job applicant. Do NOT click Submit.`
+          await agent.execute({ instruction: fixInstruction, maxSteps: 5 }).catch(() => {})
+        }
       }
     }
 

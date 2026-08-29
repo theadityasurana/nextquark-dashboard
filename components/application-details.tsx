@@ -6,10 +6,27 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
 import { useLogs, LogEntry } from "@/lib/logs-context"
-import { 
-  User as UserIcon, Heart, Shield, ExternalLink, FileText, 
-  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw, Mail
+import { RunTimeline } from "@/components/run-timeline"
+import { PreflightPanel } from "@/components/preflight-panel"
+import { AnswerBankPanel } from "@/components/answer-bank-panel"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  User as UserIcon, Heart, Shield, ExternalLink, FileText,
+  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw, Mail,
+  Activity, ShieldCheck, MessagesSquare, Loader
 } from "lucide-react"
+
+/**
+ * Panel tabs. Defaults to Run: when an operator opens an application it is nearly
+ * always to find out what the automation did, not to read the candidate's
+ * certifications — which is what the old single-scroll layout showed first.
+ */
+type DetailTab = "run" | "screening" | "answers" | "profile" | "logs"
+
+const ALL_STATUSES = [
+  'pending', 'processing', 'completed', 'failed',
+  'awaiting_otp', 'awaiting_captcha', 'blocked',
+] as const
 
 interface ApplicationDetailsProps {
   application: LiveApplicationQueue
@@ -19,6 +36,9 @@ interface ApplicationDetailsProps {
   isStreaming?: boolean
   isSendingRejection?: boolean
   recordingUrl?: string | null
+  /** False when all 3 concurrent slots are taken — disables Start with a clear reason */
+  canStart?: boolean
+  onStatusChange?: (id: string, status: LiveApplicationQueue['status']) => void
 }
 
 export function ApplicationDetails({ 
@@ -28,11 +48,15 @@ export function ApplicationDetails({
   onSendRejection,
   isStreaming = false,
   isSendingRejection = false,
-  recordingUrl = null
+  recordingUrl = null,
+  canStart = true,
+  onStatusChange,
 }: ApplicationDetailsProps) {
   const fullName = `${application.first_name} ${application.last_name}`
   const { logs } = useLogs()
   const [dbLogs, setDbLogs] = useState<LogEntry[]>([])
+  const [tab, setTab] = useState<DetailTab>("run")
+  const [savingStatus, setSavingStatus] = useState(false)
   
   // Fetch logs from database
   useEffect(() => {
@@ -68,13 +92,35 @@ export function ApplicationDetails({
         <div className="flex flex-col gap-2 mb-3">
           <div className="flex items-start justify-between gap-2">
             <h2 className="text-base sm:text-lg font-semibold">Application Details</h2>
-            <Badge variant={
-              application.status === 'completed' ? 'default' : 
-              application.status === 'processing' ? 'secondary' : 
-              application.status === 'failed' ? 'destructive' : 'outline'
-            }>
-              {application.status}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+            {savingStatus && <Loader className="h-3 w-3 animate-spin text-muted-foreground" />}
+            <Select
+              value={application.status}
+              onValueChange={async (val) => {
+                const newStatus = val as LiveApplicationQueue['status']
+                setSavingStatus(true)
+                try {
+                  await fetch('/api/live-queue', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: application.id, status: newStatus }),
+                  })
+                  onStatusChange?.(application.id, newStatus)
+                } finally {
+                  setSavingStatus(false)
+                }
+              }}
+            >
+              <SelectTrigger className="h-7 text-xs w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ALL_STATUSES.map(s => (
+                  <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           </div>
           <Badge variant="outline" className="font-mono text-[10px] w-fit truncate max-w-full">{application.id}</Badge>
         </div>
@@ -85,9 +131,10 @@ export function ApplicationDetails({
             size="sm"
             className="text-xs gap-1.5"
             onClick={onStartApplication}
-            disabled={isStreaming}
+            disabled={isStreaming || !canStart}
+            title={!canStart ? 'All 3 browser slots are in use. Wait for one to finish.' : undefined}
           >
-            {isStreaming ? 'Processing...' : 'Start Application'}
+            {isStreaming ? 'Running…' : !canStart ? 'Slots full (3/3)' : 'Start Application'}
           </Button>
           <Button
             size="sm"
@@ -106,10 +153,79 @@ export function ApplicationDetails({
             </Badge>
           )}
         </div>
+
+        {/* Tabs — Run first, because that's what the panel is usually opened for. */}
+        <div className="flex items-center gap-1 mt-4 -mb-4 border-b border-transparent" role="tablist">
+          {([
+            { id: "run" as const, label: "Run", icon: Activity },
+            { id: "screening" as const, label: "Screening", icon: ShieldCheck },
+            { id: "answers" as const, label: "Answers", icon: MessagesSquare },
+            { id: "profile" as const, label: "Profile", icon: UserIcon },
+            { id: "logs" as const, label: "Logs", icon: Terminal },
+          ]).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                tab === id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+              {id === "logs" && uniqueLogs.length > 0 && (
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {uniqueLogs.length}
+                </span>
+              )}
+              {/* A blocked application is the one case where Screening, not Run,
+                  holds the answer — mark the tab so it isn't missed. */}
+              {id === "screening" && application.knockout_blocked && (
+                <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-label="blocked" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* Job link — context for every tab, so it sits outside the panels. */}
+      <div className="px-4 sm:px-6 py-4 border-b border-border">
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Job Application Link</h4>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-semibold">{application.job_title} at {application.company_name}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a href={application.job_url} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="text-xs gap-1.5">
+                  <ExternalLink className="h-3 w-3" /> Application Portal
+                </Button>
+              </a>
+              <a href={application.job_url} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="text-xs gap-1.5">
+                  <Globe className="h-3 w-3" /> Job Listing
+                </Button>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Run tab ── */}
+      {tab === "run" && (
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
+          <RunTimeline
+            timeline={application.run_timeline}
+            confirmationId={application.confirmation_id}
+            confirmationLabel={application.confirmation_label}
+          />
+        </div>
+      )}
+
       {/* Task Recording Viewer */}
-      {(recordingUrl || application.recording_url) && (
+      {tab === "run" && (recordingUrl || application.recording_url) && (
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -131,7 +247,7 @@ export function ApplicationDetails({
       )}
       
       {/* Processing indicator */}
-      {isStreaming && !recordingUrl && !application.recording_url && (
+      {tab === "run" && isStreaming && !recordingUrl && !application.recording_url && (
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
             <p className="text-xs text-yellow-600">Task is running... Recording will be available once the task completes. Check logs below for progress.</p>
@@ -140,7 +256,7 @@ export function ApplicationDetails({
       )}
 
       {/* Retry Info */}
-      {application.attempt_count > 0 && application.last_error && (
+      {tab === "run" && application.attempt_count > 0 && application.last_error && (
         <div className="px-6 py-4 border-b border-border">
           <div className={`rounded-lg border p-4 ${
             application.status === 'failed' 
@@ -166,50 +282,66 @@ export function ApplicationDetails({
         </div>
       )}
 
-      {/* Job Details */}
-      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-border">
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Job Application Link</h4>
-          <div className="flex flex-col gap-3">
-            <p className="text-sm font-semibold">{application.job_title} at {application.company_name}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <a href={application.job_url} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" variant="outline" className="text-xs gap-1.5">
-                  <ExternalLink className="h-3 w-3" /> Application Portal
-                </Button>
-              </a>
-              <a href={application.job_url} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" variant="outline" className="text-xs gap-1.5">
-                  <Globe className="h-3 w-3" /> Job Listing
-                </Button>
-              </a>
-            </div>
-          </div>
+      {/* ── Screening tab ── */}
+      {tab === "screening" && (
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
+          <PreflightPanel
+            checks={application.knockout_checks}
+            blocked={application.knockout_blocked}
+            blockReason={application.knockout_reason || application.last_error}
+            coveragePercent={application.coverage_percent}
+            blockingMissing={application.coverage_blocking_missing}
+            portalName={application.portal_name}
+            portalConfidence={application.portal_confidence}
+            screenedAt={application.screened_at}
+          />
         </div>
+      )}
 
-        {/* Logs Section */}
-        {uniqueLogs.length > 0 && (
-          <div className="rounded-lg border border-border bg-background p-4 mt-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Terminal className="h-3 w-3" /> Application Logs
-            </h4>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {uniqueLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-2 text-xs font-mono">
-                  <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
-                  <Badge variant={log.level === "error" ? "destructive" : log.level === "warn" ? "secondary" : "outline"} className="text-[9px] h-4 shrink-0">
-                    {log.level}
-                  </Badge>
-                  <span className="text-muted-foreground">{log.message}</span>
-                </div>
-              ))}
+      {/* ── Answers tab ── */}
+      {tab === "answers" && (
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
+          <AnswerBankPanel
+            userId={application.user_id}
+            unanswered={application.unanswered_questions}
+            needsHuman={application.questions_needing_human}
+            coveragePercent={application.answer_coverage_percent}
+            llmAnsweredCount={application.llm_answered_count}
+          />
+        </div>
+      )}
+
+      {/* ── Logs tab ── */}
+      {tab === "logs" && (
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
+          {uniqueLogs.length > 0 ? (
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Terminal className="h-3 w-3" /> Application Logs
+              </h4>
+              {/* Taller than the old inline box — this tab is now the only thing on screen. */}
+              <div className="space-y-2 max-h-[32rem] overflow-y-auto">
+                {uniqueLogs.map((log) => (
+                  <div key={log.id} className="flex items-start gap-2 text-xs font-mono">
+                    <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
+                    <Badge variant={log.level === "error" ? "destructive" : log.level === "warn" ? "secondary" : "outline"} className="text-[9px] h-4 shrink-0">
+                      {log.level}
+                    </Badge>
+                    <span className="text-muted-foreground break-words">{log.message}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center">
+              <p className="text-xs text-muted-foreground">No logs recorded for this application yet.</p>
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Full Profile */}
-      <div className="px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-5">
+      {/* ── Profile tab ── */}
+      <div className={`px-4 sm:px-6 py-4 sm:py-5 flex-col gap-5 ${tab === "profile" ? "flex" : "hidden"}`}>
         {/* User Header */}
         <div className="rounded-lg border border-border p-5 bg-foreground/5">
           <div className="text-center mb-4 pb-3 border-b border-border">
@@ -269,7 +401,7 @@ export function ApplicationDetails({
           {/* Work Experience */}
           <div className="mb-4">
             <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
-            {application.experience.map((exp) => (
+            {(application.experience ?? []).map((exp) => (
               <div key={exp.id} className="mb-3">
                 <div className="flex justify-between">
                   <span className="text-xs font-semibold">{exp.title} - {exp.company}</span>
@@ -297,7 +429,7 @@ export function ApplicationDetails({
           {/* Education */}
           <div className="mb-4">
             <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Education</h4>
-            {application.education.map((edu) => (
+            {(application.education ?? []).map((edu) => (
               <div key={edu.id} className="mb-2">
                 <div className="flex justify-between">
                   <span className="text-xs font-semibold">{edu.degree} in {edu.field} - {edu.institution}</span>
@@ -310,11 +442,11 @@ export function ApplicationDetails({
           <Separator className="my-3" />
 
           {/* Certifications */}
-          {application.certifications.length > 0 && (
+          {(application.certifications ?? []).length > 0 && (
             <>
               <div className="mb-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Certifications</h4>
-                {application.certifications.map((cert) => (
+                {(application.certifications ?? []).map((cert) => (
                   <div key={cert.id} className="mb-3 rounded-lg bg-accent/30 p-3">
                     <div className="flex items-start justify-between">
                       <div>
@@ -344,11 +476,11 @@ export function ApplicationDetails({
           )}
 
           {/* Achievements */}
-          {application.achievements.length > 0 && (
+          {(application.achievements ?? []).length > 0 && (
             <>
               <div className="mb-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Achievements</h4>
-                {application.achievements.map((ach) => (
+                {(application.achievements ?? []).map((ach) => (
                   <div key={ach.id} className="mb-3 rounded-lg bg-accent/30 p-3">
                     <div className="flex items-start justify-between">
                       <span className="text-xs font-semibold">{ach.title}</span>
@@ -370,7 +502,7 @@ export function ApplicationDetails({
               <div>
                 <span className="text-[10px] text-muted-foreground">Job Types:</span>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {application.job_preferences.map((pref) => (
+                  {(application.job_preferences ?? []).map((pref) => (
                     <Badge key={pref} variant="secondary" className="text-[9px] h-4">{pref}</Badge>
                   ))}
                 </div>
@@ -378,7 +510,7 @@ export function ApplicationDetails({
               <div>
                 <span className="text-[10px] text-muted-foreground">Work Mode:</span>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {application.work_mode_preferences.map((mode) => (
+                  {(application.work_mode_preferences ?? []).map((mode) => (
                     <Badge key={mode} variant="secondary" className="text-[9px] h-4">{mode}</Badge>
                   ))}
                 </div>
@@ -395,7 +527,7 @@ export function ApplicationDetails({
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">
                 {application.salary_currency} {application.salary_min ? `${application.salary_min.toLocaleString()} - ` : ''}
-                {application.salary_max.toLocaleString()}
+                {application.salary_max?.toLocaleString() ?? 'N/A'}
               </span>
             </div>
           </div>
@@ -406,7 +538,7 @@ export function ApplicationDetails({
           <div className="mb-4">
             <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Skills</h4>
             <div className="flex flex-wrap gap-1.5">
-              {(application.top_skills.length > 0 ? application.top_skills : application.skills).map((skill) => (
+              {((application.top_skills?.length > 0 ? application.top_skills : application.skills) ?? []).map((skill) => (
                 <Badge key={skill} variant="secondary" className="text-[10px] bg-accent text-accent-foreground">{skill}</Badge>
               ))}
             </div>

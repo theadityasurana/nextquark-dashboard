@@ -1,105 +1,123 @@
-import { createClient } from "@supabase/supabase-js"
-import { NextRequest, NextResponse } from "next/server"
-import { after } from "next/server"
+import { createAdminClient } from '@/lib/supabase/admin'
+import { syncCompanyJobs } from '@/lib/ats-sync'
+import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+// How many companies to process per cron tick.
+// Each sync hits an external ATS API — keep this low enough that the total
+// wall-clock time stays well under Vercel's 300s function timeout.
+const BATCH_SIZE = 5
+
+// Per-company timeout: if one ATS API hangs, it shouldn't block the whole batch.
+const COMPANY_TIMEOUT_MS = 45_000 // 45 seconds per company
+
+async function syncWithTimeout(
+  companyId: string,
+  atsType: string,
+  atsCompanyId: string
+): Promise<{ ok: true; result: Awaited<ReturnType<typeof syncCompanyJobs>> } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve({ ok: false, error: `Timed out after ${COMPANY_TIMEOUT_MS / 1000}s` })
+    }, COMPANY_TIMEOUT_MS)
+
+    syncCompanyJobs(companyId, atsType, atsCompanyId)
+      .then(result => { clearTimeout(timer); resolve({ ok: true, result }) })
+      .catch(err => { clearTimeout(timer); resolve({ ok: false, error: err?.message || String(err) }) })
+  })
 }
 
-async function runSync(entryId: string, companyId: string, origin: string) {
-  const supabase = getAdminClient()
+async function runSyncBatch(entries: Array<{ id: string; company_id: string }>) {
+  const supabase = createAdminClient()
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id, name, ats_type, ats_company_id")
-    .eq("id", companyId)
-    .single()
+  // Fetch all company configs in one query instead of N queries inside the loop
+  const companyIds = entries.map(e => e.company_id)
+  const { data: companies } = await supabase
+    .from('companies')
+    .select('id, name, ats_type, ats_company_id')
+    .in('id', companyIds)
 
-  if (!company?.ats_type || !company?.ats_company_id) {
-    await supabase.from("job_sync_queue").update({ status: "failed", synced_at: new Date().toISOString(), result: { error: "Missing ATS config" } }).eq("id", entryId)
-    await supabase.from("companies").update({ sync_status: "failed" }).eq("id", companyId)
-    return
-  }
+  const companyMap = new Map((companies || []).map(c => [c.id, c]))
 
-  try {
-    const previewRes = await fetch(`${origin}/api/ats-sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId: company.id, atsType: company.ats_type, atsCompanyId: company.ats_company_id, preview: true }),
-    })
-    const previewData = await previewRes.json()
-    if (previewData.error) throw new Error(previewData.error)
+  // Run all companies in parallel — each has its own timeout so one slow ATS
+  // can't block the others or cause the whole batch to time out on Vercel.
+  await Promise.allSettled(entries.map(async (entry) => {
+    const company = companyMap.get(entry.company_id)
 
-    const liveJobUrls: string[] = (previewData.jobs || []).map((j: any) => j.jobUrl).filter(Boolean)
-
-    const syncRes = await fetch(`${origin}/api/ats-sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId: company.id, atsType: company.ats_type, atsCompanyId: company.ats_company_id }),
-    })
-    const syncData = await syncRes.json()
-    if (syncData.error) throw new Error(syncData.error)
-
-    let deletedCount = 0
-    if (liveJobUrls.length > 0) {
-      const liveUrlSet = new Set(liveJobUrls)
-      const { data: dbJobs } = await supabase
-        .from("jobs")
-        .select("id, job_url")
-        .eq("company_id", company.id)
-        .not("job_url", "is", null)
-        .neq("job_url", "")
-
-      const staleIds = (dbJobs || []).filter((j) => j.job_url && !liveUrlSet.has(j.job_url)).map((j) => j.id)
-      if (staleIds.length > 0) {
-        await supabase.from("jobs").delete().in("id", staleIds)
-        deletedCount = staleIds.length
-      }
+    if (!company?.ats_type || !company?.ats_company_id) {
+      await supabase
+        .from('job_sync_queue')
+        .update({ status: 'failed', synced_at: new Date().toISOString(), result: { error: 'Missing ATS config' } })
+        .eq('id', entry.id)
+      await supabase.from('companies').update({ sync_status: 'failed' }).eq('id', entry.company_id)
+      return
     }
 
-    const result = { added: syncData.addedCount || 0, updated: syncData.updatedCount || 0, deleted: deletedCount, totalLive: liveJobUrls.length }
+    const outcome = await syncWithTimeout(company.id, company.ats_type, company.ats_company_id)
 
-    await supabase.from("job_sync_queue").update({ status: "done", synced_at: new Date().toISOString(), result }).eq("id", entryId)
-    await supabase.from("companies").update({ sync_status: "success", last_synced_at: new Date().toISOString() }).eq("id", company.id)
-  } catch (err: any) {
-    console.error(`Sync failed for company ${companyId}:`, err)
-    await supabase.from("job_sync_queue").update({ status: "failed", synced_at: new Date().toISOString(), result: { error: err.message } }).eq("id", entryId)
-    await supabase.from("companies").update({ sync_status: "failed", last_synced_at: new Date().toISOString() }).eq("id", companyId)
-  }
+    if (outcome.ok) {
+      await supabase
+        .from('job_sync_queue')
+        .update({ status: 'done', synced_at: new Date().toISOString(), result: outcome.result })
+        .eq('id', entry.id)
+      await supabase
+        .from('companies')
+        .update({ sync_status: 'success', last_synced_at: new Date().toISOString() })
+        .eq('id', company.id)
+    } else {
+      console.error(`[process-sync] failed for ${company.name}: ${outcome.error}`)
+      await supabase
+        .from('job_sync_queue')
+        .update({ status: 'failed', synced_at: new Date().toISOString(), result: { error: outcome.error } })
+        .eq('id', entry.id)
+      await supabase
+        .from('companies')
+        .update({ sync_status: 'failed', last_synced_at: new Date().toISOString() })
+        .eq('id', company.id)
+    }
+  }))
 }
 
-// Called every 30 min by pg_cron — picks the next due pending company and fully syncs it
+// Called every 30 min by Vercel cron (GET) or pg_cron via pg_net (POST)
+export async function GET(request: NextRequest) {
+  return handler(request)
+}
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization")
+  return handler(request)
+}
+
+async function handler(request: NextRequest) {
+  const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getAdminClient()
-  const origin = new URL(request.url).origin
+  const supabase = createAdminClient()
 
-  const { data: entry, error: fetchError } = await supabase
-    .from("job_sync_queue")
-    .select("id, company_id")
-    .eq("status", "pending")
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(1)
-    .single()
+  const { data: entries, error } = await supabase
+    .from('job_sync_queue')
+    .select('id, company_id')
+    .eq('status', 'pending')
+    .lte('scheduled_at', new Date().toISOString())
+    .order('scheduled_at', { ascending: true })
+    .limit(BATCH_SIZE)
 
-  if (fetchError || !entry) {
-    return NextResponse.json({ message: "No pending syncs due" })
+  if (error || !entries || entries.length === 0) {
+    return NextResponse.json({ message: 'No pending syncs due' })
   }
 
-  // Mark as running before responding
-  await supabase.from("job_sync_queue").update({ status: "running" }).eq("id", entry.id)
-  await supabase.from("companies").update({ sync_status: "running" }).eq("id", entry.company_id)
+  const entryIds  = entries.map(e => e.id)
+  const companyIds = entries.map(e => e.company_id)
 
-  // Respond immediately so pg_net doesn't time out, run sync in background
-  after(runSync(entry.id, entry.company_id, origin))
+  // Mark all as running atomically before responding
+  await Promise.all([
+    supabase.from('job_sync_queue').update({ status: 'running' }).in('id', entryIds),
+    supabase.from('companies').update({ sync_status: 'running' }).in('id', companyIds),
+  ])
 
-  return NextResponse.json({ message: "Sync started", entryId: entry.id })
+  // Respond immediately so pg_net / Vercel cron doesn't time out waiting.
+  // The actual sync runs in the background via after().
+  after(runSyncBatch(entries))
+
+  return NextResponse.json({ message: `Sync started for ${entries.length} companies`, entryIds })
 }

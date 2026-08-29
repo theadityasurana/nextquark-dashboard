@@ -70,15 +70,16 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
   }, [])
 
   const toggle = async () => {
-    const newProvider = provider === "browser_use" ? "browserbase" : "browser_use"
+    const order = ["browser_use", "browserbase", "kernel"]
+    const next = order[(order.indexOf(provider) + 1) % order.length]
     setSwitching(true)
     try {
       await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ automationProvider: newProvider }),
+        body: JSON.stringify({ automationProvider: next }),
       })
-      setProvider(newProvider)
+      setProvider(next)
     } catch {} finally {
       setSwitching(false)
     }
@@ -90,7 +91,7 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
         onClick={toggle}
         disabled={switching}
         className="flex items-center justify-center w-full px-2 py-2 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-        title={`Provider: ${provider === "browser_use" ? "Browser Use" : "Browserbase"} (click to switch)`}
+        title={`Provider: ${provider === "browser_use" ? "Browser Use" : provider === "browserbase" ? "Browserbase" : "Kernel"} (click to switch)`}
       >
         <Globe className="h-4 w-4" />
       </button>
@@ -105,11 +106,13 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
     >
       <Globe className="h-4 w-4 shrink-0" />
       <span className="flex-1 text-left truncate">
-        {provider === "browser_use" ? "Browser Use" : "Browserbase"}
+        {provider === "browser_use" ? "Browser Use" : provider === "browserbase" ? "Browserbase" : "Kernel"}
       </span>
       <span className={cn(
         "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
-        provider === "browser_use" ? "bg-blue-500/15 text-blue-500" : "bg-emerald-500/15 text-emerald-500"
+        provider === "browser_use" ? "bg-blue-500/15 text-blue-500" :
+        provider === "browserbase" ? "bg-emerald-500/15 text-emerald-500" :
+        "bg-violet-500/15 text-violet-500"
       )}>
         {switching ? "..." : "ON"}
       </span>
@@ -231,6 +234,9 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
 
   return (
     <div className="relative flex h-[100dvh] overflow-hidden bg-background" suppressHydrationWarning>
@@ -260,19 +266,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <header className="relative flex h-14 items-center justify-between border-b border-border/60 px-3 sm:px-4 shrink-0 glass safe-top">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Mobile menu */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden h-9 w-9 -ml-1.5">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-72 max-w-[85vw] p-0">
-                <VisuallyHidden>
-                  <SheetTitle>Navigation Menu</SheetTitle>
-                </VisuallyHidden>
-                <SidebarContent collapsed={false} />
-              </SheetContent>
-            </Sheet>
+            {mounted && (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden h-9 w-9 -ml-1.5">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-72 max-w-[85vw] p-0">
+                  <VisuallyHidden>
+                    <SheetTitle>Navigation Menu</SheetTitle>
+                  </VisuallyHidden>
+                  <SidebarContent collapsed={false} />
+                </SheetContent>
+              </Sheet>
+            )}
 
             {/* Mobile title (visible only on small screens, replaces stats strip) */}
             <div className="flex items-center gap-2 md:hidden min-w-0">

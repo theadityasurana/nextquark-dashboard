@@ -1,5 +1,5 @@
-import { QueueScreen } from "@/components/screens/queue-screen"
+import QueueClientWrapper from "./queue-client-wrapper"
 
 export default function QueuePage() {
-  return <QueueScreen />
+  return <QueueClientWrapper />
 }

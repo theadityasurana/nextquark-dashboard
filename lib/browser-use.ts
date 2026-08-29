@@ -10,6 +10,22 @@ export interface AutomationResponse {
   steps?: number
   recordingUrl?: string | null
   taskId?: string
+  /**
+   * Classification of a failure, when the provider produced one.
+   *
+   * Two things depend on it and neither could be decided from an error string:
+   * whether the application is worth retrying at all, and whether the failure
+   * counts against the portal's circuit breaker.
+   */
+  failure?: {
+    failureClass: string
+    rootCause: string
+    suggestedAction: string
+    /** Terminal for this posting — must not be re-queued. */
+    permanent: boolean
+    /** Evidence the portal itself is broken. Only these move the breaker. */
+    portalFault: boolean
+  }
 }
 
 export interface StreamCallback {

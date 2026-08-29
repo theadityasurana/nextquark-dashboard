@@ -17,9 +17,9 @@ import { LOCATIONS, EDUCATION_QUALIFICATIONS, WORK_MODES, WORK_AUTHORIZATION } f
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Search, Plus, Upload, ChevronRight, ExternalLink, Copy, Edit2, Pause, Trash2,
-  Link, Globe, Linkedin, Briefcase, MapPin, DollarSign, Clock, GraduationCap,
-  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Zap, Loader, ChevronsUpDown, RefreshCw, Building2
+  Search, Plus, ChevronRight, ExternalLink, Copy, Edit2, Pause, Trash2,
+  Link, Globe, Linkedin, Briefcase, MapPin, DollarSign, GraduationCap,
+  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Loader, RefreshCw, Building2
 } from "lucide-react"
 
 export function JobsScreen() {
@@ -27,15 +27,9 @@ export function JobsScreen() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
-  const [showBatchForm, setShowBatchForm] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, unknown>>({})
-  const [batchCompanyId, setBatchCompanyId] = useState("")
-  const [batchPortalUrl, setBatchPortalUrl] = useState("")
-  const [isScraping, setIsScraping] = useState(false)
-  const [scrapedJobs, setScrapedJobs] = useState<any[]>([])
-  const [currentJobIndex, setCurrentJobIndex] = useState(0)
 
   // ATS preview state
   const [showAtsPreview, setShowAtsPreview] = useState(false)
@@ -277,98 +271,91 @@ export function JobsScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Jobs</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
+
+      {/* ── Header ── */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Jobs</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
+          </div>
+          <Badge variant="secondary" className="shrink-0 mt-1">{totalJobs} total</Badge>
         </div>
-        <div className="-mx-1 overflow-x-auto scrollbar-hide">
-        <div className="flex items-center gap-2 px-1 w-max">
-          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{totalJobs} total</Badge>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
-            setAtsPreviewLoading(true)
-            try {
-              const res = await fetch("/api/ats-sync-all", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ preview: true }),
-              })
-              const data = await res.json()
-              if (data.error) {
-                alert(`Error: ${data.error}`)
-              } else {
-                setAtsPreviewJobs(data.jobs || [])
-                const allUrls = new Set((data.jobs || []).map((j: any) => j.jobUrl))
-                setAtsPreviewSelected(allUrls)
-                setShowAtsPreview(true)
-              }
-            } catch (err) {
-              alert("Failed to fetch ATS jobs")
-            } finally {
-              setAtsPreviewLoading(false)
-            }
-          }} disabled={atsPreviewLoading}>
-            <Zap className="h-3 w-3" /> {atsPreviewLoading ? "Fetching..." : "Sync All ATS"}
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={async () => {
-            setCleanupLoading(true)
-            try {
-              const res = await fetch("/api/cleanup-jobs", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ preview: true }),
-              })
-              const data = await res.json()
-              if (data.error) {
-                alert(`Error: ${data.error}`)
-              } else {
-                setStaleJobs(data.staleJobs || [])
-                setShowCleanupPreview(true)
-              }
-            } catch (err) {
-              alert("Failed to check for stale jobs")
-            } finally {
-              setCleanupLoading(false)
-            }
-          }} disabled={cleanupLoading}>
-            <Trash2 className="h-3 w-3" /> {cleanupLoading ? "Checking..." : "Delete Non-Existing"}
-          </Button>
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={async () => {
-            setIsSaving(true)
-            try {
-              const res = await fetch("/api/sync-jobs", { method: "POST" })
-              const data = await res.json()
-              alert(`Synced ${data.addedCount || 0} new jobs from ${data.companiesChecked || 0} companies`)
-            } catch (err) {
-              alert("Failed to sync jobs")
-            } finally {
-              setIsSaving(false)
-            }
-          }} disabled={isSaving}>
-            <Zap className="h-3 w-3" /> {isSaving ? "Syncing..." : "Sync Latest Jobs"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 text-xs"
-            onClick={() => setShowBatchForm(true)}
-          >
-            <Zap className="h-3 w-3" /> Add Job Batch
-          </Button>
-          <Button
-            size="sm"
-            className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => setShowAddForm(true)}
-          >
-            <Plus className="h-3 w-3" /> Add Job
-          </Button>
-        </div>
+
+        {/* ── Action bar — wraps naturally on small screens ── */}
+        <div className="flex flex-wrap gap-2">
+
+          {/* Sync group */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs"
+              disabled={atsPreviewLoading}
+              onClick={async () => {
+                setAtsPreviewLoading(true)
+                try {
+                  const res = await fetch("/api/ats-sync-all", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ preview: true }),
+                  })
+                  const data = await res.json()
+                  if (data.error) { alert(`Error: ${data.error}`) }
+                  else {
+                    setAtsPreviewJobs(data.jobs || [])
+                    setAtsPreviewSelected(new Set((data.jobs || []).map((j: any) => j.jobUrl)))
+                    setShowAtsPreview(true)
+                  }
+                } catch { alert("Failed to fetch ATS jobs") }
+                finally { setAtsPreviewLoading(false) }
+              }}
+            >
+              {atsPreviewLoading ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {atsPreviewLoading ? "Fetching…" : "Sync All ATS"}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+              disabled={cleanupLoading}
+              onClick={async () => {
+                setCleanupLoading(true)
+                try {
+                  const res = await fetch("/api/cleanup-jobs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ preview: true }),
+                  })
+                  const data = await res.json()
+                  if (data.error) { alert(`Error: ${data.error}`) }
+                  else { setStaleJobs(data.staleJobs || []); setShowCleanupPreview(true) }
+                } catch { alert("Failed to check for stale jobs") }
+                finally { setCleanupLoading(false) }
+              }}
+            >
+              {cleanupLoading ? <Loader className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              {cleanupLoading ? "Checking…" : "Delete Non-Existing"}
+            </Button>
+          </div>
+
+          {/* Add group */}
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            <Button
+              size="sm"
+              className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => setShowAddForm(true)}
+            >
+              <Plus className="h-3 w-3" /> Add Job
+            </Button>
+          </div>
         </div>
       </div>
 
       <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search jobs..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <Input placeholder="Search by title, company or ID…" className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>
 
       {/* Jobs Table */}
@@ -1361,7 +1348,7 @@ export function JobsScreen() {
         <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
-              <Zap className="h-5 w-5 text-primary" />
+              <RefreshCw className="h-5 w-5 text-primary" />
               ATS Sync Preview
             </DialogTitle>
           </DialogHeader>
@@ -1640,259 +1627,6 @@ export function JobsScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ========== ADD JOB BATCH DIALOG ========== */}
-      <Dialog open={showBatchForm} onOpenChange={(open) => { if (!open) { setShowBatchForm(false); setBatchCompanyId(""); setBatchPortalUrl(""); setScrapedJobs([]); setCurrentJobIndex(0) } }}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Zap className="h-5 w-5 text-primary" />
-              Add Job Batch
-            </DialogTitle>
-          </DialogHeader>
-
-          {scrapedJobs.length === 0 ? (
-            <div className="flex flex-col gap-5 mt-2">
-              {/* Company Selection */}
-              <div className="flex flex-col gap-2">
-                <Label className="text-sm font-medium">Company <span className="text-destructive">*</span></Label>
-                <Select value={batchCompanyId} onValueChange={setBatchCompanyId}>
-                  <SelectTrigger className="bg-accent/30 border-border">
-                    <SelectValue placeholder="Select a company" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        <span className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded bg-accent text-[9px] font-bold text-accent-foreground shrink-0">
-                            {company.logoInitial}
-                          </span>
-                          {company.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Portal URL */}
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="batch-portal-url" className="text-sm font-medium">
-                  Career Portal URL <span className="text-destructive">*</span>
-                </Label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="batch-portal-url"
-                    placeholder="e.g. https://careers.company.com/jobs"
-                    className="pl-9 bg-accent/30 border-border"
-                    value={batchPortalUrl}
-                    onChange={(e) => setBatchPortalUrl(e.target.value)}
-                  />
-                </div>
-                <p className="text-[11px] text-muted-foreground">The main careers page URL where all jobs are listed</p>
-              </div>
-
-              <DialogFooter className="mt-4 gap-2">
-                <Button variant="outline" onClick={() => { setShowBatchForm(false); setBatchCompanyId(""); setBatchPortalUrl("") }} className="text-xs">
-                  Cancel
-                </Button>
-                <Button
-                  className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
-                  onClick={async () => {
-                    if (!batchCompanyId || !batchPortalUrl || isScraping) return
-                    setIsScraping(true)
-                    try {
-                      console.log("[Frontend] Starting scrape for:", batchPortalUrl)
-                      const response = await fetch("/api/scraper", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ portalUrl: batchPortalUrl }),
-                      })
-                      
-                      console.log("[Frontend] Response status:", response.status)
-                      const data = await response.json()
-                      console.log("[Frontend] Response data:", data)
-                      
-                      if (data.success && data.jobs) {
-                        if (data.jobs.length > 0) {
-                          console.log("[Frontend] Found", data.jobs.length, "jobs")
-                          setScrapedJobs(data.jobs)
-                          setCurrentJobIndex(0)
-                        } else {
-                          console.log("[Frontend] No jobs found in response")
-                          alert("No jobs found. The scraper completed but didn't extract any job listings. Check the console logs for details.")
-                        }
-                      } else {
-                        console.error("[Frontend] Error in response:", data.error)
-                        alert(data.error || "Failed to scrape jobs. Check the console logs for details.")
-                      }
-                    } catch (error) {
-                      console.error("[Frontend] Scraping error:", error)
-                      alert("Failed to fetch jobs. Please check the URL and console logs.")
-                    } finally {
-                      setIsScraping(false)
-                    }
-                  }}
-                  disabled={!batchCompanyId || !batchPortalUrl || isScraping}
-                >
-                  {isScraping ? (
-                    <>
-                      <Loader className="h-3 w-3 animate-spin" /> Fetching Jobs...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-3 w-3" /> Fetch & Preview
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-5 mt-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold">Found {scrapedJobs.length} Jobs</h3>
-                  <p className="text-xs text-muted-foreground">Reviewing job {currentJobIndex + 1} of {scrapedJobs.length}</p>
-                </div>
-              </div>
-
-              {scrapedJobs[currentJobIndex] && (
-                <div className="flex flex-col gap-4 p-4 rounded-lg bg-accent/20 border border-border">
-                  <div>
-                    <h4 className="text-sm font-semibold mb-1">{scrapedJobs[currentJobIndex].title}</h4>
-                    <p className="text-xs text-muted-foreground">{scrapedJobs[currentJobIndex].location} • {scrapedJobs[currentJobIndex].type}</p>
-                  </div>
-
-                  {scrapedJobs[currentJobIndex].salaryMin && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Salary: </span>
-                      <span className="font-medium">${scrapedJobs[currentJobIndex].salaryMin} - ${scrapedJobs[currentJobIndex].salaryMax}</span>
-                    </div>
-                  )}
-
-                  {scrapedJobs[currentJobIndex].description && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Description:</p>
-                      <p className="text-xs line-clamp-3">{scrapedJobs[currentJobIndex].description}</p>
-                    </div>
-                  )}
-
-                  {scrapedJobs[currentJobIndex].requirements.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Requirements:</p>
-                      <ul className="text-xs space-y-0.5">
-                        {scrapedJobs[currentJobIndex].requirements.slice(0, 3).map((req, i) => (
-                          <li key={i} className="text-muted-foreground">• {req}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 justify-between">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs"
-                  onClick={() => setCurrentJobIndex(Math.max(0, currentJobIndex - 1))}
-                  disabled={currentJobIndex === 0}
-                >
-                  Previous
-                </Button>
-                <div className="flex gap-1">
-                  {scrapedJobs.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentJobIndex(i)}
-                      className={`h-2 w-2 rounded-full transition-colors ${
-                        i === currentJobIndex ? "bg-primary" : "bg-muted"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs"
-                  onClick={() => setCurrentJobIndex(Math.min(scrapedJobs.length - 1, currentJobIndex + 1))}
-                  disabled={currentJobIndex === scrapedJobs.length - 1}
-                >
-                  Next
-                </Button>
-              </div>
-
-              <DialogFooter className="mt-4 gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => { setShowBatchForm(false); setBatchCompanyId(""); setBatchPortalUrl(""); setScrapedJobs([]); setCurrentJobIndex(0) }}
-                  className="text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
-                  onClick={async () => {
-                    if (isSaving) return
-                    setIsSaving(true)
-                    const company = companies.find((c) => c.id === batchCompanyId)
-                    let successCount = 0
-
-                    for (const job of scrapedJobs) {
-                      const salaryRange = job.salaryMin && job.salaryMax
-                        ? `$${Number(job.salaryMin).toLocaleString()} - $${Number(job.salaryMax).toLocaleString()}`
-                        : job.salaryMin
-                          ? `$${Number(job.salaryMin).toLocaleString()}+`
-                          : "Competitive"
-
-                      const result = await addJob({
-                        company_id: batchCompanyId,
-                        company_name: company?.name || "Custom Company",
-                        company_initial: company?.logoInitial || "C",
-                        title: job.title,
-                        location: job.location || "Remote",
-                        type: job.type || "Full-time",
-                        salary_range: salaryRange,
-                        experience: job.experience || "Not specified",
-                        portal_url: batchPortalUrl,
-                        job_url: job.jobUrl || "",
-                        company_website: company?.website || null,
-                        company_linkedin: company?.linkedinUrl || null,
-                        description: job.description || "",
-                        requirements: job.requirements,
-                        skills: job.skills,
-                        benefits: job.benefits,
-                        detailed_requirements: job.detailedRequirements,
-                      })
-
-                      if (result) successCount++
-                    }
-
-                    setIsSaving(false)
-                    alert(`Successfully added ${successCount} out of ${scrapedJobs.length} jobs`)
-                    setShowBatchForm(false)
-                    setBatchCompanyId("")
-                    setBatchPortalUrl("")
-                    setScrapedJobs([])
-                    setCurrentJobIndex(0)
-                  }}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader className="h-3 w-3 animate-spin" /> Adding Jobs...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-3 w-3" /> Add All {scrapedJobs.length} Jobs
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

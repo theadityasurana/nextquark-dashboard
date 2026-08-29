@@ -6,8 +6,25 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const applicationId = request.nextUrl.searchParams.get('applicationId')
     
-    let query = supabase.from('application_logs').select('*').order('timestamp', { ascending: false }).limit(15)
-    
+    // ─── Limits ───
+    //
+    // The dashboard feed is a rolling "what is happening right now" list, so a
+    // small newest-first window is right for it. A single application's log is a
+    // different thing entirely: it is the record of one run, and 15 lines of it
+    // is useless — a normal run emits several hundred, and the interesting ones
+    // (the fill plan, the per-field decisions, the audit) are in the middle.
+    // Read chronologically and in full.
+    const requested = Number(request.nextUrl.searchParams.get('limit'))
+    const limit = Number.isFinite(requested) && requested > 0
+      ? Math.min(requested, 2000)
+      : (applicationId ? 1000 : 15)
+
+    let query = supabase
+      .from('application_logs')
+      .select('*')
+      .order('timestamp', { ascending: !!applicationId })
+      .limit(limit)
+
     if (applicationId) {
       query = query.eq('application_id', applicationId)
     }

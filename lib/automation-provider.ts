@@ -1,5 +1,6 @@
 import { fillJobApplicationWithBrowserUse } from "./browser-use"
 import { fillJobApplicationWithBrowserbase } from "./browserbase"
+import { fillJobApplicationWithKernel } from "./kernel"
 import type { AutomationResponse, StreamCallback } from "./browser-use"
 import { createClient } from "@supabase/supabase-js"
 
@@ -39,6 +40,10 @@ export async function fillJobApplication(
 
   if (provider === "browserbase") {
     return fillJobApplicationWithBrowserbase(portalUrl, userData, onStep, applicationId, userId)
+  }
+
+  if (provider === "kernel") {
+    return fillJobApplicationWithKernel(portalUrl, userData, onStep, applicationId, userId)
   }
 
   return fillJobApplicationWithBrowserUse(portalUrl, userData, onStep, applicationId, userId)

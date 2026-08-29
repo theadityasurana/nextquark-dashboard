@@ -162,10 +162,21 @@ export function AgentsScreen() {
     if (selectedAgent?.status === 'processing') {
       setLogsOpen(true)
       fetchLogs(selectedAgent.id)
-      const interval = setInterval(() => {
-        fetchLogs(selectedAgent.id)
-      }, 5000)
-      return () => clearInterval(interval)
+
+      // Use Realtime instead of polling every 5 seconds
+      const { createClient } = require('@/lib/supabase/client')
+      const supabase = createClient()
+      const channel = supabase
+        .channel(`agent-logs-${selectedAgent.id}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'application_logs',
+          filter: `application_id=eq.${selectedAgent.id}`,
+        }, () => fetchLogs(selectedAgent.id))
+        .subscribe()
+
+      return () => { supabase.removeChannel(channel) }
     }
   }, [selectedAgent])
 

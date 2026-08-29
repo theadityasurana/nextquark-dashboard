@@ -7,10 +7,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { data, error } = await supabase
+    const { id } = await params
+    const { data, error } = await (supabase
       .from("applications")
       .select(
         `
@@ -31,8 +32,8 @@ export async function GET(
         companies(id, name, logo_initial, website)
       `
       )
-      .eq("id", params.id)
-      .single()
+      .eq("id", id)
+      .single() as any)
 
     if (error || !data) {
       return Response.json(
@@ -70,30 +71,30 @@ export async function GET(
           ((data.progress_step || 0) / (data.total_steps || 5)) * 100
         ),
         user: data.users ? {
-          id: data.users.id,
-          name: data.users.name,
-          email: data.users.email,
-          phone: data.users.phone,
-          location: data.users.location,
-          headline: data.users.headline,
-          resumeUrl: data.users.resume_url,
-          coverLetter: data.users.cover_letter,
+          id: (data.users as any).id,
+          name: (data.users as any).name,
+          email: (data.users as any).email,
+          phone: (data.users as any).phone,
+          location: (data.users as any).location,
+          headline: (data.users as any).headline,
+          resumeUrl: (data.users as any).resume_url,
+          coverLetter: (data.users as any).cover_letter,
         } : null,
         job: data.jobs ? {
-          id: data.jobs.id,
-          title: data.jobs.title,
-          location: data.jobs.location,
-          type: data.jobs.type,
-          salaryRange: data.jobs.salary_range,
-          companyName: data.jobs.company_name,
-          portalUrl: data.jobs.portal_url,
-          jobUrl: data.jobs.job_url,
+          id: (data.jobs as any).id,
+          title: (data.jobs as any).title,
+          location: (data.jobs as any).location,
+          type: (data.jobs as any).type,
+          salaryRange: (data.jobs as any).salary_range,
+          companyName: (data.jobs as any).company_name,
+          portalUrl: (data.jobs as any).portal_url,
+          jobUrl: (data.jobs as any).job_url,
         } : null,
         company: data.companies ? {
-          id: data.companies.id,
-          name: data.companies.name,
-          logoInitial: data.companies.logo_initial,
-          website: data.companies.website,
+          id: (data.companies as any).id,
+          name: (data.companies as any).name,
+          logoInitial: (data.companies as any).logo_initial,
+          website: (data.companies as any).website,
         } : null,
       },
     })

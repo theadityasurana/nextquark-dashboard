@@ -8,15 +8,21 @@ import { Activity, CheckCircle2, XCircle, Clock, ArrowUpRight, TrendingUp, Users
 import { SystemHealthPanel } from "@/components/system-health-panel"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { useEffect, useState, useCallback } from "react"
+import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export function OverviewScreen() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [chartRange, setChartRange] = useState('24h')
-  const [companyRange, setCompanyRange] = useState('24h')
-  const [agentRange, setAgentRange] = useState('24h')
-  const [jobRange, setJobRange] = useState('7d')
+  const { prefs, setPrefs } = useUIPreferences()
+  const chartRange   = prefs.chartRange
+  const companyRange = prefs.companyRange
+  const agentRange   = prefs.agentRange
+  const jobRange     = prefs.jobRange
+  const setChartRange   = (v: string) => setPrefs({ chartRange: v })
+  const setCompanyRange = (v: string) => setPrefs({ companyRange: v })
+  const setAgentRange   = (v: string) => setPrefs({ agentRange: v })
+  const setJobRange     = (v: string) => setPrefs({ jobRange: v })
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = useCallback(async () => {

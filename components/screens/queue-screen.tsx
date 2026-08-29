@@ -1,16 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { StatusBadge } from "@/components/status-badge"
 import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
@@ -19,9 +18,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { DateRange } from "react-day-picker"
+import { stepLabel } from "@/lib/run-timeline"
+import { useUIPreferences } from "@/hooks/use-ui-preferences"
+import { PortalHealthStrip } from "@/components/portal-health-strip"
 import {
-  Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink, Mail, CalendarIcon
+  Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink, Mail, CalendarIcon,
+  Receipt, XCircle, CircleSlash, TriangleAlert, Info, Crown, Play
 } from "lucide-react"
+
+// Small inline tooltip helper so every control gets an (i) icon
+function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Info className="h-3 w-3 text-muted-foreground cursor-help shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 export function QueueScreen() {
   const [selectedApp, setSelectedApp] = useState<LiveApplicationQueue | null>(null)
@@ -33,6 +50,11 @@ export function QueueScreen() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
+  // Per-application streaming state — replaces the single isStreaming boolean
+  // that was disabling Start for every app whenever any one was running.
+  const [streamingApps, setStreamingApps] = useState<Set<string>>(new Set())
+  // Active runs tray — minimizable floating cards at the bottom
+  const [activeTray, setActiveTray] = useState<Array<{ app: LiveApplicationQueue; minimized: boolean }>>([])
   const [isSendingRejection, setIsSendingRejection] = useState(false)
   const [isSendingRejectionAll, setIsSendingRejectionAll] = useState(false)
   const [isSendingRejectionByCompany, setIsSendingRejectionByCompany] = useState(false)
@@ -41,50 +63,44 @@ export function QueueScreen() {
   const [selectedRejectUser, setSelectedRejectUser] = useState<string>("")
   const [isSendingRejectionByDate, setIsSendingRejectionByDate] = useState(false)
   const [rejectDateRange, setRejectDateRange] = useState<DateRange | undefined>(undefined)
-  const [autoStart, setAutoStart] = useState(false)
+  const { prefs, setPrefs } = useUIPreferences()
+  const autoStart = prefs.autoStart
+  const premiumOnly = prefs.premiumOnly
+  const setAutoStart = (val: boolean) => setPrefs({ autoStart: val })
+  const setPremiumOnly = (val: boolean) => setPrefs({ premiumOnly: val })
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
   const [savingOtp, setSavingOtp] = useState<Record<string, boolean>>({})
   const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
-  const [premiumOnly, setPremiumOnly] = useState(false)
-
+  const [realtimeConnected, setRealtimeConnected] = useState(true)
   const [queuePage, setQueuePage] = useState(1)
+
   const QUEUE_PER_PAGE = 10
-  const prevPendingIdsRef = useRef<Set<string>>(new Set())
+  const MAX_CONCURRENT = 3
+
+  // Refs that survive re-renders without causing them
   const autoStartTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const processingCountRef = useRef(0)
   const pendingQueueRef = useRef<LiveApplicationQueue[]>([])
-  const MAX_CONCURRENT = 3
+  // Keep a ref to the latest premiumOnly value so callbacks always see current value
+  const premiumOnlyRef = useRef(premiumOnly)
+  useEffect(() => { premiumOnlyRef.current = premiumOnly }, [premiumOnly])
+
   const { addLog } = useLogs()
+
+  // ─── OTP / CAPTCHA handlers ───────────────────────────────────────────────
 
   const handleSaveOtp = async (appId: string, otp: string) => {
     setSavingOtp(prev => ({ ...prev, [appId]: true }))
-
     try {
       await fetch('/api/live-queue', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: appId, verification_otp: otp })
+        body: JSON.stringify({ id: appId, verification_otp: otp }),
       })
-
-      addLog({
-        id: `log-${Date.now()}-${Math.random()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: "info",
-        agentId: appId,
-        message: `OTP saved. Backend will pick it up and resume automation automatically.`,
-        applicationId: appId,
-      })
-
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: appId, message: `OTP saved. Backend will pick it up and resume automation automatically.`, applicationId: appId })
       setOtpInputs(prev => { const n = { ...prev }; delete n[appId]; return n })
     } catch (error) {
-      addLog({
-        id: `log-${Date.now()}-${Math.random()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: "error",
-        agentId: appId,
-        message: `Failed to save OTP: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        applicationId: appId,
-      })
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: appId, message: `Failed to save OTP: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: appId })
     } finally {
       setSavingOtp(prev => ({ ...prev, [appId]: false }))
     }
@@ -92,48 +108,112 @@ export function QueueScreen() {
 
   const handleResolveCaptcha = async (appId: string) => {
     setResolvingCaptcha(prev => ({ ...prev, [appId]: true }))
-
     try {
       await fetch('/api/live-queue', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: appId, status: 'processing' })
+        body: JSON.stringify({ id: appId, status: 'processing' }),
       })
-
-      setApplications(prev => prev.map(a =>
-        a.id === appId ? { ...a, status: 'processing' as const } : a
-      ))
-
-      addLog({
-        id: `log-${Date.now()}-${Math.random()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: "info",
-        agentId: appId,
-        message: `CAPTCHA marked as solved. Automation will resume automatically.`,
-        applicationId: appId,
-      })
+      setApplications(prev => prev.map(a => a.id === appId ? { ...a, status: 'processing' as const } : a))
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: appId, message: `CAPTCHA marked as solved. Automation will resume automatically.`, applicationId: appId })
     } catch (error) {
-      addLog({
-        id: `log-${Date.now()}-${Math.random()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: "error",
-        agentId: appId,
-        message: `Failed to mark CAPTCHA as solved: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        applicationId: appId,
-      })
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: appId, message: `Failed to mark CAPTCHA as solved: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: appId })
     } finally {
       setResolvingCaptcha(prev => ({ ...prev, [appId]: false }))
     }
   }
 
-  const processNext = () => {
+  // ─── Application dispatch ─────────────────────────────────────────────────
+
+  // processNext drains the local pending queue into available slots
+  const processNext = useCallback(() => {
     while (processingCountRef.current < MAX_CONCURRENT && pendingQueueRef.current.length > 0) {
       const next = pendingQueueRef.current.shift()!
       startApplication(next)
     }
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const enqueueOrStart = (app: LiveApplicationQueue) => {
+  const startApplication = useCallback(async (app: LiveApplicationQueue) => {
+    processingCountRef.current++
+    setIsStreaming(true)
+    setRecordingUrl(null)
+
+    // Add to the active tray so the user can see progress without keeping the modal open
+    setActiveTray(prev => {
+      if (prev.some(t => t.app.id === app.id)) return prev
+      return [...prev, { app, minimized: false }]
+    })
+    setStreamingApps(prev => new Set(prev).add(app.id))
+
+    await fetch('/api/live-queue', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: app.id, status: 'processing' }),
+    })
+    setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'processing' as const } : a))
+    addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${MAX_CONCURRENT} slots used)`, applicationId: app.id })
+
+    try {
+      const response = await fetch("/api/auto-apply-queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: app.id, stream: true }),
+      })
+      if (!response.ok) throw new Error(`Server error: ${response.status}`)
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      if (!reader) throw new Error('No response stream')
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const lines = decoder.decode(value).split("\n")
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.log) addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: data.status === "error" ? "error" : "info", agentId: app.id, message: data.log, applicationId: app.id })
+            if (data.status === "retrying") {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `Attempt ${data.attempt}/${data.maxAttempts} failed: ${data.error}. Will retry automatically...`, applicationId: app.id })
+              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'pending' as const } : a))
+            }
+            if (data.status === "error") {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: app.id, message: `All ${data.maxAttempts || 1} attempts failed: ${data.error || "An error occurred"}`, applicationId: app.id })
+              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'failed' as const } : a))
+              setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, app: { ...t.app, status: 'failed' as const } } : t))
+            }
+            if (data.status === "awaiting_captcha") {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `CAPTCHA detected. Browser session is live — waiting for human to solve it.${data.liveUrl ? ` Live URL: ${data.liveUrl}` : ''}`, applicationId: app.id })
+              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'awaiting_captcha' as const, live_url: data.liveUrl || a.live_url } : a))
+            }
+            if (data.status === "awaiting_otp") {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `OTP verification required. Automation paused. Waiting for OTP...`, applicationId: app.id })
+              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'awaiting_otp' as const } : a))
+            }
+            if (data.status === "completed" && data.success !== false) {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Application submitted & confirmed after ${data.steps ?? 0} steps`, applicationId: app.id })
+              const updatePayload: any = { id: app.id, status: 'completed' }
+              if (data.recordingUrl) updatePayload.recording_url = data.recordingUrl
+              await fetch('/api/live-queue', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) })
+              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'completed' as const, recording_url: data.recordingUrl || a.recording_url } : a))
+              setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, app: { ...t.app, status: 'completed' as const } } : t))
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    } catch (error) {
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: app.id, message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: app.id })
+    } finally {
+      processingCountRef.current--
+      setIsStreaming(processingCountRef.current > 0)
+      setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); return n })
+      processNext()
+    }
+  }, [addLog, processNext])
+
+  // enqueueOrStart: respects the concurrency cap
+  const enqueueOrStart = useCallback((app: LiveApplicationQueue) => {
     if (processingCountRef.current < MAX_CONCURRENT) {
       startApplication(app)
     } else {
@@ -141,272 +221,154 @@ export function QueueScreen() {
         pendingQueueRef.current.push(app)
       }
     }
-  }
+  }, [startApplication])
 
-  const startApplication = async (app: LiveApplicationQueue) => {
-    processingCountRef.current++
-    setIsStreaming(true)
-    setRecordingUrl(null)
-    
-    await fetch('/api/live-queue', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: app.id, status: 'processing' })
-    })
-    
-    setApplications(prev => prev.map(a => 
-      a.id === app.id ? { ...a, status: 'processing' as const } : a
-    ))
-    
-    addLog({
-      id: `log-${Date.now()}-${Math.random()}`,
-      timestamp: new Date().toLocaleTimeString(),
-      level: "info",
-      agentId: app.id,
-      message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${MAX_CONCURRENT} slots used)`,
-      applicationId: app.id,
-    })
-    
-    try {
-      const response = await fetch("/api/auto-apply-queue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          applicationId: app.id,
-          stream: true,
-        }),
-      })
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('No response stream')
-      }
-
-      let hasStarted = false
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const text = decoder.decode(value)
-        const lines = text.split("\n")
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              
-              if (!hasStarted && (data.log || data.status)) {
-                hasStarted = true
-              }
-              
-              if (data.log) {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: data.status === "error" ? "error" : "info",
-                  agentId: app.id,
-                  message: data.log,
-                  applicationId: app.id,
-                })
-              }
-              if (data.status === "retrying") {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: "warn",
-                  agentId: app.id,
-                  message: `Attempt ${data.attempt}/${data.maxAttempts} failed: ${data.error}. Will retry automatically...`,
-                  applicationId: app.id,
-                })
-                
-                setApplications(prev => prev.map(a => 
-                  a.id === app.id ? { ...a, status: 'pending' as const } : a
-                ))
-              }
-              if (data.status === "error") {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: "error",
-                  agentId: app.id,
-                  message: `All ${data.maxAttempts || 1} attempts failed: ${data.error || "An error occurred"}`,
-                  applicationId: app.id,
-                })
-                
-                setApplications(prev => prev.map(a => 
-                  a.id === app.id ? { ...a, status: 'failed' as const } : a
-                ))
-              }
-              if (data.status === "awaiting_captcha") {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: "warn",
-                  agentId: app.id,
-                  message: `CAPTCHA detected. Browser session is live — waiting for human to solve it.${data.liveUrl ? ` Live URL: ${data.liveUrl}` : ''}`,
-                  applicationId: app.id,
-                })
-                
-                setApplications(prev => prev.map(a => 
-                  a.id === app.id ? { ...a, status: 'awaiting_captcha' as const, live_url: data.liveUrl || a.live_url } : a
-                ))
-              }
-              if (data.status === "awaiting_otp") {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: "warn",
-                  agentId: app.id,
-                  message: `OTP verification required. Automation paused. Waiting for OTP...`,
-                  applicationId: app.id,
-                })
-                
-                setApplications(prev => prev.map(a => 
-                  a.id === app.id ? { ...a, status: 'awaiting_otp' as const } : a
-                ))
-              }
-              if (data.status === "completed") {
-                addLog({
-                  id: `log-${Date.now()}-${Math.random()}`,
-                  timestamp: new Date().toLocaleTimeString(),
-                  level: "info",
-                  agentId: app.id,
-                  message: `Application completed successfully after ${data.steps} steps`,
-                  applicationId: app.id,
-                })
-                
-                const updatePayload: any = { id: app.id, status: 'completed' }
-                if (data.recordingUrl) {
-                  updatePayload.recording_url = data.recordingUrl
-                  setRecordingUrl(data.recordingUrl)
-                  addLog({
-                    id: `log-${Date.now()}-${Math.random()}`,
-                    timestamp: new Date().toLocaleTimeString(),
-                    level: "info",
-                    agentId: app.id,
-                    message: `Recording saved: ${data.recordingUrl}`,
-                    applicationId: app.id,
-                  })
-                }
-                
-                await fetch('/api/live-queue', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(updatePayload)
-                })
-                
-                setApplications(prev => prev.map(a => 
-                  a.id === app.id ? { ...a, status: 'completed' as const, recording_url: data.recordingUrl || a.recording_url } : a
-                ))
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
-      }
-      
-      if (!hasStarted) {
-        throw new Error('Task failed to start')
-      }
-    } catch (error) {
-      console.error('Task error:', error)
-      addLog({
-        id: `log-${Date.now()}-${Math.random()}`,
-        timestamp: new Date().toLocaleTimeString(),
-        level: "error",
-        agentId: app.id,
-        message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        applicationId: app.id,
-      })
-    } finally {
-      processingCountRef.current--
-      setIsStreaming(processingCountRef.current > 0)
-      processNext()
-    }
-  }
+  // ─── Realtime data loading ────────────────────────────────────────────────
 
   useEffect(() => {
-    const fetchApplications = async () => {
+    const loadApplications = async () => {
       try {
         const response = await fetch('/api/live-queue')
         const data = await response.json()
-        
         if (Array.isArray(data)) {
           setApplications(data)
-          
-          // Calculate stats
-          const totalApps = data.length
-          const successful = data.filter((app: LiveApplicationQueue) => app.status === 'completed').length
-          const failed = data.filter((app: LiveApplicationQueue) => app.status === 'failed').length
-          const inProgress = data.filter((app: LiveApplicationQueue) => app.status === 'pending' || app.status === 'processing' || app.status === 'awaiting_otp' || app.status === 'awaiting_captcha').length
-          
-          setStats({ totalApps, successful, failed, inProgress })
+          setStats({
+            totalApps: data.length,
+            successful: data.filter((a: LiveApplicationQueue) => a.status === 'completed').length,
+            failed: data.filter((a: LiveApplicationQueue) => a.status === 'failed').length,
+            inProgress: data.filter((a: LiveApplicationQueue) => ['pending','processing','awaiting_otp','awaiting_captcha'].includes(a.status)).length,
+          })
         }
       } catch (err) {
         console.error('Failed to fetch applications:', err)
       }
     }
-    
-    fetchApplications()
-    const interval = setInterval(fetchApplications, 3000)
-    return () => clearInterval(interval)
+
+    loadApplications()
+
+    const { createClient } = require('@/lib/supabase/client')
+    const supabase = createClient()
+    let fallbackInterval: NodeJS.Timeout | null = null
+
+    const channel = supabase
+      .channel('live-queue-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, loadApplications)
+      .on('system', {}, (status: any) => {
+        if (status === 'SUBSCRIBED') {
+          setRealtimeConnected(true)
+          if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null }
+        } else if (['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status)) {
+          setRealtimeConnected(false)
+          if (!fallbackInterval) fallbackInterval = setInterval(loadApplications, 10000)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      if (fallbackInterval) clearInterval(fallbackInterval)
+    }
   }, [])
 
-  // Auto-start: when autoStart is ON, start pending apps after 4 seconds
+  // ─── Auto-start logic ─────────────────────────────────────────────────────
+  // FIX: The old implementation had a broken cleanup — the effect's return function
+  // ran on every `applications` change, clearing timers that were just set.
+  // Now timers are managed imperatively: we only ADD timers for newly-seen pending
+  // apps and only REMOVE timers for apps that are no longer pending.
+  // premiumOnlyRef is used inside the timer callback so it always reads the
+  // current value at fire-time, not the value when the timer was created.
+
   useEffect(() => {
     if (!autoStart) {
-      // Clear all pending timers when auto-start is turned off
+      // Turn off: cancel every pending timer immediately
       Object.values(autoStartTimersRef.current).forEach(clearTimeout)
       autoStartTimersRef.current = {}
       return
     }
 
-    const pendingApps = applications.filter(a => 
-      a.status === 'pending' && (!premiumOnly || a.is_premium)
+    // Which apps should auto-start right now?
+    const eligible = applications.filter(a =>
+      a.status === 'pending' && (!premiumOnlyRef.current || a.is_premium)
     )
+    const eligibleIds = new Set(eligible.map(a => a.id))
 
-    // Set timers for new pending apps
-    for (const app of pendingApps) {
-      if (!autoStartTimersRef.current[app.id]) {
-        autoStartTimersRef.current[app.id] = setTimeout(() => {
-          delete autoStartTimersRef.current[app.id]
-          enqueueOrStart(app)
-        }, 2000)
-      }
-    }
-
-    // Clean up timers for apps no longer pending
-    const pendingIds = new Set(pendingApps.map(a => a.id))
+    // Cancel timers for apps that are no longer eligible (status changed, or
+    // premiumOnly was toggled and this app is not premium)
     for (const id of Object.keys(autoStartTimersRef.current)) {
-      if (!pendingIds.has(id)) {
+      if (!eligibleIds.has(id)) {
         clearTimeout(autoStartTimersRef.current[id])
         delete autoStartTimersRef.current[id]
       }
     }
 
-    return () => {
-      Object.values(autoStartTimersRef.current).forEach(clearTimeout)
-      autoStartTimersRef.current = {}
+    // Set timers for newly eligible apps that don't have one yet
+    for (const app of eligible) {
+      if (!autoStartTimersRef.current[app.id]) {
+        autoStartTimersRef.current[app.id] = setTimeout(() => {
+          delete autoStartTimersRef.current[app.id]
+          // Re-check premiumOnly at fire time using the ref
+          if (!premiumOnlyRef.current || app.is_premium) {
+            enqueueOrStart(app)
+          }
+        }, 2000)
+      }
     }
-  }, [autoStart, premiumOnly, applications])
+    // No cleanup return here — we manage timers imperatively above
+  }, [autoStart, applications, enqueueOrStart])
 
+  // ─── Client-side processing timeout ─────────────────────────────────────
+  // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
+  // mark it failed locally and patch Supabase so the UI stays accurate.
+  useEffect(() => {
+    const TIMEOUT_MS = 15 * 60 * 1000
+    const interval = setInterval(() => {
+      const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString()
+      const timedOut = applications.filter(
+        a => a.status !== 'completed' && new Date(a.created_at).toISOString() < cutoff
+      )
+      if (timedOut.length === 0) return
+      timedOut.forEach(async (app) => {
+        await fetch('/api/live-queue', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: app.id,
+            status: 'completed',
+          }),
+        })
+      })
+      setApplications(prev => prev.map(a =>
+        timedOut.some(t => t.id === a.id)
+          ? { ...a, status: 'completed' as const }
+          : a
+      ))
+    }, 60_000) // check every minute
+    return () => clearInterval(interval)
+  }, [applications])
+
+  // When premiumOnly changes while autoStart is ON, cancel timers for
+  // non-premium apps that were already scheduled
+  useEffect(() => {
+    if (!autoStart) return
+    if (premiumOnly) {
+      // Cancel any pending timers for non-premium apps
+      for (const [id, timer] of Object.entries(autoStartTimersRef.current)) {
+        const app = applications.find(a => a.id === id)
+        if (app && !app.is_premium) {
+          clearTimeout(timer)
+          delete autoStartTimersRef.current[id]
+        }
+      }
+    }
+  }, [premiumOnly, autoStart, applications])
+
+  // ─── Rejection handlers ───────────────────────────────────────────────────
 
   const sendRejectionForApp = async (app: LiveApplicationQueue) => {
     await fetch('/api/email/rejection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        queueId: app.id,
-        userId: app.user_id,
-        profileEmail: app.email,
-        firstName: app.first_name,
-        jobTitle: app.job_title,
-        companyName: app.company_name,
-      }),
+      body: JSON.stringify({ queueId: app.id, userId: app.user_id, profileEmail: app.email, firstName: app.first_name, jobTitle: app.job_title, companyName: app.company_name }),
     })
   }
 
@@ -415,11 +377,8 @@ export function QueueScreen() {
     try {
       await sendRejectionForApp(app)
       setApplications(prev => prev.filter(a => a.id !== app.id))
-    } catch (err) {
-      console.error('Failed to send rejection email:', err)
-    } finally {
-      setIsSendingRejection(false)
-    }
+    } catch (err) { console.error('Failed to send rejection email:', err) }
+    finally { setIsSendingRejection(false) }
   }
 
   const handleRejectAll = async () => {
@@ -427,11 +386,8 @@ export function QueueScreen() {
     try {
       await Promise.all(applications.map(sendRejectionForApp))
       setApplications([])
-    } catch (err) {
-      console.error('Failed to send rejection emails:', err)
-    } finally {
-      setIsSendingRejectionAll(false)
-    }
+    } catch (err) { console.error('Failed to send rejection emails:', err) }
+    finally { setIsSendingRejectionAll(false) }
   }
 
   const handleRejectByCompany = async () => {
@@ -442,11 +398,8 @@ export function QueueScreen() {
       await Promise.all(targets.map(sendRejectionForApp))
       setApplications(prev => prev.filter(a => a.company_name !== selectedRejectCompany))
       setSelectedRejectCompany("")
-    } catch (err) {
-      console.error('Failed to send rejection emails by company:', err)
-    } finally {
-      setIsSendingRejectionByCompany(false)
-    }
+    } catch (err) { console.error('Failed to send rejection emails by company:', err) }
+    finally { setIsSendingRejectionByCompany(false) }
   }
 
   const handleRejectByUser = async () => {
@@ -457,11 +410,8 @@ export function QueueScreen() {
       await Promise.all(targets.map(sendRejectionForApp))
       setApplications(prev => prev.filter(a => a.user_id !== selectedRejectUser))
       setSelectedRejectUser("")
-    } catch (err) {
-      console.error('Failed to send rejection emails by user:', err)
-    } finally {
-      setIsSendingRejectionByUser(false)
-    }
+    } catch (err) { console.error('Failed to send rejection emails by user:', err) }
+    finally { setIsSendingRejectionByUser(false) }
   }
 
   const handleRejectByDate = async () => {
@@ -470,253 +420,305 @@ export function QueueScreen() {
     try {
       const from = rejectDateRange.from.getTime()
       const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
-      const targets = applications.filter(a => {
-        const t = new Date(a.created_at).getTime()
-        return t >= from && t <= to
-      })
+      const targets = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to })
       await Promise.all(targets.map(sendRejectionForApp))
-      setApplications(prev => prev.filter(a => {
-        const t = new Date(a.created_at).getTime()
-        return !(t >= from && t <= to)
-      }))
+      setApplications(prev => prev.filter(a => { const t = new Date(a.created_at).getTime(); return !(t >= from && t <= to) }))
       setRejectDateRange(undefined)
-    } catch (err) {
-      console.error('Failed to send rejection emails by date:', err)
-    } finally {
-      setIsSendingRejectionByDate(false)
-    }
+    } catch (err) { console.error('Failed to send rejection emails by date:', err) }
+    finally { setIsSendingRejectionByDate(false) }
   }
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch('/api/live-queue', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-      })
+      await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       setApplications(applications.filter(app => app.id !== id))
       setDeleteId(null)
-    } catch (err) {
-      console.error('Failed to delete:', err)
-    }
+    } catch (err) { console.error('Failed to delete:', err) }
   }
 
-  const filteredApps = applications.filter((app) => {
-    if (activeTab === "premium") {
-      if (!app.is_premium) return false
-    } else if (activeTab !== "all" && app.status !== activeTab) return false
+  // ─── Derived state ────────────────────────────────────────────────────────
+
+  const pending        = applications.filter(a => a.status === "pending")
+  const processing     = applications.filter(a => a.status === "processing")
+  const completed      = applications.filter(a => a.status === "completed")
+  const failed         = applications.filter(a => a.status === "failed")
+  const awaitingOtp    = applications.filter(a => a.status === "awaiting_otp")
+  const awaitingCaptcha = applications.filter(a => a.status === "awaiting_captcha")
+  const blocked        = applications.filter(a => a.status === "blocked")
+  const premiumApps    = applications.filter(a => a.is_premium)
+
+  // Pending apps that are eligible given the current premiumOnly toggle
+  const eligiblePending = premiumOnly ? pending.filter(a => a.is_premium) : pending
+
+  const filteredApps = applications.filter(app => {
+    if (activeTab === "premium") { if (!app.is_premium) return false }
+    else if (activeTab !== "all" && app.status !== activeTab) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const fullName = `${app.first_name} ${app.last_name}`.toLowerCase()
-      return (
-        fullName.includes(q) ||
-        app.company_name.toLowerCase().includes(q) ||
-        app.job_title.toLowerCase().includes(q)
-      )
+      return fullName.includes(q) || app.company_name.toLowerCase().includes(q) || app.job_title.toLowerCase().includes(q)
     }
     return true
   })
 
   const totalFilteredApps = filteredApps.length
   const totalQueuePages = Math.ceil(totalFilteredApps / QUEUE_PER_PAGE)
-  const paginatedApps = filteredApps.slice(
-    (queuePage - 1) * QUEUE_PER_PAGE,
-    queuePage * QUEUE_PER_PAGE
-  )
+  const paginatedApps = filteredApps.slice((queuePage - 1) * QUEUE_PER_PAGE, queuePage * QUEUE_PER_PAGE)
 
-  const pending = applications.filter((a) => a.status === "pending")
-  const processing = applications.filter((a) => a.status === "processing")
-  const completed = applications.filter((a) => a.status === "completed")
-  const failed = applications.filter((a) => a.status === "failed")
-  const awaitingOtp = applications.filter((a) => a.status === "awaiting_otp")
-  const awaitingCaptcha = applications.filter((a) => a.status === "awaiting_captcha")
-  const premiumApps = applications.filter((a) => a.is_premium)
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col gap-4 sm:gap-6">
-      <div className="flex items-center justify-between">
+
+      {/* ── Header + stats row ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
-
+        {/* Live connection indicator top-right */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {realtimeConnected ? (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+              </span>
+              <span className="text-xs text-muted-foreground">Live</span>
+            </>
+          ) : (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
+              </span>
+              <span className="text-xs text-yellow-500">Reconnecting...</span>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Controls: Start All, Auto-Start, Premium Only */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          <Switch checked={premiumOnly} onCheckedChange={setPremiumOnly} />
-          <span className="text-xs text-muted-foreground">Premium Only</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch checked={autoStart} onCheckedChange={setAutoStart} />
-          <span className="text-xs text-muted-foreground">Auto Start</span>
-        </div>
-        {!autoStart && pending.length > 0 && (
-          <Button
-            size="sm"
-            onClick={() => {
-              setIsStartingAll(true)
-              const appsToStart = premiumOnly ? pending.filter(a => a.is_premium) : pending
-              for (const app of appsToStart) {
-                enqueueOrStart(app)
-              }
-              setIsStartingAll(false)
-            }}
-            disabled={isStartingAll}
-            className="gap-2"
-          >
-            {isStartingAll ? (
-              <>
-                <Loader className="h-4 w-4 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              `Start All (${premiumOnly ? pending.filter(a => a.is_premium).length : pending.length})`
-            )}
-          </Button>
-        )}
-        {applications.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-            onClick={handleRejectAll}
-            disabled={isSendingRejectionAll}
-          >
-            {isSendingRejectionAll ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-            {isSendingRejectionAll ? 'Sending...' : `Reject All (${applications.length})`}
-          </Button>
-        )}
-        {applications.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
-              <SelectTrigger className="h-9 text-xs w-44">
-                <SelectValue placeholder="Reject by company..." />
-              </SelectTrigger>
-              <SelectContent>
-                {[...new Set(applications.map(a => a.company_name))].sort().map(company => (
-                  <SelectItem key={company} value={company} className="text-xs">
-                    {company} ({applications.filter(a => a.company_name === company).length})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={handleRejectByCompany}
-              disabled={!selectedRejectCompany || isSendingRejectionByCompany}
-            >
-              {isSendingRejectionByCompany ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-              {isSendingRejectionByCompany ? 'Sending...' : 'Reject'}
-            </Button>
+      {/* ── Stats strip ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        {[
+          { label: 'Total',      value: applications.length,    color: 'text-foreground' },
+          { label: 'Premium',    value: premiumApps.length,     color: 'text-yellow-500' },
+          { label: 'Pending',    value: pending.length,         color: 'text-muted-foreground' },
+          { label: 'Processing', value: processing.length,      color: 'text-blue-500' },
+          { label: 'Done',       value: completed.length,       color: 'text-green-500' },
+          { label: 'Failed',     value: failed.length,          color: 'text-destructive' },
+          { label: 'Blocked',    value: blocked.length,         color: 'text-orange-500' },
+        ].map(s => (
+          <div key={s.label} className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-2.5 px-2">
+            <span className={`text-lg font-bold leading-none ${s.color}`}>{s.value}</span>
+            <span className="text-[10px] text-muted-foreground mt-1">{s.label}</span>
           </div>
-        )}
-        {applications.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
-              <SelectTrigger className="h-9 text-xs w-44">
-                <SelectValue placeholder="Reject by user..." />
-              </SelectTrigger>
-              <SelectContent>
-                {[...new Map(applications.map(a => [a.user_id, a])).values()]
-                  .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
-                  .map(a => (
-                    <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
-                      {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id).length})
-                    </SelectItem>
-                  ))
-                }
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={handleRejectByUser}
-              disabled={!selectedRejectUser || isSendingRejectionByUser}
-            >
-              {isSendingRejectionByUser ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-              {isSendingRejectionByUser ? 'Sending...' : 'Reject'}
-            </Button>
-          </div>
-        )}
-        {applications.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5 w-52 justify-start font-normal">
-                  <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
-                  {rejectDateRange?.from ? (
-                    rejectDateRange.to
-                      ? `${rejectDateRange.from.toLocaleDateString()} – ${rejectDateRange.to.toLocaleDateString()}`
-                      : rejectDateRange.from.toLocaleDateString()
-                  ) : 'Reject by date range...'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={rejectDateRange}
-                  onSelect={setRejectDateRange}
-                  numberOfMonths={2}
-                />
-              </PopoverContent>
-            </Popover>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={handleRejectByDate}
-              disabled={!rejectDateRange?.from || isSendingRejectionByDate}
-            >
-              {isSendingRejectionByDate ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-              {isSendingRejectionByDate ? 'Sending...' : (() => {
-                if (!rejectDateRange?.from) return 'Reject'
-                const from = rejectDateRange.from.getTime()
-                const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
-                const count = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to }).length
-                return `Reject (${count})`
-              })()}
-            </Button>
-          </div>
-        )}
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="relative flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search applications..."
-              className="pl-9 bg-card border-border"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
+      {/* ── Dispatch controls (toggles + start) ── */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dispatch Controls</p>
+        <div className="flex flex-wrap items-center gap-3">
+
+          {/* Premium Only */}
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-2.5 py-1.5">
+            <Switch
+              checked={premiumOnly}
+              onCheckedChange={setPremiumOnly}
+              className={premiumOnly ? "data-[state=checked]:bg-yellow-500" : ""}
             />
+            <Crown className="h-3 w-3 text-yellow-500" />
+            <span className="text-xs font-medium">Premium Only</span>
+            <InfoTip text="When ON, Auto Start and Start All only process premium-flagged applications. Non-premium apps stay in the queue untouched." />
           </div>
-          <div className="flex items-center gap-1.5 sm:ml-auto">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-            </span>
-            <span className="text-xs text-muted-foreground">Auto-refresh: ON</span>
+
+          {/* Auto Start */}
+          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
+            autoStart ? 'border-green-500/40 bg-green-500/5' : 'border-border bg-accent/30'
+          }`}>
+            <Switch
+              checked={autoStart}
+              onCheckedChange={setAutoStart}
+              className={autoStart ? "data-[state=checked]:bg-green-500" : ""}
+            />
+            <Play className="h-3 w-3" />
+            <span className="text-xs font-medium">Auto Start</span>
+            <InfoTip text="When ON, every eligible pending application starts automatically 2 seconds after it arrives. Max 3 run simultaneously — extras queue up and start as slots free." />
+          </div>
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-border hidden sm:block" />
+
+          {/* Start All — only when Auto Start is OFF */}
+          {!autoStart && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsStartingAll(true)
+                  for (const app of eligiblePending) enqueueOrStart(app)
+                  setIsStartingAll(false)
+                }}
+                disabled={isStartingAll || eligiblePending.length === 0}
+                className="gap-1.5 h-8"
+              >
+                {isStartingAll
+                  ? <><Loader className="h-3.5 w-3.5 animate-spin" /> Starting...</>
+                  : <><Play className="h-3.5 w-3.5" /> Start All{eligiblePending.length > 0 ? ` (${eligiblePending.length})` : ''}</>
+                }
+              </Button>
+              <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs 3 at a time — the rest wait in line.`} />
+            </div>
+          )}
+
+          {/* Active mode pill */}
+          {(autoStart || premiumOnly) && (
+            <div className="ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium
+              border-green-500/30 bg-green-500/5 text-green-600">
+              {autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Auto · Premium only</>}
+              {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
+              {!autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Premium filter on</>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Rejection controls (collapsed into one row) ── */}
+      {applications.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Reject &amp; Remove</p>
+          <div className="flex flex-wrap items-center gap-2">
+
+            {/* Reject All */}
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline"
+                className="gap-1.5 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={handleRejectAll} disabled={isSendingRejectionAll}
+              >
+                {isSendingRejectionAll ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                {isSendingRejectionAll ? 'Sending...' : `Reject All (${applications.length})`}
+              </Button>
+              <InfoTip text="Sends a rejection email to every applicant in the queue and removes them from the list." />
+            </div>
+
+            <div className="h-5 w-px bg-border hidden sm:block" />
+
+            {/* Reject by company */}
+            <div className="flex items-center gap-1.5">
+              <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
+                <SelectTrigger className="h-8 text-xs w-40">
+                  <SelectValue placeholder="By company..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...new Set(applications.map(a => a.company_name))].sort().map(company => (
+                    <SelectItem key={company} value={company} className="text-xs">
+                      {company} ({applications.filter(a => a.company_name === company).length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline"
+                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={handleRejectByCompany} disabled={!selectedRejectCompany || isSendingRejectionByCompany}
+              >
+                {isSendingRejectionByCompany ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                {isSendingRejectionByCompany ? '...' : 'Reject'}
+              </Button>
+              <InfoTip text="Reject all applicants for a specific company." />
+            </div>
+
+            {/* Reject by user */}
+            <div className="flex items-center gap-1.5">
+              <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
+                <SelectTrigger className="h-8 text-xs w-40">
+                  <SelectValue placeholder="By user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...new Map(applications.map(a => [a.user_id, a])).values()]
+                    .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
+                    .map(a => (
+                      <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
+                        {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id).length})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline"
+                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={handleRejectByUser} disabled={!selectedRejectUser || isSendingRejectionByUser}
+              >
+                {isSendingRejectionByUser ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                {isSendingRejectionByUser ? '...' : 'Reject'}
+              </Button>
+              <InfoTip text="Reject all applications from a specific user." />
+            </div>
+
+            {/* Reject by date */}
+            <div className="flex items-center gap-1.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-44 justify-start font-normal">
+                    <CalendarIcon className="h-3 w-3 shrink-0" />
+                    {rejectDateRange?.from
+                      ? rejectDateRange.to
+                        ? `${rejectDateRange.from.toLocaleDateString()} – ${rejectDateRange.to.toLocaleDateString()}`
+                        : rejectDateRange.from.toLocaleDateString()
+                      : 'By date range...'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="range" selected={rejectDateRange} onSelect={setRejectDateRange} numberOfMonths={2} />
+                </PopoverContent>
+              </Popover>
+              <Button size="sm" variant="outline"
+                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={handleRejectByDate} disabled={!rejectDateRange?.from || isSendingRejectionByDate}
+              >
+                {isSendingRejectionByDate ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                {isSendingRejectionByDate ? '...' : (() => {
+                  if (!rejectDateRange?.from) return 'Reject'
+                  const from = rejectDateRange.from.getTime()
+                  const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
+                  const count = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to }).length
+                  return `Reject (${count})`
+                })()}
+              </Button>
+              <InfoTip text="Reject all applicants whose applications were created within a date range." />
+            </div>
           </div>
         </div>
-        {/* Tabs row — horizontal scroll on mobile */}
+      )}
+
+      <PortalHealthStrip />
+
+      {/* Search + tabs */}
+      <div className="flex flex-col gap-3">
+        <div className="relative sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, company or job title..."
+            className="pl-9 bg-card border-border"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
+          />
+        </div>
+
+        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }} className="w-full">
           <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
             <TabsList className="bg-card border border-border w-max sm:w-auto inline-flex">
               <TabsTrigger value="all" className="text-xs">All ({applications.length})</TabsTrigger>
-              <TabsTrigger value="premium" className="text-xs">Premium ({premiumApps.length})</TabsTrigger>
+              <TabsTrigger value="premium" className="text-xs">
+                <Crown className="h-3 w-3 text-yellow-500 mr-1" />Premium ({premiumApps.length})
+              </TabsTrigger>
               <TabsTrigger value="pending" className="text-xs">Pending ({pending.length})</TabsTrigger>
               <TabsTrigger value="processing" className="text-xs">Processing ({processing.length})</TabsTrigger>
               <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
               <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
               <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
               <TabsTrigger value="awaiting_captcha" className="text-xs">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
+              <TabsTrigger value="blocked" className="text-xs">Won&apos;t Apply ({blocked.length})</TabsTrigger>
             </TabsList>
           </div>
         </Tabs>
@@ -726,14 +728,23 @@ export function QueueScreen() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
-          const createdDate = new Date(app.created_at).toLocaleString()
-          
+          const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
           return (
-            <Card key={app.id} className="bg-card border-border hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setSelectedApp(app)}>
+            <Card key={app.id} className={`bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <p className="text-sm font-semibold">{fullName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold">{fullName}</p>
+                      {app.is_premium && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Crown className="h-3 w-3 text-yellow-500 shrink-0" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">Premium user — prioritised by Auto Start and Start All when Premium Only is ON</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{app.phone}</p>
                   </div>
                   <StatusBadge status={app.status} />
@@ -749,8 +760,46 @@ export function QueueScreen() {
                   </div>
                 </div>
 
-                {/* Retry indicator */}
-                {(app.attempt_count > 0) && (
+                {app.knockout_blocked && (
+                  <div className="flex items-start gap-1.5 mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30 shrink-0">
+                      <CircleSlash className="h-2.5 w-2.5 shrink-0" /> Won&apos;t apply
+                    </Badge>
+                    <span className="text-[9px] text-muted-foreground line-clamp-2">{app.knockout_reason || app.last_error}</span>
+                  </div>
+                )}
+
+                {!app.knockout_blocked && (app.coverage_blocking_missing?.length ?? 0) > 0 && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-orange-500 border-orange-500/30">
+                      <TriangleAlert className="h-2.5 w-2.5 shrink-0" /> Missing: {app.coverage_blocking_missing!.join(", ")}
+                    </Badge>
+                  </div>
+                )}
+
+                {!app.knockout_blocked && app.coverage_percent != null && app.coverage_percent < 100 && !(app.coverage_blocking_missing?.length) && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-muted-foreground">{app.coverage_percent}% fillable</Badge>
+                  </div>
+                )}
+
+                {app.confirmation_id && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-green-600 border-green-500/30 font-mono max-w-full">
+                      <Receipt className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{app.confirmation_id}</span>
+                    </Badge>
+                  </div>
+                )}
+
+                {app.failed_step && app.status === 'failed' && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30">
+                      <XCircle className="h-2.5 w-2.5 shrink-0" /> Failed at: {stepLabel(app.failed_step)}
+                    </Badge>
+                  </div>
+                )}
+
+                {app.attempt_count > 0 && (
                   <div className="flex items-center gap-1.5 mb-2">
                     <Badge variant="outline" className={`text-[9px] gap-1 ${app.status === 'failed' ? 'text-destructive border-destructive/30' : 'text-orange-500 border-orange-500/30'}`}>
                       Attempt {app.attempt_count}/{app.max_attempts || 2}
@@ -762,9 +811,7 @@ export function QueueScreen() {
                 )}
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] text-muted-foreground">{createdDate}</span>
-                  </div>
+                  <span className="text-[10px] text-muted-foreground">{createdDate}</span>
                   <div className="flex items-center gap-1">
                     {app.status === 'awaiting_otp' && (
                       <Badge variant="outline" className="text-[9px] text-orange-500 border-orange-500/30 gap-1">
@@ -785,22 +832,11 @@ export function QueueScreen() {
                   </div>
                 </div>
 
-                {/* Inline OTP input for awaiting_otp cards */}
                 {app.status === 'awaiting_otp' && (
                   <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="Enter OTP..."
-                        className="h-7 text-xs flex-1"
-                        value={otpInputs[app.id] || ''}
-                        onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))}
-                      />
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        disabled={!otpInputs[app.id] || savingOtp[app.id]}
-                        onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}
-                      >
+                      <Input placeholder="Enter OTP..." className="h-7 text-xs flex-1" value={otpInputs[app.id] || ''} onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))} />
+                      <Button size="sm" className="h-7 text-xs gap-1" disabled={!otpInputs[app.id] || savingOtp[app.id]} onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}>
                         {savingOtp[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
                         {savingOtp[app.id] ? 'Saving...' : 'Submit OTP'}
                       </Button>
@@ -808,28 +844,17 @@ export function QueueScreen() {
                     <p className="text-[10px] text-muted-foreground mt-1">Enter the OTP — backend will automatically pick it up and resume</p>
                   </div>
                 )}
-                {/* Inline CAPTCHA action for awaiting_captcha cards */}
+
                 {app.status === 'awaiting_captcha' && (
                   <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
                     <p className="text-[10px] text-muted-foreground mb-2">Browser session is live. Open it, solve the CAPTCHA, then mark as solved.</p>
                     <div className="flex items-center gap-2">
                       {app.live_url && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs gap-1"
-                          onClick={() => window.open(app.live_url!, '_blank')}
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          Open Browser
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => window.open(app.live_url!, '_blank')}>
+                          <ExternalLink className="h-3 w-3" /> Open Browser
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700"
-                        disabled={resolvingCaptcha[app.id]}
-                        onClick={() => handleResolveCaptcha(app.id)}
-                      >
+                      <Button size="sm" className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700" disabled={resolvingCaptcha[app.id]} onClick={() => handleResolveCaptcha(app.id)}>
                         {resolvingCaptcha[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
                         {resolvingCaptcha[app.id] ? 'Resuming...' : 'Mark as Solved'}
                       </Button>
@@ -845,7 +870,7 @@ export function QueueScreen() {
       {/* Pagination */}
       {totalQueuePages > 1 && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Showing {((queuePage - 1) * QUEUE_PER_PAGE) + 1}-{Math.min(queuePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
+          <span className="text-xs text-muted-foreground">Showing {((queuePage - 1) * QUEUE_PER_PAGE) + 1}–{Math.min(queuePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
           <div className="flex items-center justify-between sm:justify-end gap-2">
             <Button size="sm" variant="outline" className="text-xs h-8" disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
             <span className="text-xs text-muted-foreground whitespace-nowrap">Page {queuePage} of {totalQueuePages}</span>
@@ -854,39 +879,146 @@ export function QueueScreen() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogTitle>Delete Application</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to delete this application? This action cannot be undone.
-          </AlertDialogDescription>
+          <AlertDialogDescription>Are you sure you want to delete this application? This action cannot be undone.</AlertDialogDescription>
           <div className="flex gap-3 justify-end">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && handleDelete(deleteId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteId && handleDelete(deleteId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
           </div>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Application Detail Modal */}
-      <Dialog open={!!selectedApp} onOpenChange={() => setSelectedApp(null)}>
-        <DialogContent className="w-[95vw] max-w-4xl bg-card border-border p-0">
+      {/* Application detail modal — does NOT close on outside click when app is running */}
+      <Dialog
+        open={!!selectedApp}
+        onOpenChange={(open) => {
+          // Don't close by clicking outside if this app is currently running
+          if (!open && selectedApp && streamingApps.has(selectedApp.id)) return
+          if (!open) setSelectedApp(null)
+        }}
+      >
+        <DialogContent
+          className="w-[95vw] max-w-4xl bg-card border-border p-0"
+          // Prevent accidental dismissal while streaming
+          onInteractOutside={(e) => {
+            if (selectedApp && streamingApps.has(selectedApp.id)) e.preventDefault()
+          }}
+        >
           <DialogTitle className="sr-only">Application Details</DialogTitle>
           {selectedApp && (
-            <ApplicationDetails 
-              application={selectedApp} 
+            <ApplicationDetails
+              application={selectedApp}
               stats={stats}
-              onStartApplication={() => startApplication(selectedApp)}
+              onStartApplication={() => {
+                startApplication(selectedApp)
+                setSelectedApp(null) // close modal — app moves to tray
+              }}
               onSendRejection={() => handleSendRejection(selectedApp)}
-              isStreaming={isStreaming}
+              isStreaming={streamingApps.has(selectedApp.id)}
               isSendingRejection={isSendingRejection}
-              recordingUrl={recordingUrl}
+              recordingUrl={null}
+              canStart={processingCountRef.current < MAX_CONCURRENT && !streamingApps.has(selectedApp.id)}
+              onStatusChange={(id, status) => {
+                setApplications(prev => prev.map(a => a.id === id ? { ...a, status } : a))
+                setSelectedApp(prev => prev?.id === id ? { ...prev, status } : prev)
+              }}
             />
           )}
         </DialogContent>
       </Dialog>
+      {/* ── Active Runs Tray ──
+           Floating cards at the bottom of the screen, one per running application.
+           Clicking outside the modal no longer kills the run — it moves here.
+           Each card shows live status and can be minimized or dismissed once done. */}
+      {activeTray.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2 items-end">
+          {activeTray.map(({ app, minimized }) => {
+            const isRunning = streamingApps.has(app.id)
+            const isDone = app.status === 'completed' || app.status === 'failed'
+            return (
+              <div
+                key={app.id}
+                className={`rounded-xl border shadow-lg bg-card transition-all duration-200 ${
+                  app.status === 'completed' ? 'border-green-500/40' :
+                  app.status === 'failed'    ? 'border-destructive/40' :
+                  isRunning                  ? 'border-blue-500/40' :
+                  'border-border'
+                } ${minimized ? 'w-64' : 'w-80'}`}
+              >
+                {/* Tray card header — always visible */}
+                <div
+                  className="flex items-center justify-between px-3 py-2 cursor-pointer select-none"
+                  onClick={() => setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, minimized: !t.minimized } : t))}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isRunning && (
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                      </span>
+                    )}
+                    {app.status === 'completed' && <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />}
+                    {app.status === 'failed'    && <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />}
+                    {!isRunning && !isDone       && <span className="h-2 w-2 rounded-full bg-muted-foreground shrink-0" />}
+                    <span className="text-xs font-medium truncate">{app.first_name} {app.last_name}</span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] text-muted-foreground">{minimized ? '▲' : '▼'}</span>
+                    {isDone && (
+                      <button
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); setActiveTray(prev => prev.filter(t => t.app.id !== app.id)) }}
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded body */}
+                {!minimized && (
+                  <div className="px-3 pb-3 flex flex-col gap-1.5 border-t border-border pt-2">
+                    <p className="text-[11px] text-muted-foreground truncate">{app.job_title} · {app.company_name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <StatusBadge status={app.status} />
+                      {isRunning && <span className="text-[10px] text-blue-500">Running…</span>}
+                      {app.status === 'completed' && <span className="text-[10px] text-green-500">Done ✓</span>}
+                      {app.status === 'failed'    && <span className="text-[10px] text-destructive">Failed</span>}
+                    </div>
+                    {/* Slot usage indicator */}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {Array.from({ length: MAX_CONCURRENT }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full ${
+                            i < processingCountRef.current ? 'bg-blue-500' : 'bg-muted'
+                          }`}
+                        />
+                      ))}
+                      <span className="text-[10px] text-muted-foreground ml-1">{processingCountRef.current}/{MAX_CONCURRENT}</span>
+                    </div>
+                    {/* Open detail button */}
+                    <button
+                      className="text-[10px] text-primary hover:underline text-left mt-0.5"
+                      onClick={() => {
+                        const full = applications.find(a => a.id === app.id)
+                        if (full) setSelectedApp(full)
+                      }}
+                    >
+                      View details →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
     </div>
+    </TooltipProvider>
   )
 }

@@ -1,5 +1,8 @@
 import { fillJobApplication } from "@/lib/automation-provider"
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { preflight, persistPreflight, recordRunOutcome } from "@/lib/preflight"
+import { withDistributedSlot } from "@/lib/distributed-gate"
+import { getKernelApiKey } from "@/lib/kernel"
 
 export async function POST(request: Request) {
   try {
@@ -9,11 +12,11 @@ export async function POST(request: Request) {
       return Response.json({ error: "Missing applicationId" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     
     const { data: app, error } = await supabase
       .from('live_application_queue')
-      .select('*')
+      .select('id, user_id, job_id, job_url, first_name, last_name, email, phone, location, gender, ethnicity, disability_status, veteran_status, work_authorization_status, headline, bio, linkedin_url, github_url, resume_url, cover_letter, experience, education, certifications, achievements, top_skills, skills, job_preferences, work_mode_preferences, salary_currency, salary_min, salary_max, attempt_count, max_attempts, company_name, job_title')
       .eq('id', applicationId)
       .single()
 
@@ -27,11 +30,53 @@ export async function POST(request: Request) {
     console.log(`[auto-apply-queue] Email: ${app.email}`)
     console.log(`[auto-apply-queue] Resume: ${app.resume_url}`)
 
+    // ─── Pre-flight gate ───
+    // Runs before any browser session exists. Refuses applications we already
+    // know will fail (explicit knockout, missing required profile field,
+    // unrecognized portal) and applications to a portal whose breaker is open.
+    // Every refusal here is a session, a proxy, and a handful of LLM calls saved.
+    const { data: job } = app.job_id
+      ? await supabase
+          .from('jobs')
+          .select('work_authorization, experience, location, type, description, detailed_requirements')
+          .eq('id', app.job_id)
+          .maybeSingle()
+      : { data: null }
+
+    const gate = await preflight(supabase, app, job)
+    await persistPreflight(supabase, applicationId, gate)
+
+    if (!gate.allow) {
+      // `retryable` distinguishes "come back later" (open breaker, fixable
+      // profile) from "never" (explicit knockout, unknown portal). Retryable
+      // rows stay pending so the next queue cycle picks them up; terminal ones
+      // are parked in the "Won't apply" bucket rather than burning retries.
+      await supabase
+        .from('live_application_queue')
+        .update({
+          status: gate.retryable ? 'pending' : 'blocked',
+          last_error: gate.reason,
+          error_message: gate.reason,
+        })
+        .eq('id', applicationId)
+
+      console.log(`[auto-apply-queue] BLOCKED (${gate.blockKind}): ${gate.reason}`)
+      return Response.json({
+        success: false,
+        blocked: true,
+        blockKind: gate.blockKind,
+        retryable: gate.retryable,
+        message: gate.reason,
+        knockouts: gate.knockouts,
+        coverage: gate.coverage,
+      }, { status: 200 })
+    }
+
     const currentAttempt = (app.attempt_count || 0) + 1
 
     await supabase
       .from('live_application_queue')
-      .update({ 
+      .update({
         status: 'processing',
         started_at: new Date().toISOString(),
         attempt_count: currentAttempt,
@@ -113,18 +158,31 @@ export async function POST(request: Request) {
                 safeEnqueue(`data: ${JSON.stringify(step)}\n\n`)
               }
 
-              const result = await fillJobApplication(
-                app.job_url,
-                formData,
-                onStep,
-                applicationId,
-                app.user_id
-              )
+              // Gate: never start more browsers at once than the plan allows.
+              // Waiting for a slot is better than being rejected by the API and
+              // marked failed on a posting that was perfectly fine.
+              const result = await withDistributedSlot(async (slot) => {
+                if (slot.waited) {
+                  onStep({ status: "in_progress", log: `Waited ${Math.round(slot.waitedMs / 1000)}s for a free browser slot (${slot.active}/${slot.limit} active)` })
+                }
+                return fillJobApplication(
+                  app.job_url,
+                  formData,
+                  onStep,
+                  applicationId,
+                  app.user_id
+                )
+              })
 
               const processingTime = Date.now() - startTime
 
               const maxAttempts = app.max_attempts || 2
-              const canRetry = !result.success && currentAttempt < maxAttempts
+              // A permanent failure — a closed posting, an SSO wall, a page that
+              // was never an application — will produce the identical outcome on
+              // every retry. Re-queuing it burns a browser session to learn
+              // nothing, so the diagnosis ends the attempt sequence outright.
+              const permanent = result.failure?.permanent === true
+              const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
               const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
               await supabase
@@ -136,12 +194,37 @@ export async function POST(request: Request) {
                   last_error: result.error || null,
                   processing_time_ms: processingTime,
                   recording_url: result.recordingUrl || null,
+                  ...(result.failure
+                    ? {
+                        failure_class: result.failure.failureClass,
+                        failure_cause: result.failure.rootCause,
+                        failure_action: result.failure.suggestedAction,
+                        failure_permanent: result.failure.permanent,
+                        failure_portal_fault: result.failure.portalFault,
+                      }
+                    : {}),
                 })
                 .eq('id', applicationId)
 
-              safeEnqueue(`data: ${JSON.stringify({
-                status: "completed",
+              // Feed the portal breaker so a run of failures stops the bleeding.
+              await recordRunOutcome(supabase, gate.portalName, {
                 success: result.success,
+                error: result.error || null,
+                portalFault: result.failure?.portalFault,
+              })
+
+              // Send the REAL terminal status, not a hardcoded "completed".
+              // finalStatus is 'completed' | 'pending' (retry) | 'failed'. Map to the
+              // stream vocabulary the client already understands.
+              const streamStatus = result.success ? "completed" : (canRetry ? "retrying" : "error")
+              safeEnqueue(`data: ${JSON.stringify({
+                status: streamStatus,
+                success: result.success,
+                error: result.error || null,
+                // The client renders "Attempt {attempt}/{maxAttempts}" on a
+                // retry; without these it printed "Attempt undefined/undefined".
+                attempt: currentAttempt,
+                maxAttempts,
                 result: result.result,
                 steps: result.steps,
                 recordingUrl: result.recordingUrl,
@@ -167,6 +250,8 @@ export async function POST(request: Request) {
                 })
                 .eq('id', applicationId)
 
+              await recordRunOutcome(supabase, gate.portalName, { success: false, error: errorMsg })
+
               safeEnqueue(`data: ${JSON.stringify({
                 status: canRetry ? "retrying" : "error",
                 error: errorMsg,
@@ -188,18 +273,21 @@ export async function POST(request: Request) {
     }
 
     const startTime = Date.now()
-    const result = await fillJobApplication(
-      app.job_url,
-      formData,
-      undefined,
-      applicationId,
-      app.user_id
+    const result = await withDistributedSlot(() =>
+      fillJobApplication(
+        app.job_url,
+        formData,
+        undefined,
+        applicationId,
+        app.user_id
+      )
     )
 
     const processingTime = Date.now() - startTime
 
     const maxAttempts = app.max_attempts || 2
-    const canRetry = !result.success && currentAttempt < maxAttempts
+    const permanent = result.failure?.permanent === true
+    const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
     const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
     await supabase
@@ -213,6 +301,12 @@ export async function POST(request: Request) {
         recording_url: result.recordingUrl || null,
       })
       .eq('id', applicationId)
+
+    await recordRunOutcome(supabase, gate.portalName, {
+      success: result.success,
+      error: result.error || null,
+      portalFault: result.failure?.portalFault,
+    })
 
     return Response.json({
       success: result.success,

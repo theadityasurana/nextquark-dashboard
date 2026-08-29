@@ -232,7 +232,8 @@ export function EmailsScreen() {
   const fetchLogs = async () => {
     const res = await fetch('/api/email/logs')
     const data = await res.json()
-    setLogs(Array.isArray(data) ? data : [])
+    // Handle both old shape (array) and new shape ({ logs, total })
+    setLogs(Array.isArray(data) ? data : (data.logs || []))
   }
 
   const fetchIncompleteProfiles = async () => {
