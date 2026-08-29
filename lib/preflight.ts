@@ -172,12 +172,18 @@ export async function preflight(
     }
   }
   if (portalConfidence < CONFIDENT_THRESHOLD) {
-    return {
-      ...base,
-      allow: false,
-      blockKind: "portal",
-      reason: `Low-confidence portal match (${portalName}, ${portalConfidence}%: ${detection.signals.join(", ")}). Needs manual review.`,
-      retryable: false,
+    // Embed-pattern matches (e.g. ?gh_jid= on a company careers page) are
+    // reliable enough to dispatch — the ATS is identified, just hosted on a
+    // custom domain. Allow them through rather than blocking for manual review.
+    const isEmbedMatch = detection.signals.includes("embedded form marker")
+    if (!isEmbedMatch) {
+      return {
+        ...base,
+        allow: false,
+        blockKind: "portal",
+        reason: `Low-confidence portal match (${portalName}, ${portalConfidence}%: ${detection.signals.join(", ")}). Needs manual review.`,
+        retryable: false,
+      }
     }
   }
 
