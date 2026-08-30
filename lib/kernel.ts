@@ -6262,7 +6262,7 @@ return await page.evaluate((want) => {
     }
 
     if (!independentSolveCleared && (detectCaptcha(allAgentText) || !!structuralCaptcha)) {
-      await persistLog(applicationId, "info", "CAPTCHA still present. Waiting for Kernel auto-solve via telemetry event...")
+      if (applicationId) await persistLog(applicationId, "info", "CAPTCHA still present. Waiting for Kernel auto-solve via telemetry event...")
       if (onStep) onStep({ status: "in_progress", log: "CAPTCHA detected — waiting for Kernel auto-solve...", liveUrl })
       const autoSolved = await Promise.race([
         captchaSolvedPromise.then(() => true),
@@ -6276,7 +6276,7 @@ return await page.evaluate((want) => {
         // A dry run has no operator watching a queue card, so waiting for one
         // would hang forever. Report the challenge and carry on to the gate.
         if (DRY_RUN) {
-          await persistLog(applicationId, "warn", "DRY RUN — a CAPTCHA needs a human; not waiting for one.")
+          if (applicationId) await persistLog(applicationId, "warn", "DRY RUN — a CAPTCHA needs a human; not waiting for one.")
         } else {
           while (true) {
             await new Promise(r => setTimeout(r, 10000))
@@ -6286,7 +6286,7 @@ return await page.evaluate((want) => {
         }
       }
       captchaUnresolved = false
-      await persistLog(applicationId, "info", "CAPTCHA solved. Resuming fill...")
+      if (applicationId) await persistLog(applicationId, "info", "CAPTCHA solved. Resuming fill...")
       if (onStep) onStep({ status: "in_progress", log: "CAPTCHA solved. Resuming...", liveUrl })
       run?.detail("verification", autoSolved ? "CAPTCHA auto-solved by Kernel" : "CAPTCHA cleared by a human operator")
       allAgentText = ""   // reset so a stale captcha keyword doesn't block submit
