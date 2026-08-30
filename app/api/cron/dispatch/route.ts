@@ -63,25 +63,21 @@ export async function GET(request: NextRequest) {
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${request.headers.get('host')}`
 
-  const results = await Promise.allSettled(
-    pending.map(async (app) => {
-      const res = await fetch(`${baseUrl}/api/auto-apply-queue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ applicationId: app.id, stream: false }),
-      })
-      return { id: app.id, ok: res.ok, status: res.status }
-    })
-  )
+  // Fire-and-forget — do NOT await. auto-apply-queue runs a full browser
+  // session (minutes), and Vercel Hobby functions time out in 10s.
+  // We just kick off each job and return immediately.
+  for (const app of pending) {
+    fetch(`${baseUrl}/api/auto-apply-queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId: app.id, stream: false }),
+    }).catch(() => {})
+  }
 
-  const dispatched = results.filter(r => r.status === 'fulfilled' && (r.value as any).ok).length
-  const failed = results.length - dispatched
-
-  console.log(`[cron/dispatch] dispatched=${dispatched} failed=${failed} slots=${slots} premiumOnly=${premiumOnly}`)
+  console.log(`[cron/dispatch] fired=${pending.length} slots=${slots} premiumOnly=${premiumOnly}`)
 
   return NextResponse.json({
-    dispatched,
-    failed,
+    fired: pending.length,
     premiumOnly,
     apps: pending.map(a => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, company: a.company_name, premium: a.is_premium })),
   })
