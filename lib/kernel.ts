@@ -6247,10 +6247,12 @@ return await page.evaluate((want) => {
     // Our own solve path runs FIRST when the challenge is structurally
     // identified: it covers the invisible types the vendor solver is weakest
     // on, and it removes the single point of failure of waiting on one vendor.
+    let independentSolveCleared = false
     if (structuralCaptcha && isSolvable(structuralCaptcha)) {
       if (onStep) onStep({ status: "in_progress", log: `${structuralCaptcha.type} detected — solving...`, liveUrl })
       const solved = await resolveCaptcha(kernelClient, sessionId, structuralCaptcha, captchaSolverKey, applicationId)
       if (solved.cleared) {
+        independentSolveCleared = true
         run?.detail("verification", `${structuralCaptcha.type} solved via the independent solver`)
         allAgentText = ""
         await runFillLoop(3)
@@ -6259,7 +6261,7 @@ return await page.evaluate((want) => {
       }
     }
 
-    if (applicationId && (detectCaptcha(allAgentText) || (structuralCaptcha && !isSolvable(structuralCaptcha)))) {
+    if (!independentSolveCleared && (detectCaptcha(allAgentText) || !!structuralCaptcha)) {
       await persistLog(applicationId, "info", "CAPTCHA still present. Waiting for Kernel auto-solve via telemetry event...")
       if (onStep) onStep({ status: "in_progress", log: "CAPTCHA detected — waiting for Kernel auto-solve...", liveUrl })
       const autoSolved = await Promise.race([

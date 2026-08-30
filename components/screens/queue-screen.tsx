@@ -125,13 +125,17 @@ export function QueueScreen() {
 
   // ─── Application dispatch ─────────────────────────────────────────────────
 
+  // A ref so processNext always calls the latest startApplication without
+  // creating a circular useCallback dependency.
+  const startApplicationRef = useRef<(app: LiveApplicationQueue) => Promise<void>>(async () => {})
+
   // processNext drains the local pending queue into available slots
   const processNext = useCallback(() => {
     while (processingCountRef.current < MAX_CONCURRENT && pendingQueueRef.current.length > 0) {
       const next = pendingQueueRef.current.shift()!
-      startApplication(next)
+      startApplicationRef.current(next)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const startApplication = useCallback(async (app: LiveApplicationQueue) => {
     processingCountRef.current++
@@ -210,18 +214,22 @@ export function QueueScreen() {
       setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); return n })
       processNext()
     }
-  }, [addLog, processNext])
+  }, [addLog])
+
+  // Keep the ref pointing at the latest startApplication so processNext
+  // always dispatches the current version.
+  useEffect(() => { startApplicationRef.current = startApplication }, [startApplication])
 
   // enqueueOrStart: respects the concurrency cap
   const enqueueOrStart = useCallback((app: LiveApplicationQueue) => {
     if (processingCountRef.current < MAX_CONCURRENT) {
-      startApplication(app)
+      startApplicationRef.current(app)
     } else {
       if (!pendingQueueRef.current.some(a => a.id === app.id)) {
         pendingQueueRef.current.push(app)
       }
     }
-  }, [startApplication])
+  }, [])
 
   // ─── Realtime data loading ────────────────────────────────────────────────
 
