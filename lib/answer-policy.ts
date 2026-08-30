@@ -706,8 +706,33 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
     return { route: "deterministic", value: dateCandidates(defaultStartDate(userData)), why: "date question" }
   }
 
-  // Yes/No bank — ONLY when the widget genuinely offers a yes/no decision.
-  const booleanCapable = shape === "checkbox" || isBooleanChoice(field.options)
+  // ── Yes/No bank — when the widget CAN offer a yes/no decision ──
+  //
+  // The strict reading of SHAPE-BEFORE-TEXT was "the options must literally say
+  // Yes and No". That works on Greenhouse and Ashby, which publish an authoritative
+  // schema, and silently disables this entire bank everywhere else: Lever, Workday,
+  // SmartRecruiters, Workable, iCIMS and Jobvite expose no schema, so a closed
+  // dropdown scans with ZERO options and `isBooleanChoice([])` is false.
+  //
+  // The cost of that was not one question. It was work authorisation, sponsorship,
+  // on-site attendance, sanctions, non-competes and criminal history all falling
+  // through to "unmapped choice" with an empty value on six of the nine portals —
+  // which is how a real application came back with "Missing entry for required
+  // field: Are you authorized to work in the country where the job is located?"
+  //
+  // An empty option list is ABSENCE of evidence, not evidence of absence. When the
+  // DOM has already told us the control is a choice, proposing "Yes" costs nothing
+  // that "" doesn't: the handler opens the widget, reads the options that actually
+  // render, and matches the proposed value against them. If it does not match, the
+  // field escalates exactly as it would have anyway.
+  //
+  // The thesis still holds where it earns its keep. Prose shapes and essay-shaped
+  // labels have already been routed to the model above, so no textarea can reach
+  // here; and when options ARE known they must still genuinely read as yes/no, so
+  // a "Full-time / Part-time" pair can never absorb a "Yes".
+  const optionsUnknown = field.options.length === 0
+  const booleanCapable =
+    shape === "checkbox" || isBooleanChoice(field.options) || (isChoiceShape(shape) && optionsUnknown)
   if (booleanCapable) {
     for (const rule of BOOLEAN_BANK) {
       if (rule.re.test(label)) {
@@ -788,6 +813,10 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   // Restricted to REQUIRED fields deliberately. An optional screener blocks
   // nothing, so there is no reason to assert experience to clear it; it goes to
   // the model like any other unmapped choice.
+  // Deliberately NOT extended to unknown options, unlike the bank above. The bank
+  // fires on anchored, question-shaped patterns that identify a specific question;
+  // this default fires on anything left over, and asserting "Yes" into a control we
+  // cannot even see the options of is a guess with no evidence behind it at all.
   if (isBooleanChoice(field.options) && field.required) {
     const yes = field.options.find((o) => AFFIRMATIVE.test(o.trim()))
     if (yes) {

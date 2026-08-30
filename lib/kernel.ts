@@ -3280,7 +3280,27 @@ ${VM_DOM_HELPERS}
     if (tag === 'FIELDSET' || role === 'radiogroup' || role === 'group') {
       return !!el.querySelector('[aria-checked="true"],input:checked,[aria-pressed="true"],[aria-selected="true"]');
     }
-    if (type === 'checkbox' || type === 'radio') return !!el.checked;
+    // ─── A grouped checkbox is answered at the GROUP, not the box ───
+    //
+    // "How did you learn about us? Select ALL that apply." renders one checkbox
+    // per option and marks EVERY option required, which is how the browser is
+    // told to enforce "pick at least one". Judging each box on its own .checked
+    // therefore inverts the question: ticking exactly one option — the correct
+    // answer — leaves the other fifteen reporting unfilled, and the audit blocked
+    // submit on a form that was properly filled in. A live run ended
+    // "Submit was never clicked — form incomplete" with both multi-selects
+    // correctly answered and verified by their handler moments earlier.
+    //
+    // Radios keep the same semantics for the same reason: one of the set is the
+    // answer for all of them.
+    if (type === 'checkbox' || type === 'radio') {
+      if (el.checked) return true;
+      const nm = el.getAttribute('name') || '';
+      if (!nm) return false;
+      return !!document.querySelector(
+        'input[type="' + type + '"][name="' + nm.replace(/["\\]/g, '\\$&') + '"]:checked'
+      );
+    }
     const ariaState = el.getAttribute('aria-checked') || el.getAttribute('aria-selected');
     if (ariaState !== null) return ariaState === 'true';
     if (tag === 'SELECT') {
