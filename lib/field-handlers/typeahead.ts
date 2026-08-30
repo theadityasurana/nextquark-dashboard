@@ -66,6 +66,154 @@ const readOptions = () => {
   return out.slice(0, 60);
 };
 
+// ─── react-select, which mostly cannot be typed into at all ───
+//
+// Greenhouse renders its Yes/No screeners, its Country picker and its
+// acknowledgements with react-select. Most are built with isSearchable={false},
+// which means the thing that looks like a text input is a zero-width dummy that
+// discards keystrokes: setting its .value and firing input changes nothing, no
+// menu opens, and this handler reported widget-unresponsive on all six
+// screeners of a live form while the questions stayed blank.
+//
+// react-select opens on MOUSEDOWN, not click and not focus, and it listens on
+// the CONTROL rather than on the input. So the sequence is: mousedown the
+// control to open the menu, read the options it renders, and mousedown the one
+// we want — a plain a plain .click() misses because react-select commits its choice in
+// its own mousedown handler before any click event is dispatched.
+//
+// The listbox id is published on the input's aria-controls while the menu is
+// open, which scopes the option query exactly and beats guessing class names.
+const rsControl = el.closest('[class*="select__control"],[class*="-control"]');
+const looksReactSelect = !!rsControl
+  || /^react-select-/.test(el.getAttribute('aria-controls') || '')
+  || /^react-select-/.test(el.id || '')
+  || (el.getAttribute('role') === 'combobox' && el.getAttribute('aria-haspopup') === 'true');
+
+if (looksReactSelect) {
+  const fire = (node, type) => {
+    try {
+      node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
+    } catch { try { node.dispatchEvent(new Event(type, { bubbles: true })); } catch {} }
+  };
+  const opener = rsControl || el;
+  // Captured before the menu opens: react-select swaps out the control and the
+  // input as it re-renders, so anything resolved after the click can be stale.
+  const rsShell = el.closest('[class*="select__container"],[class*="select-shell"]') || rsControl || el.parentElement;
+
+  el.scrollIntoView({ block: 'center' });
+  await sleep(rnd(120, 300));
+  el.focus();
+  fire(opener, 'mousedown');
+  fire(opener, 'mouseup');
+  await waitForMutation(2500, 200);
+
+  // Scope to this widget's own listbox when it names one; otherwise fall back to
+  // the portal-wide option selector.
+  const listboxId = el.getAttribute('aria-controls') || '';
+  const scoped = listboxId
+    ? '#' + (window.CSS && CSS.escape ? CSS.escape(listboxId) : listboxId) + ' [role="option"], '
+      + '#' + (window.CSS && CSS.escape ? CSS.escape(listboxId) : listboxId) + ' [class*="option"]'
+    : '';
+
+  const readScoped = () => {
+    document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+    const nodes = scoped ? Array.from(document.querySelectorAll(scoped)) : [];
+    const list = nodes.length ? nodes : Array.from(document.querySelectorAll(${JSON.stringify(ctx.optionSelector)}));
+    const seen = new Set(); const out = [];
+    list.forEach((n) => {
+      const r = n.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return;
+      const text = (n.innerText || n.textContent || '').replace(/\\s+/g, ' ').trim();
+      if (!text || text.length > 160 || seen.has(text)) return;
+      seen.add(text); n.setAttribute(OPT_ATTR, String(out.length)); out.push(text);
+    });
+    return out.slice(0, 60);
+  };
+
+  let opts = readScoped();
+
+  // ─── Narrow a long list before reading it ───
+  //
+  // react-select renders its menu alphabetically and this reader caps at 60
+  // options, so on a ~250-entry country picker everything past the Bs is simply
+  // absent: "India +91" was never in the list. bestIndex then fell through to
+  // substring matching, where "british indian ocean territory 246" contains
+  // "india", and the handler confidently committed the wrong dial code.
+  //
+  // A searchable react-select filters as you type, which is both how a person
+  // uses it and the only way to get the wanted row into the rendered window.
+  // isSearchable={false} widgets — the Yes/No screeners — render a readOnly
+  // dummy input instead; typing into those does nothing, and their lists are
+  // short enough that the first read already contains every option.
+  const searchable = !el.readOnly && el.getAttribute('inputmode') !== 'none';
+  if (searchable && bestIndex(WANT, opts) < 0) {
+    const filterTerm = (WANT.split(/[,\\-–—]/)[0] || WANT).trim();
+    if (filterTerm) {
+      if (setter) setter.call(el, filterTerm); else el.value = filterTerm;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      await waitForMutation(2500, 250);
+      await sleep(200);
+      const narrowed = readScoped();
+      if (narrowed.length) opts = narrowed;
+    }
+  }
+
+  // A searchable react-select shows everything on open; typing only narrows it.
+  // If nothing rendered, it may be an async picker that needs a query first —
+  // fall through to the typing path below rather than failing here.
+  if (opts.length) {
+    const idx = bestIndex(WANT, opts);
+    if (idx < 0) {
+      // Close the menu so the page is left as we found it.
+      fire(opener, 'mousedown'); fire(opener, 'mouseup');
+      document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+      return { handled: true, filled: false, reason: 'no-matching-option', options: opts, needsModelChoice: true };
+    }
+    const node = document.querySelector('[' + OPT_ATTR + '="' + idx + '"]');
+    if (node) {
+      node.scrollIntoView({ block: 'nearest' });
+      // mousedown is the one react-select acts on; the rest are for widgets that
+      // want a full, ordinary click.
+      fire(node, 'mousedown'); fire(node, 'mouseup'); fire(node, 'click');
+      await waitForMutation(1500, 200);
+      document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+
+      // ─── Confirm from the committed value, never from the click ───
+      //
+      // Scope matters more than it looks. closest('[class*=select]') resolves to
+      // the NEAREST match, which is .select__input-container — a subtree that
+      // never contains the chosen value, because react-select renders that into
+      // .select__single-value under a sibling value-container. So the check read
+      // an empty node and reported selection-not-committed on answers that had
+      // in fact landed. rsShell is captured above the control, before the click,
+      // because react-select replaces nodes as it re-renders.
+      //
+      // Polled, not sampled once: the re-render is a frame or two behind the
+      // mousedown, which is the same mistake in miniature.
+      const readCommitted = () => {
+        const box = rsShell || document;
+        const single = box.querySelector('[class*="single-value"],[class*="singleValue"]');
+        if (single) return ((single.innerText || single.textContent) || '').trim();
+        // Builds that render no single-value node: the placeholder disappearing
+        // is the same signal.
+        const ctrl = box.querySelector('[class*="select__control"],[class*="-control"]') || box;
+        if (ctrl.querySelector('[class*="placeholder"]')) return '';
+        return ((ctrl.innerText || ctrl.textContent) || '').trim();
+      };
+      let committed = '';
+      for (let i = 0; i < 12; i++) {
+        committed = readCommitted();
+        if (committed) break;
+        await sleep(150);
+      }
+      if (committed) {
+        return { handled: true, filled: true, reason: 'react-select-picked', picked: opts[idx], options: opts };
+      }
+      return { handled: true, filled: false, reason: 'selection-not-committed', picked: opts[idx], options: opts };
+    }
+  }
+}
+
 // ─── Query order: SHORTEST first ───
 //
 // A place picker is filtered, not searched. Typing the whole profile value

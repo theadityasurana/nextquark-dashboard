@@ -18,7 +18,7 @@
  *   bad-reply — the call succeeded but returned nothing usable.
  */
 
-export type LlmProvider = "openrouter" | "google" | "openai"
+export type LlmProvider = "groq" | "openrouter" | "google" | "openai"
 
 export interface LlmAttempt {
   /** Stable label for logs. */

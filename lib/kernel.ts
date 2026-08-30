@@ -126,29 +126,32 @@ let cachedKernelApiKey: string | null = null
 let cachedGeminiApiKey: string | null = null
 let cachedOpenAiApiKey: string | null = null
 let cachedOpenRouterApiKey: string | null = null
+let cachedGroqApiKey: string | null = null
 // The independent CAPTCHA solver (CapSolver-compatible). Optional: without it
 // we fall back to the browser vendor's auto-solve and then to a human.
 let cachedCaptchaSolverKey: string | null = null
 
-async function getKeys(): Promise<{ apiKey: string; geminiKey: string; openAiKey: string; openRouterKey: string; captchaSolverKey: string }> {
-  if (cachedKernelApiKey && cachedGeminiApiKey !== null && cachedOpenAiApiKey !== null && cachedOpenRouterApiKey !== null && cachedCaptchaSolverKey !== null) {
-    return { apiKey: cachedKernelApiKey, geminiKey: cachedGeminiApiKey, openAiKey: cachedOpenAiApiKey, openRouterKey: cachedOpenRouterApiKey, captchaSolverKey: cachedCaptchaSolverKey }
+async function getKeys(): Promise<{ apiKey: string; geminiKey: string; openAiKey: string; openRouterKey: string; groqKey: string; captchaSolverKey: string }> {
+  if (cachedKernelApiKey && cachedGeminiApiKey !== null && cachedOpenAiApiKey !== null && cachedOpenRouterApiKey !== null && cachedGroqApiKey !== null && cachedCaptchaSolverKey !== null) {
+    return { apiKey: cachedKernelApiKey, geminiKey: cachedGeminiApiKey, openAiKey: cachedOpenAiApiKey, openRouterKey: cachedOpenRouterApiKey, groqKey: cachedGroqApiKey, captchaSolverKey: cachedCaptchaSolverKey }
   }
   try {
-    const { data } = await supabase.from("settings").select("kernelApiKey, geminiApiKey, openAiApiKey, openRouterApiKey, captchaSolverApiKey").single()
+    const { data } = await supabase.from("settings").select("kernelApiKey, geminiApiKey, openAiApiKey, openRouterApiKey, groqApiKey, captchaSolverApiKey").single()
     cachedKernelApiKey = process.env.KERNEL_API_KEY || data?.kernelApiKey || ""
     cachedGeminiApiKey = process.env.GEMINI_API_KEY || data?.geminiApiKey || ""
     cachedOpenAiApiKey = process.env.OPENAI_API_KEY || data?.openAiApiKey || ""
     cachedOpenRouterApiKey = process.env.OPENROUTER_API_KEY || data?.openRouterApiKey || ""
+    cachedGroqApiKey = process.env.GROQ_API_KEY || data?.groqApiKey || ""
     cachedCaptchaSolverKey = process.env.CAPTCHA_SOLVER_API_KEY || data?.captchaSolverApiKey || ""
   } catch {
     cachedKernelApiKey = process.env.KERNEL_API_KEY || ""
     cachedGeminiApiKey = process.env.GEMINI_API_KEY || ""
     cachedOpenAiApiKey = process.env.OPENAI_API_KEY || ""
     cachedOpenRouterApiKey = process.env.OPENROUTER_API_KEY || ""
+    cachedGroqApiKey = process.env.GROQ_API_KEY || ""
     cachedCaptchaSolverKey = process.env.CAPTCHA_SOLVER_API_KEY || ""
   }
-  return { apiKey: cachedKernelApiKey!, geminiKey: cachedGeminiApiKey!, openAiKey: cachedOpenAiApiKey!, openRouterKey: cachedOpenRouterApiKey!, captchaSolverKey: cachedCaptchaSolverKey! }
+  return { apiKey: cachedKernelApiKey!, geminiKey: cachedGeminiApiKey!, openAiKey: cachedOpenAiApiKey!, openRouterKey: cachedOpenRouterApiKey!, groqKey: cachedGroqApiKey!, captchaSolverKey: cachedCaptchaSolverKey! }
 }
 
 /**
@@ -169,19 +172,90 @@ export function clearCachedKernelKey() {
   cachedGeminiApiKey = null
   cachedOpenAiApiKey = null
   cachedOpenRouterApiKey = null
+  cachedGroqApiKey = null
   cachedCaptchaSolverKey = null
 }
 
 // ─── Build the ordered list of Stagehand model configs to try ───
-// OpenRouter goes first for DOM/tool agents (cua:false). OpenRouter can't drive Computer-Use
-// (cua:true) providers, so for those portals we prefer direct Gemini/OpenAI and only fall back
-// to OpenRouter (as a DOM agent) if nothing else is configured.
+//
+// Direct Gemini first, OpenRouter last, for every portal.
+//
+// OpenRouter used to lead for DOM/tool agents on the theory that OpenAI models
+// support function-calling most reliably. In practice the direct Gemini entry
+// was answering these calls anyway — every successful act() in a live run is
+// logged [google/gemini-2.5-flash] — while the three OpenRouter entries ahead of
+// it were being tried first and failing, because a credit-exhausted OpenRouter
+// account returns HTTP 402 rather than declining to be chosen. That is three
+// guaranteed round trips, about eleven seconds, in front of every single AI call
+// on the form.
+//
+// Putting the provider we actually have quota on first makes OpenRouter what it
+// should have been: the fallback for when Gemini is rate-limited or out.
+//
+// The cua flag no longer changes the order — it happened to produce this order
+// already for Computer-Use portals, since OpenRouter cannot drive CUA providers.
 type ModelChoice = { label: string; stagehandModel: any; apiKey: string }
 
-function buildModelChain(
+/**
+ * Groq, first in every chain.
+ *
+ * OpenAI-compatible endpoint, so it needs no new transport — only a base URL.
+ * Both models below are named `openai/...` in Groq's own catalogue, which means
+ * they satisfy Stagehand's provider-prefix check (see STAGEHAND_PROVIDER_PREFIXES)
+ * without any rewriting. That is what makes Groq usable for observe/act and not
+ * just for text answers.
+ *
+ * 120b leads on quality, 20b follows as the faster, cheaper retry — a chain of
+ * two costs nothing extra unless the first one fails.
+ */
+export const GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+export const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
+/** How many free OpenRouter models to offer Stagehand before falling back to paid. */
+const STAGEHAND_FREE_MODELS = 4
+
+/**
+ * Vendor prefixes Stagehand's aiSDK layer will accept.
+ *
+ * Stagehand does not take our word for the provider. It re-derives one from the
+ * text BEFORE the first slash in `modelName` and rejects anything outside this
+ * set with "<vendor> is not currently supported for aiSDK".
+ *
+ * That is invisible for the paid entries only by luck: OpenRouter names its
+ * OpenAI and Google models `openai/…` and `google/…`, which collide with real
+ * provider names. Most of the free tier does not — `minimax/…`, `z-ai/…`,
+ * `nvidia/…`, `dots-studio/…` — and offering those to Stagehand cost four
+ * guaranteed failures and about fourteen seconds on EVERY escalation before a
+ * working model was reached.
+ *
+ * The id cannot be rewritten to dodge this: OpenRouter needs the full vendor
+ * prefix to route the call, so `openai/minimax/…` is simply a 404. Filtering is
+ * the only correct move here.
+ *
+ * `askModel` is deliberately unaffected — it calls OpenRouter over plain fetch,
+ * never through Stagehand, so the whole free tier stays available for the text
+ * answers where most of the free-model value actually is.
+ */
+const STAGEHAND_PROVIDER_PREFIXES = new Set(["openai", "google", "anthropic", "xai", "azure", "bedrock", "vertex"])
+
+/** Can Stagehand actually route this OpenRouter model id? */
+export function isStagehandRoutableModel(id: string): boolean {
+  const vendor = String(id || "").split("/")[0]
+  return STAGEHAND_PROVIDER_PREFIXES.has(vendor.toLowerCase())
+}
+
+export function buildModelChain(
   cua: boolean,
-  keys: { openRouterKey: string; geminiKey: string; openAiKey: string }
+  keys: { openRouterKey: string; geminiKey: string; openAiKey: string; groqKey?: string },
+  freeModels: string[] = freeModelIds
 ): ModelChoice[] {
+  const groq: ModelChoice[] = keys.groqKey
+    ? GROQ_MODELS.map((m) => ({
+        label: `groq/${m}`,
+        apiKey: keys.groqKey!,
+        stagehandModel: { provider: "openai", modelName: m, apiKey: keys.groqKey!, baseURL: GROQ_BASE_URL },
+      }))
+    : []
   // OpenAI models via OpenRouter first — the DOM agent relies on function/tool-calling, which
   // OpenAI models support most reliably. Gemini-via-OpenRouter is a secondary option.
   const openRouter: ModelChoice[] = keys.openRouterKey ? [
@@ -197,9 +271,29 @@ function buildModelChain(
     direct.push({ label: "gpt-4.1-mini", apiKey: keys.openAiKey, stagehandModel: { provider: "openai", modelName: "gpt-4.1-mini", apiKey: keys.openAiKey } })
     direct.push({ label: "gpt-4o-mini",  apiKey: keys.openAiKey, stagehandModel: { provider: "openai", modelName: "gpt-4o-mini", apiKey: keys.openAiKey } })
   }
-  // cua:false → OpenRouter first. cua:true → direct first (CUA needs a real provider), OpenRouter last.
-  const chain = cua ? [...direct, ...openRouter] : [...openRouter, ...direct]
-  return chain
+  // ── The free tier goes AHEAD of the paid one ──
+  //
+  // These are the same models `askModel` has always kept as its last resort, but
+  // Stagehand was never offered them at all: buildModelChain only ever knew about
+  // the three paid entries, so all 64 observe/act escalations in a live run went
+  // through models the account had no credit for. Zero-cost models that might
+  // work belong in front of paid models that are returning HTTP 402.
+  //
+  // Capped, because unlike a text answer each Stagehand attempt re-sends a full
+  // accessibility tree — a long chain of unlikely models is expensive in latency
+  // even when every call is free. The curated list is ordered JSON-capable first
+  // (see FREE_OPENROUTER_MODELS), which is what observe/act needs, so taking the
+  // head of it takes the models most likely to actually answer.
+  const freeOpenRouter: ModelChoice[] = keys.openRouterKey
+    ? freeModels.filter(isStagehandRoutableModel).slice(0, STAGEHAND_FREE_MODELS).map((m) => ({
+        label: `openrouter-free/${m}`,
+        apiKey: keys.openRouterKey,
+        stagehandModel: { provider: "openai", modelName: m, apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL },
+      }))
+    : []
+
+  void cua
+  return [...groq, ...direct, ...freeOpenRouter, ...openRouter]
 }
 
 /**
@@ -244,7 +338,7 @@ function consoleLog(level: string, message: string) {
  */
 const llmKeyHealth = new Map<string, boolean>()
 
-async function probeLlmKey(provider: "openrouter" | "gemini" | "openai", key: string): Promise<boolean> {
+async function probeLlmKey(provider: "openrouter" | "gemini" | "openai" | "groq", key: string): Promise<boolean> {
   if (!key) return false
   const cacheKey = `${provider}:${key.slice(-8)}`
   const cached = llmKeyHealth.get(cacheKey)
@@ -255,7 +349,13 @@ async function probeLlmKey(provider: "openrouter" | "gemini" | "openai", key: st
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), 8000)
     try {
-      if (provider === "gemini") {
+      if (provider === "groq") {
+        // Groq's /models requires the key, so it authenticates without spending
+        // generation quota — the same property that makes Gemini's ListModels
+        // the right probe there.
+        const r = await fetch(`${GROQ_BASE_URL}/models`, { signal: ctl.signal, headers: { Authorization: `Bearer ${key}` } })
+        ok = r.ok
+      } else if (provider === "gemini") {
         // ─── Probe the KEY, not one model's minute-quota ───
         //
         // Generating a completion here conflated two very different things: an
@@ -291,30 +391,33 @@ async function probeLlmKey(provider: "openrouter" | "gemini" | "openai", key: st
 
 /** Drop providers whose keys do not authenticate, so no field pays for them. */
 async function healthyKeys(
-  keys: { openRouterKey: string; geminiKey: string; openAiKey: string },
+  keys: { openRouterKey: string; geminiKey: string; openAiKey: string; groqKey?: string },
   applicationId?: string
-): Promise<{ openRouterKey: string; geminiKey: string; openAiKey: string; report: string }> {
-  const [orOk, gemOk, oaiOk] = await Promise.all([
+): Promise<{ openRouterKey: string; geminiKey: string; openAiKey: string; groqKey: string; report: string }> {
+  const [orOk, gemOk, oaiOk, groqOk] = await Promise.all([
     probeLlmKey("openrouter", keys.openRouterKey),
     probeLlmKey("gemini", keys.geminiKey),
     probeLlmKey("openai", keys.openAiKey),
+    probeLlmKey("groq", keys.groqKey || ""),
   ])
   const say = (name: string, present: boolean, good: boolean) =>
     !present ? `${name}: not configured` : good ? `${name}: OK` : `${name}: REJECTED (key not recognised)`
   const report = [
+    say("Groq", !!keys.groqKey, groqOk),
     say("OpenRouter", !!keys.openRouterKey, orOk),
     say("Gemini", !!keys.geminiKey, gemOk),
     say("OpenAI", !!keys.openAiKey, oaiOk),
   ].join(" · ")
 
   if (applicationId) {
-    const anyDead = (keys.openRouterKey && !orOk) || (keys.geminiKey && !gemOk) || (keys.openAiKey && !oaiOk)
+    const anyDead = (keys.openRouterKey && !orOk) || (keys.geminiKey && !gemOk) || (keys.openAiKey && !oaiOk) || (keys.groqKey && !groqOk)
     await persistLog(applicationId, anyDead ? "warn" : "info", `LLM key check — ${report}`)
   }
   return {
     openRouterKey: orOk ? keys.openRouterKey : "",
     geminiKey: gemOk ? keys.geminiKey : "",
     openAiKey: oaiOk ? keys.openAiKey : "",
+    groqKey: groqOk ? (keys.groqKey || "") : "",
     report,
   }
 }
@@ -650,6 +753,28 @@ const verify = async () => {
 
 if (await verify()) return { uploaded: true, method: 'already-present' };
 
+// ─── Give the upload time to land before declaring it failed ───
+//
+// setInputFiles returns as soon as the file is handed to the input, but the
+// portal then uploads it (Greenhouse POSTs to S3) and re-renders before any
+// evidence appears in the DOM. Checking once, immediately, therefore asked the
+// question before the answer could exist: a live run logged a successful
+// "201 POST .../s3.amazonaws.com" at 34.1s, failed its instant verify, walked
+// every remaining input, fell through to the Attach-button path, and reported
+// success at 63.6s — thirty seconds spent re-uploading a file that was already
+// there.
+//
+// Polling costs nothing on the happy path (it exits on the first true) and only
+// spends its budget when the upload genuinely is slow.
+const verifyFor = async (ms) => {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    if (await verify()) return true;
+    if (Date.now() >= deadline) return false;
+    await page.waitForTimeout(250);
+  }
+};
+
 let lastErr = '';
 
 // 1. Straight at every file input, including hidden ones — setInputFiles does
@@ -660,7 +785,7 @@ try {
   for (let i = 0; i < n; i++) {
     try {
       await inputs.nth(i).setInputFiles(fileArg);
-      if (await verify()) return { uploaded: true, method: 'setInputFiles-buffer', inputs: n };
+      if (await verifyFor(8000)) return { uploaded: true, method: 'setInputFiles-buffer', inputs: n };
     } catch (e) { lastErr = String(e && e.message || e); }
   }
 } catch (e) { lastErr = String(e && e.message || e); }
@@ -679,7 +804,7 @@ try {
       btn.click(),
     ]);
     await chooser.setFiles(fileArg);
-    if (await verify()) return { uploaded: true, method: 'filechooser-buffer' };
+    if (await verifyFor(8000)) return { uploaded: true, method: 'filechooser-buffer' };
   }
 } catch (e) { lastErr = String(e && e.message || e); }
 
@@ -723,6 +848,34 @@ const countryName = ${JSON.stringify(country.name)};
 const dialCode = ${JSON.stringify(country.dial)};
 const isoCode = ${JSON.stringify(country.iso.toLowerCase())};
 let matchedPattern = 'none';
+
+// ─── Pattern A0: react-select country picker, checked HONESTLY ───
+//
+// Greenhouse renders the phone country as react-select (id #country, options
+// react-select-country-option-N) with a hidden required input holding the real
+// submitted value. Pattern A below matched one of its decorative [class*=flag]
+// nodes, found the word "India" somewhere in its text, and returned
+// 'A:already-correct' without ever opening anything — so every run logged
+// "Country code: +91 India selected" while the field sat visibly empty.
+//
+// A fuzzy text match is not evidence of a committed value. The hidden input is.
+// When it is empty we report NOT selected, which keeps Country on the work list
+// for the Phase 2 typeahead handler — the one that now knows how to drive
+// react-select — instead of silently declaring victory here.
+const rsCountry = page.locator('#country,[id^="react-select-country"]').first();
+if (await rsCountry.count() > 0) {
+  const committed = await rsCountry.evaluate((el) => {
+    const shell = el.closest('[class*="select__container"],[class*="phone-input__country"],[class*="select"]');
+    if (!shell) return '';
+    const single = shell.querySelector('[class*="single-value"],[class*="singleValue"]');
+    const hidden = shell.querySelector('input[aria-hidden="true"],input[type="hidden"]');
+    return ((single && single.textContent) || '').trim() || ((hidden && hidden.value) || '').trim();
+  }).catch(() => '');
+  if (committed) {
+    return { selected: true, matchedPattern: 'A0:react-select-already-correct' };
+  }
+  return { selected: false, matchedPattern: 'A0:react-select-empty-deferred' };
+}
 
 // Pattern A: intl-tel-input style flag button
 const flagTrigger = page.locator('[class*="flag"],[class*="country-code"],[class*="phone-country"],[class*="iti__flag"]').first();
@@ -1362,7 +1515,23 @@ const phone = _p.phone, firstName = _p.firstName, lastName = _p.lastName,
 
   // TS-level variables still needed for template literal interpolations
   // in the Workday experience block and portal-specific selector strings below.
-  const phone = (userData.phone || "").replace(/\D/g, "").replace(/^91/, "")
+  // ─── The number WITHOUT its dial code ───
+  //
+  // Every portal that shows a country dropdown beside the phone box expects the
+  // national number only — the dial code is the dropdown's job, and typing it
+  // twice produces "+91 +917776004343".
+  //
+  // The dial code is stripped using the candidate's OWN country, not a hardcoded
+  // one. The previous `.replace(/^91/, "")` assumed India and silently corrupted
+  // everyone else: a US number in area code 917, "9175551234", came out as
+  // "75551234". Guarded on length too, so a national number that merely happens
+  // to begin with its own dial digits is left alone.
+  const phoneDial = resolvePhoneCountry(userData).dial.replace(/\D/g, "")
+  const phoneDigits = (userData.phone || "").replace(/\D/g, "")
+  const phone =
+    phoneDial && phoneDigits.startsWith(phoneDial) && phoneDigits.length - phoneDial.length >= 7
+      ? phoneDigits.slice(phoneDial.length)
+      : phoneDigits
   const firstName = (userData.firstName || "").replace(/'/g, "\\'")
   const lastName = (userData.lastName || "").replace(/'/g, "\\'")
   const fullName = (userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim()).replace(/'/g, "\\'")
@@ -1495,13 +1664,20 @@ async function getLabelText(field) {
     return wrapper?.querySelector('label,legend,[class*="label"]')?.textContent?.trim() ?? '';
   }).catch(() => '');
 }
-async function findFieldByLabel(pattern) {
+// \`exclude\`, when given, vetoes a label the pattern would otherwise claim.
+// Needed because the question and its conditional follow-up share vocabulary:
+// 'If selected "Referral", who referred you?' matches any pattern loose enough
+// to catch "How did you hear about us?", and answering the follow-up invents a
+// reason for a trigger that was never selected.
+async function findFieldByLabel(pattern, exclude) {
   const inputs = page.locator('input[type="text"],input[type="url"],input[type="email"],textarea,select');
   const count = await inputs.count();
   for (let i = 0; i < count; i++) {
     const f = inputs.nth(i);
     const label = await getLabelText(f);
-    if (pattern.test(label)) return f;
+    if (!pattern.test(label)) continue;
+    if (exclude && exclude.test(String(label || '').trim())) continue;
+    return f;
   }
   return null;
 }
@@ -1690,17 +1866,82 @@ try {
 ` : ""}
 
 // ─── Location autocomplete ───
+//
+// Greenhouse renders this as a react-select combobox backed by a geocode
+// service, and it has three traps that the obvious implementation walks into.
+//
+//   1. IT IS A PREFIX SEARCH. Typing the profile's location verbatim —
+//      "Bangalore, India" — sends the whole string, suffix included, and the
+//      menu comes back empty. Only the city token goes in the box; the rest of
+//      the string is what we match the RESULTS against.
+//
+//   2. ITS OPTIONS ARE NOT WHERE YOU GUESS. They are not \`.pac-item\`, not
+//      \`li\`, and not reliably \`[role="option"]\` — react-select names them
+//      after the input (\`react-select-candidate-location-option-0\`) and, while
+//      the menu is open, publishes the listbox id on the input's own
+//      \`aria-controls\`. Reading that attribute is exact; guessing class names
+//      is how this ended up clicking nothing at all.
+//
+//   3. TYPED IS NOT SELECTED. The visible box shows the text either way, but
+//      until an option is committed the hidden geocode companions stay empty
+//      and the form rejects the submission with the field looking filled. So
+//      the outcome is verified from the committed value, never from the typing.
+//
+// The first match is also not necessarily the right one — "Bangalore" returns
+// several administrative regions — so options are scored against the full
+// location string rather than blindly taking \`.first()\`.
 try {
+  const want = '${location}'.trim();
   const locInput = page.locator('input[name="location"],input[id*="location" i],input[placeholder*="location" i],input[placeholder*="city" i],#candidate-location').first();
-  if (await locInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+  if (want && await locInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const term = (want.split(',')[0] || want).trim();
+    const wantTokens = norm(want).split(' ').filter(Boolean);
+
+    await locInput.click({ timeout: 2000 }).catch(() => {});
     await locInput.fill('');
-    await locInput.pressSequentially('${location}', { delay: 25 });
-    const suggestion = page.locator('[role="option"],[class*="pac-item"],[class*="suggestion"],[class*="autocomplete"] li').first();
-    await suggestion.waitFor({ state: 'visible', timeout: 4000 }).catch(() => null);
-    if (await suggestion.count() > 0) { await suggestion.click(); results.location = true; }
-    else { results.location = false; } // typed but no suggestion — surface as failed
+    await locInput.pressSequentially(term, { delay: 60 });
+
+    // Wait for the menu by asking the input which listbox it opened.
+    let listboxId = '';
+    for (let i = 0; i < 24; i++) {
+      listboxId = (await locInput.getAttribute('aria-controls').catch(() => '')) || '';
+      if (listboxId) break;
+      await page.waitForTimeout(250);
+    }
+    const optionSel = listboxId
+      ? '#' + listboxId + ' [role="option"], #' + listboxId + ' [class*="option"], [id^="' + listboxId.replace(/-listbox$/, '') + '-option"]'
+      : '[role="option"],[class*="select__option"],[class*="pac-item"],[class*="suggestion"]';
+
+    const opts = page.locator(optionSel);
+    await opts.first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => null);
+    const texts = (await opts.allTextContents().catch(() => [])).map((t) => t.trim()).filter(Boolean);
+
+    let picked = -1, best = 0;
+    for (let i = 0; i < texts.length; i++) {
+      const t = norm(texts[i]);
+      let score = 0;
+      for (const tok of wantTokens) if (t.includes(tok)) score += 2;
+      if (t.startsWith(norm(term))) score += 3;
+      if (score > best) { best = score; picked = i; }
+    }
+
+    if (picked >= 0) {
+      await opts.nth(picked).click({ timeout: 3000 }).catch(() => {});
+    } else {
+      // react-select is always keyboard-drivable, whatever it calls its DOM.
+      await locInput.press('ArrowDown').catch(() => {});
+      await locInput.press('Enter').catch(() => {});
+    }
+
+    await page.waitForTimeout(400);
+    const committed = (await page.locator('[class*="single-value"],[class*="singleValue"],.select__single-value').first().textContent().catch(() => '')) || '';
+    results.location = norm(committed).length > 0;
+    console.log('[location] term="' + term + '" options=' + texts.length +
+      ' picked=' + (picked >= 0 ? '"' + texts[picked] + '"' : '(keyboard fallback)') +
+      ' committed="' + committed.trim() + '"');
   }
-} catch {}
+} catch (e) { console.log('[location] failed: ' + (e && e.message)); }
 
 // ─── B: Semi-deterministic fields via label-text matching ───
 
@@ -1725,8 +1966,15 @@ try {
 } catch {}
 
 // Source / How did you hear — progressive fallback list
+//
+// The pattern is anchored on the QUESTION, not on its keywords. The previous
+// bare /referral/ matched Greenhouse's conditional follow-up — 'If selected
+// "Referral", who referred you?' — and typed a source name into it, inventing a
+// referrer for a trigger nobody selected. A lone /source/ was worse: it claims
+// "Have you contributed to open source?". Follow-ups are excluded outright,
+// because a label that opens with "If ..." is never the question itself.
 try {
-  const srcField = await findFieldByLabel(/how did you hear|source|referral/i);
+  const srcField = await findFieldByLabel(/\b(how|where)\s+did\s+you\s+(\w+\s+)?(hear|learn|find)\b|\breferral\s+source\b|\bsource\s+of\s+(this\s+)?(job|application)\b/i, /^\s*if\b/i);
   if (srcField) {
     const matched = await trySelectOption(srcField, ['LinkedIn', 'Linkedin', 'linkedin', 'Job Board', 'Job board', 'Internet', 'Online', 'Other']);
     results.source = matched;
@@ -1755,22 +2003,54 @@ try {
 } catch {}
 ` : ""}
 
-// Consent / agreement checkboxes — setChecked (Playwright-recommended) + verify each stuck.
+// ─── Consent / agreement checkboxes ───
+//
+// "Required checkbox" does NOT mean "consent checkbox", and treating the two as
+// synonyms ticked every box on the form.
+//
+// A multi-select question — "How did you learn about us? Select ALL that apply."
+// — is rendered by Greenhouse as one checkbox per option, and EVERY option
+// carries a required attribute so the browser enforces "pick at least one". On the KnowBe4
+// posting that is 27 required checkboxes across two questions and not one
+// standalone consent box among them. The old selector matched all 27 and
+// setChecked(true) on each, which silently claimed the candidate had heard about
+// the role from all sixteen sources at once and researched it with all eleven.
+//
+// What separates the two is arity, not wording: group members SHARE a name (and
+// Greenhouse suffixes it with the [] array marker), while a consent box is
+// alone under its own. So a box is only ticked when nothing else on the page
+// shares its name — which is the definition of "there is nothing here to choose
+// between". Anything in a group is left to the fill plan, which knows which
+// single option was actually asked for.
 try {
   const requiredCbs = page.locator('input[type="checkbox"][required],input[type="checkbox"][aria-required="true"],[role="checkbox"][aria-required="true"]');
   const cbCount = await requiredCbs.count();
-  let checkedCount = 0;
+
+  const names = [];
   for (let i = 0; i < cbCount; i++) {
+    names.push((await requiredCbs.nth(i).getAttribute('name').catch(() => '')) || '');
+  }
+  const seen = {};
+  for (const n of names) seen[n] = (seen[n] || 0) + 1;
+
+  let eligible = 0, checkedCount = 0, skipped = 0;
+  for (let i = 0; i < cbCount; i++) {
+    const n = names[i];
+    // [] is Greenhouse's own array marker; a shared name is the general case.
+    if (n.endsWith('[]') || seen[n] > 1) { skipped++; continue; }
+    eligible++;
     try {
       const cb = requiredCbs.nth(i);
       await cb.setChecked(true);
-      // Verify it actually registered (isChecked reads aria-checked for role=checkbox too).
+      // Verify it registered (isChecked reads aria-checked for role=checkbox too).
       if (await cb.isChecked().catch(() => false)) checkedCount++;
     } catch {}
   }
-  // Only mark consent handled when every required box is confirmed checked.
-  results.consent = cbCount > 0 && checkedCount === cbCount;
-} catch {}
+  // Only mark consent handled when every standalone box is confirmed checked.
+  results.consent = eligible > 0 && checkedCount === eligible;
+  console.log('[consent] required=' + cbCount + ' standalone=' + eligible +
+    ' checked=' + checkedCount + ' left-to-the-fill-plan=' + skipped);
+} catch (e) { console.log('[consent] failed: ' + (e && e.message)); }
 
 // ─── Resume upload ───
 ${resumeBlock}
@@ -3261,7 +3541,7 @@ async function callLlm(
           }
         )
       } else {
-        const base = a.provider === "openrouter" ? OPENROUTER_BASE_URL : "https://api.openai.com/v1"
+        const base = a.provider === "groq" ? GROQ_BASE_URL : a.provider === "openrouter" ? OPENROUTER_BASE_URL : "https://api.openai.com/v1"
         res = await fetch(`${base}/chat/completions`, {
           method: "POST",
           headers: {
@@ -3362,6 +3642,10 @@ async function askModel(
   // that classifies a failure, and one place that walks the free-tier fallbacks.
   const attempts: LlmAttempt[] = []
   for (const c of chain) {
+    if (c.label.startsWith("groq/")) {
+      attempts.push({ label: c.label, provider: "groq", model: c.label.replace(/^groq\//, ""), apiKey: c.apiKey, json: false })
+      continue
+    }
     const isOpenRouter = c.label.startsWith("openrouter/")
     if (isOpenRouter) {
       attempts.push({ label: c.label, provider: "openrouter", model: c.label.replace(/^openrouter\//, ""), apiKey: c.apiKey, json: false })
@@ -3389,7 +3673,35 @@ async function askModel(
     }
   }
 
-  const { text } = await callLlm(prompt, attempts, {
+  // ── Exhaust a provider's own ladder before moving to the next provider ──
+  //
+  // The two fallback blocks above append to the END of the list, so the Gemini
+  // ladder was landing BEHIND the paid OpenRouter entries. A Gemini model that
+  // was merely rate-limited — its quota is per-model and per-minute, so the next
+  // Gemini entry usually succeeds within seconds — therefore sent the call to
+  // OpenRouter first, which is exactly the hop this ordering exists to avoid.
+  //
+  // Free OpenRouter outranks paid OpenRouter for the same reason: a model that
+  // costs nothing and might answer beats one that bills for the attempt, and on
+  // a credit-exhausted account the paid entries cannot answer at all.
+  //
+  // A stable sort, so the deliberate ordering WITHIN each tier is preserved.
+  const tier = (a: LlmAttempt): number =>
+    a.provider === "groq" ? 0 : a.provider === "google" ? 1 : a.provider === "openai" ? 2 : a.free ? 3 : 4
+  attempts.sort((x, y) => tier(x) - tier(y))
+
+  // The chain now carries free models of its own, and the block above appends the
+  // full free list, so the same model can appear twice. Retrying an identical
+  // provider+model pair can only fail the same way it just did.
+  const seenAttempt = new Set<string>()
+  const ordered = attempts.filter((a) => {
+    const k = `${a.provider}\u0000${a.model}`
+    if (seenAttempt.has(k)) return false
+    seenAttempt.add(k)
+    return true
+  })
+
+  const { text } = await callLlm(prompt, ordered, {
     maxTokens: 200,
     applicationId,
     purpose: "option choice",
@@ -3523,12 +3835,22 @@ ${VM_DOM_HELPERS}
       timeout_sec: 60,
     })
 
+    // ─── A thrown handler must not report as "unknown" ───
+    //
+    // playwright.execute reports a VM-side throw on `error`, with `result` left
+    // undefined — and only `result` was ever read. Every such failure therefore
+    // arrived as reason "unknown" with no options and no message, which is
+    // exactly the shape of a widget that ran fine and simply matched nothing.
+    // The two need completely different fixes, and the log could not tell them
+    // apart: a live run showed 13 "FAILED (unknown)" lines and not one of them
+    // said what actually went wrong.
     const r = (runRes.result as any) || {}
+    const vmError = !runRes.success && runRes.error ? String(runRes.error) : ""
     const result: HandlerResult = {
       handled: r.handled !== false,
       filled: !!r.filled,
       handler: r.handler || handler.name,
-      reason: r.reason || "unknown",
+      reason: r.reason || (vmError ? `threw: ${vmError.slice(0, 200)}` : "unknown"),
       picked: r.picked,
       options: Array.isArray(r.options) ? r.options : undefined,
       needsModelChoice: !!r.needsModelChoice,
@@ -3540,6 +3862,7 @@ ${VM_DOM_HELPERS}
         applicationId,
         result.filled ? "info" : "warn",
         `[${result.handler}] "${label.slice(0, 45)}" ← "${String(value).slice(0, 35)}": ${result.filled ? "filled" : "FAILED"} (${result.reason})` +
+          (runRes.stderr ? ` | stderr: ${String(runRes.stderr).slice(0, 200)}` : "") +
           (result.picked ? ` → "${String(result.picked).slice(0, 50)}"` : "") +
           // The options the widget actually offered are THE diagnostic on a
           // mismatch — without them a failure is unactionable.
@@ -4502,13 +4825,14 @@ export async function fillJobApplicationWithKernel(
   cachedGeminiApiKey = null
   cachedOpenAiApiKey = null
   cachedOpenRouterApiKey = null
+  cachedGroqApiKey = null
   cachedCaptchaSolverKey = null
   const rawKeys = await getKeys()
   const { apiKey, captchaSolverKey } = rawKeys
 
   if (!apiKey) return { success: false, error: "Kernel API key is not configured. Set it in Settings." }
-  if (!rawKeys.openRouterKey && !rawKeys.geminiKey && !rawKeys.openAiKey) {
-    return { success: false, error: "At least one LLM API key (OpenRouter, Gemini, or OpenAI) is required. Set it in Settings." }
+  if (!rawKeys.openRouterKey && !rawKeys.geminiKey && !rawKeys.openAiKey && !rawKeys.groqKey) {
+    return { success: false, error: "At least one LLM API key (Groq, OpenRouter, Gemini, or OpenAI) is required. Set it in Settings." }
   }
 
   // ── Validate the keys BEFORE spending a browser session on them ──
@@ -4517,7 +4841,7 @@ export async function fillJobApplicationWithKernel(
   // fall-through. Now it is one probe, up front, and a dead provider never
   // enters the chain — so no field pays for it and the reason is stated plainly
   // instead of being inferred from forty identical warnings.
-  const { openRouterKey, geminiKey, openAiKey, report: llmReport } = await healthyKeys(rawKeys, applicationId)
+  const { openRouterKey, geminiKey, openAiKey, groqKey, report: llmReport } = await healthyKeys(rawKeys, applicationId)
   // Load the free-tier catalogue once, so every later call already has its
   // fallbacks available without paying for a lookup mid-fill.
   if (openRouterKey) await ensureFreeModels(applicationId)
@@ -4744,7 +5068,7 @@ export async function fillJobApplicationWithKernel(
     // v3 injects helpers via Page.addScriptToEvaluateOnNewDocument (inline JS),
     // which works over any remote CDP connection. v4 requires loading a Chrome
     // extension from the local filesystem — incompatible with Kernel's remote sessions.
-    const _shChain = buildModelChain(false, { openRouterKey, geminiKey, openAiKey })
+    const _shChain = buildModelChain(false, { openRouterKey, geminiKey, openAiKey, groqKey })
     const captchaOtpChoice = openRouterKey ? _shChain[0] : (_shChain.find(c => !c.label.startsWith("openrouter/")) ?? _shChain[0])
     if (captchaOtpChoice) {
       const { Stagehand } = await import("@browserbasehq/stagehand")
@@ -4813,7 +5137,7 @@ export async function fillJobApplicationWithKernel(
       await waitForApplicationForm(kernelClient, sessionId, applicationId)
     }
 
-    const modelChain = buildModelChain(portalConfig.cua, { openRouterKey, geminiKey, openAiKey })
+    const modelChain = buildModelChain(portalConfig.cua, { openRouterKey, geminiKey, openAiKey, groqKey })
     if (applicationId) await persistLog(applicationId, 'info', `LLM model chain: ${modelChain.map(m => m.label).join(' → ') || 'NONE'}`)
 
     // ─── Gate the landed page before anything is filled ───

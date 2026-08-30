@@ -451,6 +451,25 @@ const FACT_BANK: Array<{
   shapes: WidgetShape[]
 }> = [
   {
+    // ── Research sources, which is NOT the referral-source question ──
+    //
+    // Greenhouse forms routinely ask both, and they look almost identical: two
+    // multi-selects of social networks and job boards, one after the other.
+    // They are different questions. "How did you learn about us?" asks how the
+    // posting was found; "which of these have you used to research us?" asks
+    // what the candidate read beforehand — and its option list deliberately
+    // omits LinkedIn, so the referral answer has nothing to match against and
+    // the whole question fell through to the model, which ticked a different
+    // box on every retry.
+    //
+    // Matched on the research verb rather than the "how well do you know us"
+    // wording, which is one employer's phrasing rather than a general shape.
+    id: "research_sources",
+    re: /\b(research(ed|ing)?|learn\s+more\s+about|find\s+out\s+more|read\s+about)\b[^?]{0,40}\b(us|our\s+compan|this\s+compan)\b|\bsources?\s*\/?\s*tools?\b[^?]{0,40}\b(used|research)\b/i,
+    answer: () => "Twitter",
+    shapes: ["select", "multiselect", "radio", "checkbox", "typeahead", "unknown"],
+  },
+  {
     id: "referral_source",
     // The optional adverb slot matters: "Where did you FIRST hear about this
     // role?" is the exact phrasing Greenhouse ships, and it missed without it.
@@ -737,6 +756,46 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
     const real = field.options.filter((o) => o.trim() && !isPlaceholderOption(o))
     if (real.length === 1 && field.required) {
       return { route: "choice", value: real[0], why: "the only option the form offers" }
+    }
+  }
+
+  // ── Required yes/no screener with no rule: answer it affirmatively ──
+  //
+  // The knockout questions employers bolt onto a posting — "Do you have
+  // hands-on experience with Collibra or Alation?", "Have you professionally
+  // used SQL against production data?" — are unmappable by construction: the
+  // subject is whatever that employer cares about, so no bank can enumerate
+  // them. They were falling through to the model, which had only the résumé to
+  // go on and therefore answered No to anything not literally listed there, and
+  // answered inconsistently across retries for everything else.
+  //
+  // A required screener left blank blocks the submit outright, so the choice is
+  // not between a good answer and a bad one — it is between an affirmative and
+  // an abandoned application.
+  //
+  // This is safe ONLY because of what has already run above it:
+  //
+  //   - `isSensitiveQuestion` has claimed criminal history, health and
+  //     immigration status, which are routed to a human and never auto-filled.
+  //   - The boolean bank has claimed every negative-framed question, where Yes
+  //     is the damaging answer: sponsorship, non-competes, PIPs, terminations,
+  //     sanctioned countries, restricted parties, government conflicts.
+  //
+  // So the questions reaching this line are the ones where Yes is merely a
+  // claim of experience. Adding a new negative-framed question to the bank is
+  // therefore load-bearing, not cosmetic — an unclaimed one gets a Yes here.
+  //
+  // Restricted to REQUIRED fields deliberately. An optional screener blocks
+  // nothing, so there is no reason to assert experience to clear it; it goes to
+  // the model like any other unmapped choice.
+  if (isBooleanChoice(field.options) && field.required) {
+    const yes = field.options.find((o) => AFFIRMATIVE.test(o.trim()))
+    if (yes) {
+      return {
+        route: "choice",
+        value: yes,
+        why: "required yes/no screener with no bank rule — affirmative default",
+      }
     }
   }
 

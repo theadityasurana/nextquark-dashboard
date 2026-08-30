@@ -113,6 +113,36 @@ describe("buildHandlerProgram", () => {
     expect(program).toContain("already-checked")
   })
 
+  // The bug this pins: playwright.execute runs its code in Node, where `document`
+  // and `window` do not exist. Without this hop every handler threw a
+  // ReferenceError before doing any work, and the throw surfaced as the
+  // indistinguishable reason "unknown".
+  it("runs the handler in the browser, not in Node", () => {
+    for (const d of [el({ type: "checkbox" }), el({ role: "combobox" }), el({ type: "radio" }), el()]) {
+      const program = buildHandlerProgram(selectHandler(d)!, ctx)
+      expect(program).toContain("return await page.evaluate(async () => {")
+      // The DOM access must sit INSIDE the evaluate callback.
+      expect(program.indexOf("page.evaluate")).toBeLessThan(program.indexOf("document"))
+    }
+  })
+
+  // ─── The escape that silently ate every letter "s" ───
+  //
+  // These handler bodies are TS template literals, so a regex written /\s+/ in
+  // the source emits /s+/ into the browser: `\s` is not a recognised escape and
+  // collapses to a bare `s`. The option reader then replaced every "s" in every
+  // label — "Yes" became "Ye", "United States +1" became "United State  +1" —
+  // and the matcher picked "British Indian Ocean Territory" as the best fit for
+  // "India". Nothing throws; the widget just gets the wrong answer.
+  it("emits whitespace regexes that match whitespace, not the letter s", () => {
+    for (const d of [{ role: "combobox" }, { type: "checkbox" }, { type: "radio" }, {}]) {
+      const program = buildHandlerProgram(selectHandler(el(d as any))!, ctx)
+      for (const m of program.matchAll(/replace\(\/([^/\n]{1,12})\/[gimsuy]*/g)) {
+        expect(m[1], `collapsed escape /${m[1]}/ in ${program.slice(0, 0)}`).not.toMatch(/^s\+?$/)
+      }
+    }
+  })
+
   it("wraps the body so await and early return both work", () => {
     const handler = selectHandler(el())!
     const program = buildHandlerProgram(handler, ctx)

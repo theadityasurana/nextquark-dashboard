@@ -406,10 +406,11 @@ describe("KnowBe4 form regressions", () => {
       }),
       USER
     )
-    // isConsentQuestion matches on "gdpr"; the Yes/No options are what prove it
-    // is a question about the candidate, not a statement to agree to.
-    expect(r.route).toBe("choice")
-    expect((r as any).value).toBe("")
+    // isConsentQuestion matches on "gdpr". The Yes/No options are what prove it
+    // is a question about the candidate, not a statement to agree to — so the
+    // answer must be one of THOSE options, never the acknowledgement path's
+    // "I agree". It resolves to Yes as a required screener, not as consent.
+    expect(r).toMatchObject({ route: "choice", value: "Yes" })
   })
 
   it("still ticks a real acknowledgement dropdown", () => {
@@ -470,15 +471,26 @@ describe("KnowBe4 form regressions", () => {
     ).toMatchObject({ route: "choice", value: "No" })
   })
 
-  it("sends genuine skills questions to the model rather than guessing", () => {
+  // Superseded by the affirmative default: these questions used to be handed to
+  // the model, which answered them from the résumé alone and so said No to
+  // anything not spelled out there — on REQUIRED controls, where a No is a
+  // knockout and a blank blocks the submit outright.
+  it("answers genuine skills questions affirmatively when they are required", () => {
     for (const label of [
       "Have you professionally used SQL to query large datasets, profile data quality, and identify anomalies in production environments?",
       "Have you partnered with Data Stewards or business leaders to implement and enforce data ownership and governance processes?",
     ]) {
       const r = routeField(f({ label, kind: "select", options: ["Yes", "No"] }), USER)
-      expect(r.route).toBe("choice")
-      expect((r as any).value).toBe("")
+      expect(r, label).toMatchObject({ route: "choice", value: "Yes" })
     }
+  })
+
+  it("still defers an OPTIONAL skills question to the model", () => {
+    const r = routeField(f({
+      label: "Have you professionally used SQL to query large datasets, profile data quality, and identify anomalies in production environments?",
+      kind: "select", required: false, options: ["Yes", "No"],
+    }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "" })
   })
 })
 
@@ -562,6 +574,141 @@ describe("demographic questions", () => {
     for (const label of ["Race", "Veteran status", "Disability status"]) {
       const r = routeField(f({ label, kind: "select", schemaGroup: "eeo", options: ["A", "B"] }), { ...USER, ethnicity: "", veteranStatus: "", disabilityStatus: "" })
       expect([r.route, label]).toEqual(["sensitive", label])
+    }
+  })
+})
+
+// ─── The KnowBe4 Greenhouse form, end to end ───
+//
+// A real posting (job-boards.greenhouse.io/knowbe4/jobs/8721151002) used as a
+// routing table. Every row is a control that actually renders on that form, with
+// the options Greenhouse's own schema reports for it. Three classes of question
+// on this one form were previously unmapped and fell through to the model, which
+// picked a different answer on every retry:
+//
+//   - "How well do you know us?"  — a research-sources multi-select
+//   - six domain screeners        — "Do you have experience with X?"
+//   - the sanctions question      — where a wrong Yes is disqualifying
+//
+// Kept as one table because the interesting property is the WHOLE form routing
+// correctly at once; a screener answered right while the sanctions question is
+// answered wrong is not a partial success.
+
+const YESNO = ["Yes", "No"]
+
+const RESEARCH_SOURCES = [
+  "Indeed", "Glassdoor", "The Muse", 'Googled "Top Workplaces Tampa Bay"',
+  "Facebook", "Instagram", "Twitter", "YouTube", "KnowBe4 Careers Blog",
+  "I am a current employee", "Other",
+]
+
+const HEARD_ABOUT = [
+  "Indeed", "LinkedIn", "Glassdoor", "RepVue", "The Muse",
+  'Googled "Top Workplaces Tampa Bay"', "Facebook", "Instagram", "Twitter",
+  "YouTube", "KnowBe4 Careers Blog", "Event", "A Recruiter reached out to me",
+  "Referral", "I am a current employee", "Other",
+]
+
+describe("KnowBe4 Greenhouse form", () => {
+  it("picks LinkedIn for the referral-source multi-select", () => {
+    const r = routeField(f({ label: "How did you learn about us? Select ALL that apply.", kind: "multiselect", options: HEARD_ABOUT }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "LinkedIn" })
+  })
+
+  it("picks Twitter for the research-sources multi-select, which offers no LinkedIn", () => {
+    const r = routeField(f({ label: "How well do you know us? Please select all of the following sources/tools that you have used to research KnowBe4 and learn more about us.", kind: "multiselect", options: RESEARCH_SOURCES }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "Twitter" })
+  })
+
+  it("skips every conditional follow-up, none of which is required", () => {
+    for (const label of [
+      'If selected "Events", please specify.',
+      'If selected "Other", please specify.',
+      'If selected "Referral", who referred you?',
+      'If "Other", please specify. ',
+    ]) {
+      expect(routeField(f({ label, kind: "text", required: false }), USER).route).toBe("skip")
+    }
+  })
+
+  it("answers No to the current-employee question", () => {
+    const r = routeField(f({ label: "Are you a current employee at KnowBe4?", kind: "select", options: YESNO }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "No" })
+  })
+
+  it("answers the domain screeners affirmatively", () => {
+    for (const label of [
+      "Do you have hands-on experience using enterprise data governance or cataloging tools such as Collibra, Alation, Informatica, or similar platforms?",
+      "Have you professionally used SQL to query large datasets, profile data quality, and identify anomalies in production environments?",
+      "Do you have experience working with data privacy regulations such as GDPR, CCPA, or other compliance frameworks?",
+      "Have you gathered data requirements and documented business rules by working directly with non-technical business stakeholders?",
+      "Have you partnered with Data Stewards or business leaders to implement and enforce data ownership and governance processes?",
+    ]) {
+      const r = routeField(f({ label, kind: "select", options: YESNO }), USER)
+      expect(r, label).toMatchObject({ route: "choice", value: "Yes" })
+    }
+  })
+
+  it("agrees to the single-option acknowledgement", () => {
+    const r = routeField(f({
+      label: "I understand and agree that KnowBe4 does not permit the use of AI tools or assistance during the interview process. Exceptions may be made for approved reasonable accommodations (please visit www.knowbe4.com/careers/request-accommodation to make a request).",
+      kind: "select", options: ["I agree"],
+    }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "I agree" })
+  })
+
+  it("answers No to the sanctions question, which the affirmative default must never claim", () => {
+    const r = routeField(f({
+      label: "Are you located in or a national of Cuba, Iran, North Korea, or Syria, or are currently located in the Crimea, Donetsk, Luhansk, Kherson, or Zaporizhzhia territories?",
+      kind: "select", options: YESNO,
+    }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "No" })
+  })
+})
+
+// ─── The affirmative default, and the questions it must never touch ───
+//
+// An unanswered required dropdown blocks the whole application, so a required
+// yes/no screener with no bank rule is answered affirmatively rather than left
+// to a model that picks differently each round. That is only safe because every
+// negative-framed question — the ones where Yes is the damaging answer — is
+// claimed by the boolean bank FIRST. These rows are the guard on that ordering.
+describe("required yes/no screeners", () => {
+  it("defaults to the affirmative when no bank rule claims the question", () => {
+    const r = routeField(f({ label: "Do you have experience with Kubernetes in production?", kind: "select", options: YESNO }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "Yes" })
+  })
+
+  it("resolves the affirmative against the options the form actually offers", () => {
+    const r = routeField(f({ label: "Do you have experience with Kubernetes in production?", kind: "select", options: ["Yes, I do", "No, I do not"] }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "Yes, I do" })
+  })
+
+  it("leaves an OPTIONAL screener to the model rather than asserting experience", () => {
+    const r = routeField(f({ label: "Do you have experience with Kubernetes in production?", kind: "select", required: false, options: YESNO }), USER)
+    expect(r).toMatchObject({ route: "choice", value: "" })
+  })
+
+  it("leaves criminal-history questions to a human, never to the affirmative default", () => {
+    for (const label of [
+      "Have you ever been convicted of a felony?",
+      "Have you ever been convicted of a crime?",
+    ]) {
+      expect(routeField(f({ label, kind: "select", options: YESNO }), USER).route, label).toBe("sensitive")
+    }
+  })
+
+  it("never overrides a negative-framed bank rule", () => {
+    const negative: Array<[string, string]> = [
+      ["Are you subject to a non-compete agreement?", "No"],
+      ["Have you ever been placed on a performance improvement plan?", "No"],
+      ["Have you ever been terminated from a position?", "No"],
+      ["Do you now or in the future require visa sponsorship?", "No"],
+      ["Are you a national of Iran?", "No"],
+    ]
+    for (const [label, want] of negative) {
+      const r = routeField(f({ label, kind: "select", options: YESNO }), USER)
+      expect(r, label).toMatchObject({ route: "choice", value: want })
     }
   })
 })
