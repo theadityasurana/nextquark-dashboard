@@ -21,8 +21,8 @@ SELECT cron.schedule(
   '* * * * *',
   $$
   SELECT net.http_post(
-    url     := 'https://YOUR_DOMAIN/api/cron/dispatch',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer YOUR_CRON_SECRET"}'::jsonb,
+    url     := 'https://nextquark-dashboard.vercel.app/api/cron/dispatch',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer 520548687dab80b53126f1e2936afbfb7b796d3e61da7b97b6429781532c0ba8"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$
