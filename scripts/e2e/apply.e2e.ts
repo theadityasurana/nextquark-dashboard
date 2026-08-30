@@ -81,6 +81,10 @@ describe("auto-apply end-to-end", () => {
       coverLetter: p.cover_letter,
       experience: join(p.experience, (e: any) => `${e.title} at ${e.company} (${e.startDate} - ${e.isCurrent ? "Present" : e.endDate}) - ${e.description}`),
       education: join(p.education, (e: any) => `${e.degree} in ${e.field || e.course} from ${e.institution || e.university} (${e.startDate} - ${e.endDate})`),
+      // Mirrors app/api/auto-apply-queue: forms ask for School / Degree /
+      // Discipline separately, and the prose above cannot answer a dropdown.
+      educationEntries: p.education || [],
+      experienceEntries: p.experience || [],
       certifications: join(p.certifications, (c: any) => `${c.name} - ${c.issuingOrganization}`),
       achievements: join(p.achievements, (a: any) => `${a.title} (${a.date}) - ${a.issuer}: ${a.description}`),
       skills: p.top_skills || p.skills || [],

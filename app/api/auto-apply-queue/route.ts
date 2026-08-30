@@ -122,6 +122,12 @@ export async function POST(request: Request) {
       coverLetter: app.cover_letter,
       experience: experienceText,
       education: educationText,
+      // The prose above reads well in a cover letter and is useless to a form
+      // that asks for School, Degree and Discipline in three separate dropdowns.
+      // Those fields went unanswered on every posting with an education block
+      // while the structured data sat right here, already parsed.
+      educationEntries: app.education || [],
+      experienceEntries: app.experience || [],
       certifications: certificationsText,
       achievements: achievementsText,
       skills: app.top_skills || app.skills || [],

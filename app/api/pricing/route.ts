@@ -11,14 +11,15 @@ function getAdminClient() {
 export async function GET() {
   const supabase = getAdminClient()
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, subscription_type, subscription_start_date, subscription_end_date, created_at")
-    .order("created_at", { ascending: false })
+  const [{ count: total }, { count: premium }] = await Promise.all([
+    supabase.from("profiles").select("*", { count: "exact", head: true }),
+    supabase.from("profiles").select("*", { count: "exact", head: true })
+      .in("subscription_type", ["premium", "pro"]),
+  ])
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json(data || [])
+  return NextResponse.json({
+    total: total ?? 0,
+    premium: premium ?? 0,
+    free: (total ?? 0) - (premium ?? 0),
+  })
 }

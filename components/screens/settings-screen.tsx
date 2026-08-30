@@ -94,17 +94,14 @@ export function SettingsScreen() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       <div>
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-gradient">Settings</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage automation provider and API credentials</p>
       </div>
 
       {/* Provider Toggle */}
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Globe className="h-4 w-4 text-primary" />
-            Automation Provider
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Automation Provider</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -163,10 +160,7 @@ export function SettingsScreen() {
       {/* Browser Use API Key */}
       <Card className={`bg-card border-border transition-opacity ${automationProvider !== "browser_use" ? "opacity-40 pointer-events-none" : ""}`}>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            Browser Use API Key
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Browser Use API Key</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -195,10 +189,7 @@ export function SettingsScreen() {
       {/* Kernel Settings */}
       <Card className={`bg-card border-border transition-opacity ${automationProvider !== "kernel" ? "opacity-40 pointer-events-none" : ""}`}>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            Kernel
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Kernel</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="rounded-lg border border-border bg-accent/20 px-3 py-2.5 text-xs text-muted-foreground">
@@ -248,10 +239,7 @@ export function SettingsScreen() {
       {/* Browserbase Settings */}
       <Card className={`bg-card border-border transition-opacity ${automationProvider !== "browserbase" ? "opacity-40 pointer-events-none" : ""}`}>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="h-4 w-4 text-primary" />
-            Browserbase + Stagehand
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Browserbase + Stagehand</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="rounded-lg border border-border bg-accent/20 px-3 py-2.5 text-xs text-muted-foreground">

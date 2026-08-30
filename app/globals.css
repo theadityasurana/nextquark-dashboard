@@ -4,7 +4,62 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Surfaces — deeper, richer blacks (Vercel/Linear style) */
+  /* Light mode */
+  --background: oklch(0.98 0.002 265);
+  --foreground: oklch(0.13 0.006 265);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.006 265);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.006 265);
+
+  --primary: oklch(0.55 0.2 270);
+  --primary-foreground: oklch(0.98 0 0);
+
+  --secondary: oklch(0.94 0.004 265);
+  --secondary-foreground: oklch(0.2 0.008 265);
+
+  --muted: oklch(0.94 0.004 265);
+  --muted-foreground: oklch(0.48 0.012 265);
+
+  --accent: oklch(0.93 0.006 265);
+  --accent-foreground: oklch(0.13 0.006 265);
+
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.88 0.006 265);
+  --input: oklch(0.92 0.004 265);
+  --ring: oklch(0.55 0.2 270);
+
+  --chart-1: oklch(0.55 0.2 270);
+  --chart-2: oklch(0.55 0.18 220);
+  --chart-3: oklch(0.65 0.16 70);
+  --chart-4: oklch(0.55 0.22 0);
+  --chart-5: oklch(0.58 0.18 320);
+
+  --radius: 0.625rem;
+
+  --sidebar: oklch(0.96 0.003 265);
+  --sidebar-foreground: oklch(0.2 0.008 265);
+  --sidebar-primary: oklch(0.55 0.2 270);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.91 0.006 265);
+  --sidebar-accent-foreground: oklch(0.13 0.006 265);
+  --sidebar-border: oklch(0.88 0.006 265);
+  --sidebar-ring: oklch(0.55 0.2 270);
+
+  --success: oklch(0.55 0.18 155);
+  --success-foreground: oklch(0.98 0 0);
+  --warning: oklch(0.65 0.16 75);
+  --warning-foreground: oklch(0.13 0.006 265);
+
+  --glow-primary: oklch(0.55 0.2 270 / 0.1);
+  --glow-accent: oklch(0.55 0.18 220 / 0.08);
+}
+
+.dark {
   --background: oklch(0.11 0.005 265);
   --foreground: oklch(0.97 0.003 265);
 
@@ -14,7 +69,6 @@
   --popover: oklch(0.16 0.006 265);
   --popover-foreground: oklch(0.97 0.003 265);
 
-  /* Accent — refined indigo/violet (was green) */
   --primary: oklch(0.7 0.18 270);
   --primary-foreground: oklch(0.11 0.005 265);
 
@@ -34,16 +88,12 @@
   --input: oklch(0.2 0.008 265);
   --ring: oklch(0.7 0.18 270);
 
-  /* Charts — harmonized palette */
-  --chart-1: oklch(0.7 0.18 270);   /* indigo */
-  --chart-2: oklch(0.7 0.16 220);   /* cyan-blue */
-  --chart-3: oklch(0.78 0.16 70);   /* amber */
-  --chart-4: oklch(0.65 0.22 0);    /* rose */
-  --chart-5: oklch(0.72 0.18 320);  /* magenta */
+  --chart-1: oklch(0.7 0.18 270);
+  --chart-2: oklch(0.7 0.16 220);
+  --chart-3: oklch(0.78 0.16 70);
+  --chart-4: oklch(0.65 0.22 0);
+  --chart-5: oklch(0.72 0.18 320);
 
-  --radius: 0.625rem;
-
-  /* Sidebar — slightly darker than main bg, very subtle */
   --sidebar: oklch(0.095 0.005 265);
   --sidebar-foreground: oklch(0.92 0.003 265);
   --sidebar-primary: oklch(0.7 0.18 270);
@@ -53,19 +103,13 @@
   --sidebar-border: oklch(0.2 0.008 265);
   --sidebar-ring: oklch(0.7 0.18 270);
 
-  /* Semantic */
   --success: oklch(0.72 0.18 155);
   --success-foreground: oklch(0.11 0.005 265);
   --warning: oklch(0.78 0.16 75);
   --warning-foreground: oklch(0.11 0.005 265);
 
-  /* Ambient glow colors (for subtle backdrops) */
   --glow-primary: oklch(0.7 0.18 270 / 0.15);
   --glow-accent: oklch(0.7 0.16 220 / 0.12);
-}
-
-.dark {
-  /* Already dark by default */
 }
 
 @theme inline {
@@ -131,10 +175,9 @@
   }
 
   body {
-    /* Subtle ambient gradient backdrop — Linear-style glow */
     background-image:
-      radial-gradient(ellipse 80% 60% at 50% -20%, oklch(0.7 0.18 270 / 0.08), transparent 60%),
-      radial-gradient(ellipse 60% 50% at 100% 0%, oklch(0.7 0.16 220 / 0.06), transparent 60%);
+      radial-gradient(ellipse 80% 60% at 50% -20%, oklch(0.7 0.18 270 / 0.06), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 0%, oklch(0.7 0.16 220 / 0.04), transparent 60%);
     background-attachment: fixed;
     font-feature-settings: 'cv11', 'ss01';
     text-rendering: optimizeLegibility;
@@ -242,7 +285,7 @@
 
   /* Gradient text (for headings) */
   .text-gradient {
-    background: linear-gradient(180deg, oklch(0.98 0 0) 0%, oklch(0.7 0.005 265) 100%);
+    background: linear-gradient(180deg, var(--foreground) 0%, oklch(from var(--foreground) l c h / 0.6) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;

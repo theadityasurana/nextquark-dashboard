@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { StatusBadge } from "@/components/status-badge"
 import { ApplicationDetails } from "@/components/application-details"
 import { LiveApplicationQueue, ApplicationStats } from "@/lib/types/live-queue.types"
+// ApplicationStats is used by ApplicationDetails prop type
 import { useLogs } from "@/lib/logs-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -46,10 +47,9 @@ export function QueueScreen() {
   const [activeTab, setActiveTab] = useState("all")
   const [applications, setApplications] = useState<LiveApplicationQueue[]>([])
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [stats, setStats] = useState<ApplicationStats>({ totalApps: 0, successful: 0, failed: 0, inProgress: 0 })
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const [isStartingAll, setIsStartingAll] = useState(false)
+  // Local queue backlog depth — shown in the tray so the operator knows how many are waiting
+  const [localQueueDepth, setLocalQueueDepth] = useState(0)
   // Per-application streaming state — replaces the single isStreaming boolean
   // that was disabling Start for every app whenever any one was running.
   const [streamingApps, setStreamingApps] = useState<Set<string>>(new Set())
@@ -66,6 +66,7 @@ export function QueueScreen() {
   const { prefs, setPrefs } = useUIPreferences()
   const autoStart = prefs.autoStart
   const premiumOnly = prefs.premiumOnly
+  const maxConcurrent = prefs.maxConcurrent ?? 3
   const setAutoStart = (val: boolean) => setPrefs({ autoStart: val })
   const setPremiumOnly = (val: boolean) => setPrefs({ premiumOnly: val })
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
@@ -75,15 +76,20 @@ export function QueueScreen() {
   const [queuePage, setQueuePage] = useState(1)
 
   const QUEUE_PER_PAGE = 10
-  const MAX_CONCURRENT = 3
 
   // Refs that survive re-renders without causing them
   const autoStartTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const processingCountRef = useRef(0)
   const pendingQueueRef = useRef<LiveApplicationQueue[]>([])
-  // Keep a ref to the latest premiumOnly value so callbacks always see current value
+  // AbortControllers keyed by app id — cancelled when an app is deleted mid-run
+  const abortControllersRef = useRef<Record<string, AbortController>>({})
+  // Keep refs to latest values so callbacks always see current values
   const premiumOnlyRef = useRef(premiumOnly)
   useEffect(() => { premiumOnlyRef.current = premiumOnly }, [premiumOnly])
+  const maxConcurrentRef = useRef(maxConcurrent)
+  useEffect(() => { maxConcurrentRef.current = maxConcurrent }, [maxConcurrent])
+  // streamingAppsRef mirrors streamingApps state so enqueueOrStart can read it synchronously
+  const streamingAppsRef = useRef<Set<string>>(new Set())
 
   const { addLog } = useLogs()
 
@@ -131,23 +137,22 @@ export function QueueScreen() {
 
   // processNext drains the local pending queue into available slots
   const processNext = useCallback(() => {
-    while (processingCountRef.current < MAX_CONCURRENT && pendingQueueRef.current.length > 0) {
+    while (processingCountRef.current < maxConcurrentRef.current && pendingQueueRef.current.length > 0) {
       const next = pendingQueueRef.current.shift()!
       startApplicationRef.current(next)
     }
+    setLocalQueueDepth(pendingQueueRef.current.length)
   }, [])
 
   const startApplication = useCallback(async (app: LiveApplicationQueue) => {
     processingCountRef.current++
-    setIsStreaming(true)
-    setRecordingUrl(null)
 
     // Add to the active tray so the user can see progress without keeping the modal open
     setActiveTray(prev => {
       if (prev.some(t => t.app.id === app.id)) return prev
       return [...prev, { app, minimized: false }]
     })
-    setStreamingApps(prev => new Set(prev).add(app.id))
+    setStreamingApps(prev => { const n = new Set(prev); n.add(app.id); streamingAppsRef.current = n; return n })
 
     await fetch('/api/live-queue', {
       method: 'PATCH',
@@ -155,13 +160,17 @@ export function QueueScreen() {
       body: JSON.stringify({ id: app.id, status: 'processing' }),
     })
     setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'processing' as const } : a))
-    addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${MAX_CONCURRENT} slots used)`, applicationId: app.id })
+    addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${maxConcurrentRef.current} slots used)`, applicationId: app.id })
+
+    const abortController = new AbortController()
+    abortControllersRef.current[app.id] = abortController
 
     try {
       const response = await fetch("/api/auto-apply-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ applicationId: app.id, stream: true }),
+        signal: abortController.signal,
       })
       if (!response.ok) throw new Error(`Server error: ${response.status}`)
 
@@ -210,23 +219,26 @@ export function QueueScreen() {
       addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: app.id, message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: app.id })
     } finally {
       processingCountRef.current--
-      setIsStreaming(processingCountRef.current > 0)
-      setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); return n })
+      delete abortControllersRef.current[app.id]
+      setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); streamingAppsRef.current = n; return n })
       processNext()
     }
-  }, [addLog])
+  }, [addLog, processNext])
 
   // Keep the ref pointing at the latest startApplication so processNext
   // always dispatches the current version.
   useEffect(() => { startApplicationRef.current = startApplication }, [startApplication])
 
-  // enqueueOrStart: respects the concurrency cap
+  // enqueueOrStart: respects the concurrency cap; guards against double-dispatch
   const enqueueOrStart = useCallback((app: LiveApplicationQueue) => {
-    if (processingCountRef.current < MAX_CONCURRENT) {
+    // Never start or queue an app that is already streaming
+    if (streamingAppsRef.current.has(app.id)) return
+    if (processingCountRef.current < maxConcurrentRef.current) {
       startApplicationRef.current(app)
     } else {
       if (!pendingQueueRef.current.some(a => a.id === app.id)) {
         pendingQueueRef.current.push(app)
+        setLocalQueueDepth(pendingQueueRef.current.length)
       }
     }
   }, [])
@@ -240,11 +252,16 @@ export function QueueScreen() {
         const data = await response.json()
         if (Array.isArray(data)) {
           setApplications(data)
-          setStats({
-            totalApps: data.length,
-            successful: data.filter((a: LiveApplicationQueue) => a.status === 'completed').length,
-            failed: data.filter((a: LiveApplicationQueue) => a.status === 'failed').length,
-            inProgress: data.filter((a: LiveApplicationQueue) => ['pending','processing','awaiting_otp','awaiting_captcha'].includes(a.status)).length,
+          // Fix #2: sync processingCountRef with actual DB state on every load
+          // so a page refresh doesn't reset the counter to 0 while apps are running
+          const activeCount = data.filter((a: LiveApplicationQueue) =>
+            a.status === 'processing'
+          ).length
+          processingCountRef.current = Math.max(processingCountRef.current, activeCount)
+          // Fix #8: clamp page to valid range after data changes
+          setQueuePage(p => {
+            const maxPage = Math.max(1, Math.ceil(data.length / QUEUE_PER_PAGE))
+            return p > maxPage ? maxPage : p
           })
         }
       } catch (err) {
@@ -311,6 +328,8 @@ export function QueueScreen() {
 
     // Set timers for newly eligible apps that don't have one yet
     for (const app of eligible) {
+      // Fix #5: skip apps already streaming — a retry status flip must not re-dispatch
+      if (streamingAppsRef.current.has(app.id)) continue
       if (!autoStartTimersRef.current[app.id]) {
         autoStartTimersRef.current[app.id] = setTimeout(() => {
           delete autoStartTimersRef.current[app.id]
@@ -326,7 +345,7 @@ export function QueueScreen() {
 
   // ─── Client-side processing timeout ─────────────────────────────────────
   // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
-  // mark it failed locally and patch Supabase so the UI stays accurate.
+  // mark it completed locally and patch Supabase so the UI stays accurate.
   useEffect(() => {
     const TIMEOUT_MS = 15 * 60 * 1000
     const interval = setInterval(() => {
@@ -350,7 +369,7 @@ export function QueueScreen() {
           ? { ...a, status: 'completed' as const }
           : a
       ))
-    }, 60_000) // check every minute
+    }, 60_000)
     return () => clearInterval(interval)
   }, [applications])
 
@@ -438,13 +457,21 @@ export function QueueScreen() {
 
   const handleDelete = async (id: string) => {
     try {
+      // Fix #15: abort any in-flight SSE stream before deleting
+      if (abortControllersRef.current[id]) {
+        abortControllersRef.current[id].abort()
+        delete abortControllersRef.current[id]
+      }
+      // Remove from local pending queue too
+      pendingQueueRef.current = pendingQueueRef.current.filter(a => a.id !== id)
+      setLocalQueueDepth(pendingQueueRef.current.length)
       await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       setApplications(applications.filter(app => app.id !== id))
       setDeleteId(null)
     } catch (err) { console.error('Failed to delete:', err) }
   }
 
-  // ─── Derived state ────────────────────────────────────────────────────────
+  // ─── Derived state (Fix #14: stats derived from applications, no separate state) ──
 
   const pending        = applications.filter(a => a.status === "pending")
   const processing     = applications.filter(a => a.status === "processing")
@@ -454,6 +481,12 @@ export function QueueScreen() {
   const awaitingCaptcha = applications.filter(a => a.status === "awaiting_captcha")
   const blocked        = applications.filter(a => a.status === "blocked")
   const premiumApps    = applications.filter(a => a.is_premium)
+  const stats = {
+    totalApps: applications.length,
+    successful: completed.length,
+    failed: failed.length,
+    inProgress: processing.length + awaitingOtp.length + awaitingCaptcha.length,
+  }
 
   // Pending apps that are eligible given the current premiumOnly toggle
   const eligiblePending = premiumOnly ? pending.filter(a => a.is_premium) : pending
@@ -470,8 +503,10 @@ export function QueueScreen() {
   })
 
   const totalFilteredApps = filteredApps.length
-  const totalQueuePages = Math.ceil(totalFilteredApps / QUEUE_PER_PAGE)
-  const paginatedApps = filteredApps.slice((queuePage - 1) * QUEUE_PER_PAGE, queuePage * QUEUE_PER_PAGE)
+  const totalQueuePages = Math.max(1, Math.ceil(totalFilteredApps / QUEUE_PER_PAGE))
+  // Fix #8: clamp page in render too, in case state update hasn't flushed yet
+  const safePage = Math.min(queuePage, totalQueuePages)
+  const paginatedApps = filteredApps.slice((safePage - 1) * QUEUE_PER_PAGE, safePage * QUEUE_PER_PAGE)
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -482,7 +517,7 @@ export function QueueScreen() {
       {/* ── Header + stats row ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
         {/* Live connection indicator top-right */}
@@ -552,8 +587,31 @@ export function QueueScreen() {
             />
             <Play className="h-3 w-3" />
             <span className="text-xs font-medium">Auto Start</span>
-            <InfoTip text="When ON, every eligible pending application starts automatically 2 seconds after it arrives. Max 3 run simultaneously — extras queue up and start as slots free." />
+            <InfoTip text="When ON, every eligible pending application starts automatically 2 seconds after it arrives. Extras queue up and start as slots free." />
           </div>
+
+          {/* Concurrency slider */}
+          <div className="flex items-center gap-2 rounded-md border border-border bg-accent/30 px-2.5 py-1.5">
+            <span className="text-xs font-medium whitespace-nowrap">Concurrency</span>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={maxConcurrent}
+              onChange={(e) => setPrefs({ maxConcurrent: Number(e.target.value) })}
+              className="w-20 accent-primary cursor-pointer"
+            />
+            <span className="text-xs font-mono w-4 text-center">{maxConcurrent}</span>
+            <InfoTip text="Controls how many SSE streams this browser opens at once. The server-side Kernel gate may queue further — this is the client dispatch limit." />
+          </div>
+
+          {/* Fix #10: local queue backlog indicator */}
+          {localQueueDepth > 0 && (
+            <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
+              <span className="text-xs text-blue-500 font-medium">{localQueueDepth} waiting</span>
+              <InfoTip text="Applications queued locally, waiting for a concurrency slot to free up." />
+            </div>
+          )}
 
           {/* Divider */}
           <div className="h-6 w-px bg-border hidden sm:block" />
@@ -576,7 +634,7 @@ export function QueueScreen() {
                   : <><Play className="h-3.5 w-3.5" /> Start All{eligiblePending.length > 0 ? ` (${eligiblePending.length})` : ''}</>
                 }
               </Button>
-              <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs 3 at a time — the rest wait in line.`} />
+              <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs ${maxConcurrent} at a time — the rest wait in line.`} />
             </div>
           )}
 
@@ -878,11 +936,11 @@ export function QueueScreen() {
       {/* Pagination */}
       {totalQueuePages > 1 && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Showing {((queuePage - 1) * QUEUE_PER_PAGE) + 1}–{Math.min(queuePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
+          <span className="text-xs text-muted-foreground">Showing {((safePage - 1) * QUEUE_PER_PAGE) + 1}–{Math.min(safePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
           <div className="flex items-center justify-between sm:justify-end gap-2">
-            <Button size="sm" variant="outline" className="text-xs h-8" disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Page {queuePage} of {totalQueuePages}</span>
-            <Button size="sm" variant="outline" className="text-xs h-8" disabled={queuePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
+            <Button size="sm" variant="outline" className="text-xs h-8" disabled={safePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Page {safePage} of {totalQueuePages}</span>
+            <Button size="sm" variant="outline" className="text-xs h-8" disabled={safePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
           </div>
         </div>
       )}
@@ -928,7 +986,7 @@ export function QueueScreen() {
               isStreaming={streamingApps.has(selectedApp.id)}
               isSendingRejection={isSendingRejection}
               recordingUrl={null}
-              canStart={processingCountRef.current < MAX_CONCURRENT && !streamingApps.has(selectedApp.id)}
+              canStart={processingCountRef.current < maxConcurrentRef.current && !streamingApps.has(selectedApp.id)}
               onStatusChange={(id, status) => {
                 setApplications(prev => prev.map(a => a.id === id ? { ...a, status } : a))
                 setSelectedApp(prev => prev?.id === id ? { ...prev, status } : prev)
@@ -996,18 +1054,22 @@ export function QueueScreen() {
                       {app.status === 'completed' && <span className="text-[10px] text-green-500">Done ✓</span>}
                       {app.status === 'failed'    && <span className="text-[10px] text-destructive">Failed</span>}
                     </div>
-                    {/* Slot usage indicator */}
+                    {/* Fix #11: slot bar uses maxConcurrent state (not ref) so it re-renders on slider change */}
                     <div className="flex items-center gap-1 mt-0.5">
-                      {Array.from({ length: MAX_CONCURRENT }).map((_, i) => (
+                      {Array.from({ length: maxConcurrent }).map((_, i) => (
                         <div
                           key={i}
                           className={`h-1.5 flex-1 rounded-full ${
-                            i < processingCountRef.current ? 'bg-blue-500' : 'bg-muted'
+                            i < streamingApps.size ? 'bg-blue-500' : 'bg-muted'
                           }`}
                         />
                       ))}
-                      <span className="text-[10px] text-muted-foreground ml-1">{processingCountRef.current}/{MAX_CONCURRENT}</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">{streamingApps.size}/{maxConcurrent}</span>
                     </div>
+                    {/* Fix #10: show local queue backlog in tray */}
+                    {localQueueDepth > 0 && (
+                      <span className="text-[10px] text-blue-500">{localQueueDepth} more waiting…</span>
+                    )}
                     {/* Open detail button */}
                     <button
                       className="text-[10px] text-primary hover:underline text-left mt-0.5"

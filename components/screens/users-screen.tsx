@@ -390,7 +390,7 @@ function UserProfileModal({ user }: { user: User }) {
             { label: "In Progress", value: user.inProgressApps, color: "text-chart-2" },
           ].map((s) => (
             <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
-              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+              <p className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</p>
               <p className="text-[10px] text-muted-foreground">{s.label}</p>
             </div>
           ))}

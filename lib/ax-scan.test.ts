@@ -107,3 +107,37 @@ describe("needsVisionFallback", () => {
     expect(needsVisionFallback(20, 0, 0)).toBe(false)
   })
 })
+
+// ─── An option is not a question ───
+//
+// A radio group is one inventory item keyed group:<name>, but every member radio
+// is its own accessibility-tree node named after the option it carries. Neither
+// existing dedupe catches them — the member key is id:<uuid>, not the group key,
+// and "Yes" is nobody's question label. A live Anyscale run therefore grew two
+// extra fields called "Yes" and "No", with no value to give them and no question
+// behind them, while its three real Yes/No questions went unanswered.
+describe("mergeAxFields — radio group members", () => {
+  const node = (over: any) => ({
+    role: "radio", name: "", domLabel: "", mmid: "1", disabled: false, hidden: false, ...over,
+  })
+
+  it("drops AX nodes that are options of a grouped control", () => {
+    const dom = [{ key: "group:q1", label: "Are you open to relocate?", options: ["Yes", "No"] }]
+    const out = mergeAxFields(
+      [node({ name: "Yes", mmid: "1", domKey: "id:q1-radio-0" }), node({ name: "No", mmid: "2", domKey: "id:q1-radio-1" })],
+      dom
+    )
+    expect(out).toHaveLength(0)
+  })
+
+  it("still surfaces a genuine control the DOM scan missed", () => {
+    const dom = [{ key: "group:q1", label: "Are you open to relocate?", options: ["Yes", "No"] }]
+    const out = mergeAxFields([node({ role: "combobox", name: "Preferred start date", mmid: "9" })], dom)
+    expect(out.map((f) => f.label)).toEqual(["Preferred start date"])
+  })
+
+  it("is unaffected when the inventory reports no options", () => {
+    const out = mergeAxFields([node({ role: "combobox", name: "Country", mmid: "3" })], [{ key: "id:x", label: "Email" }])
+    expect(out.map((f) => f.label)).toEqual(["Country"])
+  })
+})

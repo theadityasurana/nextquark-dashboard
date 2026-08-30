@@ -88,7 +88,11 @@ const UNSAFE_TEXT: Array<{ re: RegExp; label: string }> = [
   { re: /\b(take|upload) a selfie|selfie verification|face (scan|verification|capture)|liveness check\b/i, label: "biometric / selfie verification" },
   { re: /upload (a photo of )?(your )?(government|photo) (issued )?id|passport (photo|scan)|driver'?s licen[cs]e (photo|scan|upload)/i, label: "government ID upload" },
   { re: /\b(credit card|debit card|card number|cvv|billing address|payment (details|information|method))\b/i, label: "payment details" },
-  { re: /\b(social security number|ssn|aadhaar|sin number|national insurance number|tax identification number|pan (card )?number)\b/i, label: "a national identity or tax number" },
+  // National identity / tax numbers are NOT a hard stop any more. Abandoning the
+  // whole posting over one field meant a form whose other 22 inputs were filled
+  // correctly produced no application at all. They are answered with a reserved
+  // placeholder instead — see the `national_id` rule in answer-policy — which
+  // fills the field without asserting a real person's identifier.
   { re: /\b(bank account|routing number|ifsc|account number for (direct )?deposit)\b/i, label: "bank account details" },
   { re: /(allow|enable|grant) (access to )?(your )?(camera|microphone|webcam|screen sharing)|record (a|your) video (introduction|answer)/i, label: "camera / microphone access or a video recording" },
   { re: /install (this )?(browser )?extension to (apply|continue)|proctoring software/i, label: "an installed extension or proctoring software" },

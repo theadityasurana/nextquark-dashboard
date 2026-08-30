@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 })
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

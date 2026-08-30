@@ -84,11 +84,31 @@ describe("selectHandler", () => {
   })
 
   it("prefers the specific handler when a control matches several", () => {
-    // A combobox that is also inside a date container is a DATE picker (40)
-    // before it's a typeahead (50).
-    expect(selectHandler(el({ role: "combobox", inDateContainer: true }))?.name).toBe("date")
     // A checkbox never falls through to text.
     expect(selectHandler(el({ type: "checkbox", className: "select__input" }))?.name).toBe("checkbox")
+  })
+
+  // ─── Superseded: a picker in a date block is a picker ───
+  //
+  // This used to assert the opposite — that a combobox inside a date container is
+  // a DATE picker (40) before it is a typeahead (50). Greenhouse's education row
+  // is exactly that shape: "Start date month" and "Start date year" are
+  // react-selects sitting in a date container. The date handler claimed both and
+  // failed them six times in a single run with date-unhandled, while the correct
+  // values ("September", "2020") waited to be selected.
+  //
+  // Only a native date input is a date. Everything else is driven by whatever can
+  // actually open it.
+  it("hands a combobox in a date container to the typeahead handler", () => {
+    expect(selectHandler(el({ role: "combobox", inDateContainer: true }))?.name).toBe("typeahead")
+    expect(selectHandler(el({ tag: "select", inDateContainer: true }))?.name).toBe("dropdown")
+  })
+
+  it("still routes a native date input to the date handler", () => {
+    expect(selectHandler(el({ type: "date" }))?.name).toBe("date")
+    expect(selectHandler(el({ type: "month" }))?.name).toBe("date")
+    // A plain text input in a date block is still the datepicker's own field.
+    expect(selectHandler(el({ type: "text", inDateContainer: true }))?.name).toBe("date")
   })
 
   it("returns null for a control nothing can drive", () => {

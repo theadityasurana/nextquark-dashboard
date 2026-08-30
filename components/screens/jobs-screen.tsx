@@ -276,7 +276,7 @@ export function JobsScreen() {
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Jobs</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-gradient">Jobs</h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
           </div>
           <Badge variant="secondary" className="shrink-0 mt-1">{totalJobs} total</Badge>
@@ -908,15 +908,15 @@ export function JobsScreen() {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Application Stats</h3>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold">{selectedJob.successRate}%</p>
+                      <p className="text-sm font-bold tabular-nums">{selectedJob.successRate}%</p>
                       <p className="text-[10px] text-muted-foreground">Success Rate</p>
                     </div>
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold">{selectedJob.rightSwipes ?? 0}</p>
+                      <p className="text-sm font-bold tabular-nums">{selectedJob.rightSwipes ?? 0}</p>
                       <p className="text-[10px] text-muted-foreground">Right Swipes</p>
                     </div>
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold">{selectedJob.avgTime}</p>
+                      <p className="text-sm font-bold tabular-nums">{selectedJob.avgTime}</p>
                       <p className="text-[10px] text-muted-foreground">Avg Time</p>
                     </div>
                   </div>

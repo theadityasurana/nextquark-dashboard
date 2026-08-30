@@ -229,7 +229,7 @@ export function CompaniesScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Companies</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Companies</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
         </div>
         <div className="flex items-center gap-2">
@@ -273,15 +273,15 @@ export function CompaniesScreen() {
 
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-lg font-bold">{company.totalJobs}</p>
+                  <p className="text-xl font-bold tabular-nums">{company.totalJobs}</p>
                   <p className="text-[10px] text-muted-foreground">Jobs</p>
                 </div>
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-lg font-bold">{company.appsToday}</p>
+                  <p className="text-xl font-bold tabular-nums">{company.appsToday}</p>
                   <p className="text-[10px] text-muted-foreground">Today</p>
                 </div>
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-lg font-bold">{company.successRate}%</p>
+                  <p className="text-xl font-bold tabular-nums">{company.successRate}%</p>
                   <p className="text-[10px] text-muted-foreground">Success</p>
                 </div>
               </div>

@@ -1,39 +1,35 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { NextRequest, NextResponse } from 'next/server'
-import { unstable_cache } from 'next/cache'
-
-// Analytics data changes slowly — cache for 60 seconds.
-// Right swipe counts and success rates only update when applications complete.
-const getCachedAnalytics = unstable_cache(
-  async () => {
-    const supabase = createAdminClient()
-
-    const [jobsRes, appsRes] = await Promise.all([
-      // Only the columns the analytics screen actually renders
-      supabase
-        .from('jobs')
-        .select('id, company_id, company_name, company_initial, title, location, right_swipes, success_rate, total_apps, created_at'),
-      supabase
-        .from('live_application_queue')
-        .select('id, job_id, company_id, company_name, status, created_at'),
-    ])
-
-    if (jobsRes.error) console.error('Analytics jobs error:', jobsRes.error)
-    if (appsRes.error) console.error('Analytics apps error:', appsRes.error)
-
-    return {
-      jobs: jobsRes.data || [],
-      applications: appsRes.data || [],
-    }
-  },
-  ['analytics-data'],
-  { revalidate: 60 }
-)
+import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const data = await getCachedAnalytics()
-    return NextResponse.json(data)
+    const supabase = createAdminClient()
+
+    const [{ count: jobCount }, appsRes] = await Promise.all([
+      supabase.from('jobs').select('*', { count: 'exact', head: true }),
+      supabase.from('live_application_queue').select('job_id, company_name, status, created_at').limit(5000),
+    ])
+
+    const rawApps = appsRes.data || []
+
+    const appsByJob = new Map<string, { total: number; completed: number }>()
+    for (const a of rawApps) {
+      if (!a.job_id) continue
+      const cur = appsByJob.get(a.job_id) || { total: 0, completed: 0 }
+      cur.total++
+      if (a.status === 'completed') cur.completed++
+      appsByJob.set(a.job_id, cur)
+    }
+
+    const applications = rawApps.map((a: any) => ({
+      id: a.id,
+      job_id: a.job_id,
+      company_name: a.company_name || '',
+      status: a.status,
+      created_at: a.created_at,
+    }))
+
+    return NextResponse.json({ jobCount: jobCount ?? 0, applications })
   } catch (err) {
     console.error('Analytics fetch error:', err)
     return NextResponse.json({ jobs: [], applications: [] }, { status: 500 })

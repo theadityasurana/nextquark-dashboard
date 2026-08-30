@@ -225,7 +225,7 @@ export interface RawAxNode {
  */
 export function mergeAxFields(
   raw: RawAxNode[],
-  domInventory: Array<{ key?: string; label: string }>
+  domInventory: Array<{ key?: string; label: string; options?: string[] }>
 ): AxField[] {
   const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim()
 
@@ -240,6 +240,20 @@ export function mergeAxFields(
   // the submit gate forever.
   const knownKeys = new Set(domInventory.map((i) => i.key).filter(Boolean) as string[])
   const knownLabels = new Set(domInventory.map((i) => normalize(i.label)).filter(Boolean))
+
+  // ─── An option is not a question ───
+  //
+  // A radio group is ONE inventory item keyed group:<name>, but each member radio
+  // is its own node in the accessibility tree, named after the option it carries.
+  // Neither dedupe above catches them: the member's own key is id:<uuid> rather
+  // than the group key, and "Yes" is nobody's question label.
+  //
+  // So an Ashby form with three Yes/No questions produced two extra "fields"
+  // called "Yes" and "No" — with no value to give them and no question behind
+  // them — while the three real questions went unanswered.
+  const knownOptions = new Set(
+    domInventory.flatMap((i) => (i.options ?? []).map(normalize)).filter(Boolean)
+  )
   const seen = new Set<string>()
   const out: AxField[] = []
 
@@ -256,6 +270,7 @@ export function mergeAxFields(
     // Already covered by the DOM scan, under either identity.
     if (n.domKey && knownKeys.has(n.domKey)) continue
     if (knownLabels.has(norm)) continue
+    if (knownOptions.has(norm)) continue
     if (seen.has(norm)) continue
     seen.add(norm)
 

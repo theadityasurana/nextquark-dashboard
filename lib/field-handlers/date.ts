@@ -14,6 +14,27 @@ export const dateHandler: FieldHandler = {
   priority: 40,
 
   canHandle(d: ElementDescriptor): boolean {
+    // ─── A picker inside a date block is still a picker ───
+    //
+    // This handler sits at priority 40, ahead of typeahead's 50, so anything it
+    // claims never reaches the combobox code. Greenhouse renders an education row
+    // as "Start date month" and "Start date year" — two react-selects that live in
+    // a date container — and this claimed both, then failed them 6 times in one
+    // run with `date-unhandled` while the correct values ("September", "2020")
+    // sat right there waiting to be selected.
+    //
+    // A native <input type="date"> is a date. A combobox is a combobox, whatever
+    // container it happens to sit in, so it is handed on to typeahead/dropdown.
+    const isPicker =
+      d.tag === "select" ||
+      d.role === "combobox" ||
+      d.role === "listbox" ||
+      !!d.ariaControls ||
+      !!d.ariaAutocomplete ||
+      d.ariaHasPopup === "listbox" ||
+      /select__|react-select/i.test(d.className ?? "")
+    if (isPicker && d.type !== "date" && d.type !== "month") return false
+
     if (d.type === "date" || d.type === "month") return true
     if (d.ariaHasPopup === "dialog" && d.inDateContainer) return true
     if (d.inDateContainer) return true

@@ -187,7 +187,7 @@ export function AgentsScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">AI Agents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gradient">AI Agents</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -543,13 +543,13 @@ function AgentCard({ agent, onRetry, retrying, setSelectedAgent, getStatusBadgeS
 
         {agent.status === "completed" && (
           <div className="mb-3">
-            <p className="text-xs text-success">✓ Application completed in {agent.duration}</p>
+            <p className="text-xs text-success">Completed in {agent.duration}</p>
           </div>
         )}
 
         {agent.status === "failed" && (
           <div className="mb-3">
-            <p className="text-xs text-destructive">✗ Application failed after {agent.duration}</p>
+            <p className="text-xs text-destructive">Failed after {agent.duration}</p>
           </div>
         )}
 

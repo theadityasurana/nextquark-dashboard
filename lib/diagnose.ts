@@ -79,6 +79,16 @@ const INFRA_RE = /econnreset|etimedout|socket hang up|proxy|browser (session|has
 const LLM_RE = /rate limit|429|quota|insufficient_quota|402|api key|unauthorized|model .{0,20}not found/i
 
 /**
+ * A refusal from the BROWSER provider, not a model provider.
+ *
+ * Deliberately specific: it names the vendor or the resource, because the generic
+ * words it shares with LLM_RE ("rate limit", "429", "quota") are exactly what made
+ * these get misattributed in the first place.
+ */
+const BROWSER_QUOTA_RE =
+  /\b(kernel|browserbase)\b[^.]{0,40}\b(rate limit|429|quota|capacity)|concurrent browser capacity|would exceed your concurrent|browser pool|no (browser|session)s? available/i
+
+/**
  * Classify a failed run.
  *
  * Order is the specification: the most specific and most terminal conditions
@@ -150,6 +160,25 @@ export function diagnose(s: RunSignals): Diagnosis {
   }
 
   // 6. Our own infrastructure. Retryable, and explicitly not the portal's fault.
+
+  // ── The browser provider, checked BEFORE the LLM ──
+  //
+  // LLM_RE matches the bare words "rate limit" and "429" wherever they appear, so
+  // "Kernel rate limit exceeded" and "would exceed your concurrent browser
+  // capacity" were both reported as "An LLM provider call failed (quota, rate
+  // limit, or bad key)" with the advice to check provider credits. That sends the
+  // operator to the wrong dashboard entirely: the LLM keys are fine and the
+  // browser pool is full.
+  if (BROWSER_QUOTA_RE.test(haystack)) {
+    return {
+      failureClass: "infra",
+      rootCause: "The browser provider refused a new session (rate limit or concurrent-session cap).",
+      suggestedAction: "Wait for running sessions to finish, or raise the browser concurrency limit. Retry after.",
+      permanent: false,
+      portalFault: false,
+    }
+  }
+
   if (s.llmError || LLM_RE.test(haystack)) {
     return {
       failureClass: "infra",

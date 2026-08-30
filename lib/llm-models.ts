@@ -150,15 +150,33 @@ export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
  * proven dead is not included at all — that check belongs upstream, in the
  * health probe, so it happens once per run rather than once per field.
  */
+/** Groq model ids, in the order they should be tried. */
+export const GROQ_TEXT_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
 export function buildLlmChain(keys: {
   openRouterKey?: string
   geminiKey?: string
   openAiKey?: string
+  groqKey?: string
   freeModels?: string[]
   geminiModels?: string[]
 }): LlmAttempt[] {
   const out: LlmAttempt[] = []
-  const { openRouterKey, geminiKey, openAiKey } = keys
+  const { openRouterKey, geminiKey, openAiKey, groqKey } = keys
+
+  // ─── Groq first, for the same reason it leads the Stagehand chain ───
+  //
+  // This is the SECOND chain builder in the codebase and it was missed when Groq
+  // was added to the first, so every free-text answer still started at OpenRouter.
+  // On a credit-exhausted account that is three guaranteed HTTP 402s followed by a
+  // Gemini 429 with a 16-second retry hint: one live run spent 64 seconds — a
+  // third of its total wall clock — walking six dead providers to answer two
+  // questions, while a working Groq key sat unused.
+  if (groqKey) {
+    for (const m of GROQ_TEXT_MODELS) {
+      out.push({ label: `groq/${m}`, provider: "groq", model: m, apiKey: groqKey, json: true })
+    }
+  }
 
   if (openRouterKey) {
     for (const m of ["openai/gpt-4o-mini", "openai/gpt-4.1-mini", "google/gemini-2.5-flash"]) {

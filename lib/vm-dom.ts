@@ -206,6 +206,25 @@ function nqLabelOf(el) {
     if (t) return t.slice(0, 160);
   }
 
+  // ─── A group container names itself ───
+  //
+  // nqWrapperOf finds an ANCESTOR wrapper, so for a <fieldset> — which IS the
+  // wrapper — it returns null and the fallback below never runs. Ashby's radio
+  // groups are exactly that: a fieldset with no id, no aria-label, and its
+  // question in a <label for=...> pointing at another element. nqLabelOf returned
+  // "" for all three, the scan dropped them on its empty-label check, and the
+  // accessibility tree then re-surfaced the member radios as two fields named
+  // "Yes" and "No" — while the real questions went unasked.
+  //
+  // The text is right there: nqTextWithoutOptions strips the option labels and
+  // leaves the question, which is how the member radios already resolve it.
+  const tag = (el.tagName || '').toLowerCase();
+  const role = el.getAttribute && el.getAttribute('role');
+  if (tag === 'fieldset' || role === 'radiogroup' || role === 'group') {
+    const own = nqTextWithoutOptions(el);
+    if (own) return own.slice(0, 160);
+  }
+
   const wrapper = nqWrapperOf(el);
   if (wrapper) {
     const t = nqTextWithoutOptions(wrapper.querySelector('label,legend,[class*="label"]'));
@@ -254,6 +273,17 @@ function nqKeyOf(el) {
     if (document.querySelectorAll('[name="' + nqEsc(el.name) + '"]').length > 1) {
       return 'group:' + el.name;
     }
+  }
+
+  // A fieldset wrapping a named group shares the group's identity. Without this
+  // the container keys on its DOM index (idx:13) while its members key on
+  // group:<name>, so the accessibility tree cannot tell they are the same
+  // question and adds the members again as separate fields.
+  const ktag = (el.tagName || '').toLowerCase();
+  const krole = el.getAttribute && el.getAttribute('role');
+  if (ktag === 'fieldset' || krole === 'radiogroup' || krole === 'group') {
+    const member = el.querySelector('input[type="radio"][name],input[type="checkbox"][name]');
+    if (member && member.name) return 'group:' + member.name;
   }
 
   if (el.id) return 'id:' + el.id;

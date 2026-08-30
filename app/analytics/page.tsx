@@ -1,5 +1,5 @@
-import { AnalyticsScreen } from "@/components/screens/analytics-screen"
+import { redirect } from "next/navigation"
 
 export default function AnalyticsPage() {
-  return <AnalyticsScreen />
+  redirect("/")
 }

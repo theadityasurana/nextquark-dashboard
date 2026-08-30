@@ -14,6 +14,7 @@ export interface UIPreferences {
   // Queue page
   autoStart: boolean
   premiumOnly: boolean
+  maxConcurrent: number
   // Overview page
   chartRange: string
   companyRange: string
@@ -24,6 +25,7 @@ export interface UIPreferences {
 const DEFAULTS: UIPreferences = {
   autoStart: false,
   premiumOnly: false,
+  maxConcurrent: 3,
   chartRange: '24h',
   companyRange: '24h',
   agentRange: '24h',

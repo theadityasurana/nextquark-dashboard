@@ -70,7 +70,22 @@ export const PORTAL_PATTERNS: PortalPattern[] = [
     urlPatterns: [/smartrecruiters\.com/],
     canonicalPatterns: [/^https?:\/\/(?:jobs|careers)\.smartrecruiters\.com\//i],
     supportsDirectApi: true,
-    getApplyUrl: (url) => url,
+    // ─── The stored URL is the API, not the application ───
+    //
+    // Every SmartRecruiters row in the jobs table (1,566 of them, and not one
+    // exception) holds the posting's REST endpoint —
+    //   https://api.smartrecruiters.com/v1/companies/<Company>/postings/<id>
+    // — because that is what the ingest read them from. It matches
+    // /smartrecruiters\.com/ so the portal is detected correctly, and then the
+    // browser is pointed at a JSON document. There is no form on it to fill, so
+    // the run scans zero fields, which audits as "nothing required is missing".
+    //
+    // The canonical apply page is derived from the same two path segments the
+    // API URL already carries, so no lookup is needed.
+    getApplyUrl: (url) => {
+      const m = url.match(/api\.smartrecruiters\.com\/v1\/companies\/([^/?#]+)\/postings\/([^/?#]+)/i)
+      return m ? `https://jobs.smartrecruiters.com/${m[1]}/${m[2]}` : url
+    },
   },
   {
     name: "BambooHR",
@@ -183,4 +198,55 @@ export function detectPortalScored(url: string): PortalDetection | null {
  */
 export function detectPortal(url: string): PortalPattern | null {
   return detectPortalScored(url)?.portal ?? null
+}
+
+
+/**
+ * The URL that actually shows an application FORM, resolved over the network.
+ *
+ * `getApplyUrl` is a pure string rewrite, which is all most portals need: Ashby
+ * appends /application, Lever appends /apply. SmartRecruiters cannot be done that
+ * way. Its posting page carries no form and no apply button this scanner can
+ * find — a live ServiceNow run reported "no-apply-button-found" and a form
+ * inventory of ZERO controls — because the form lives behind a separate URL keyed
+ * by a publication UUID that the posting id does not contain.
+ *
+ * Its public API hands over both, so this asks rather than guesses:
+ *
+ *   GET /v1/companies/<Company>/postings/<id>
+ *     → applyUrl:  …/<id>-<slug>?oga=true      ← the form
+ *       postingUrl: …/<id>-<slug>              ← the advert
+ *       uuid:       <publication uuid>         ← for the oneclick form
+ *
+ * Best-effort by design: on any failure it falls back to the string rewrite, so a
+ * network hiccup degrades to today's behaviour instead of failing the run.
+ */
+export async function resolveApplyUrl(rawUrl: string, timeoutMs = 8000): Promise<string> {
+  const portal = detectPortal(rawUrl)
+  const fallback = portal?.getApplyUrl(rawUrl) || rawUrl
+  if (portal?.name !== "SmartRecruiters") return fallback
+
+  const m = rawUrl.match(/smartrecruiters\.com\/(?:v1\/companies\/)?([^/?#]+)\/(?:postings\/)?(\d+)/i)
+  if (!m) return fallback
+
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), timeoutMs)
+  try {
+    const res = await fetch(
+      `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(m[1])}/postings/${encodeURIComponent(m[2])}`,
+      { signal: ctl.signal }
+    )
+    if (!res.ok) return fallback
+    const j: any = await res.json()
+    // applyUrl carries ?oga=true, which is what opens the form rather than the ad.
+    if (typeof j?.applyUrl === "string" && j.applyUrl) return j.applyUrl
+    if (typeof j?.uuid === "string" && j.uuid) {
+      return `https://jobs.smartrecruiters.com/oneclick-ui/company/${encodeURIComponent(m[1])}/publication/${j.uuid}?dcr_ci=${encodeURIComponent(m[1])}`
+    }
+    return fallback
+  } catch {
+    return fallback
+  } finally {
+    clearTimeout(timer)
+  }
 }

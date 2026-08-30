@@ -97,3 +97,24 @@ describe("detectPortalScored", () => {
     expect(detectPortalScored("jobs.lever.co/acme/8f2c1d3e4a5b6c7d")?.portal.name).toBe("Lever")
   })
 })
+
+// ─── SmartRecruiters postings are stored as API endpoints ───
+//
+// Every SmartRecruiters row in the jobs table (1,566, no exceptions) holds the
+// REST endpoint the ingest read it from, not a page a person could apply on. It
+// still matches /smartrecruiters\.com/, so the portal was detected correctly and
+// the browser was then pointed at a JSON document — a "form" with zero fields,
+// which audits as nothing-required-missing and silently applies to nothing.
+describe("SmartRecruiters apply URL", () => {
+  it("rewrites the API endpoint to the application page", () => {
+    const sr = detectPortal("https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000135949979")
+    expect(sr?.name).toBe("SmartRecruiters")
+    expect(sr?.getApplyUrl("https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000135949979"))
+      .toBe("https://jobs.smartrecruiters.com/ServiceNow/744000135949979")
+  })
+
+  it("leaves a real application URL alone", () => {
+    const url = "https://jobs.smartrecruiters.com/LLNL/3743990013734826"
+    expect(detectPortal(url)?.getApplyUrl(url)).toBe(url)
+  })
+})

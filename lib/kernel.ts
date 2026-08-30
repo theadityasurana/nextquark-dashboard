@@ -1,7 +1,7 @@
 import { createAdminClient } from "./supabase/admin"
 import axios from "axios"
 import Kernel, { ConflictError, RateLimitError, APIError } from "@onkernel/sdk"
-import { detectPortal } from "./portal-detector"
+import { detectPortal, resolveApplyUrl } from "./portal-detector"
 import type { AutomationResponse, StreamCallback } from "./browser-use"
 import { fetchOtpViaApi } from "./otp-fetcher"
 import { RunTracker, type RunTimeline } from "./run-timeline"
@@ -2804,7 +2804,10 @@ ${freeTextQuestions.map((q, i) => `${i + 1}. ${q.label}`).join('\n')}`
   // stopped at the first exhausted quota and returned {} — indistinguishable
   // from "the model had nothing to say", which is what let unanswered questions
   // be ticked off as complete.
-  const chain = buildLlmChain({ openRouterKey, geminiKey, openAiKey, freeModels: freeModelIds, geminiModels: GEMINI_TEXT_MODELS })
+  // groqKey is read from the module cache rather than threaded through this
+  // function's signature: it is set once per run by getKeys(), and every caller
+  // between here and there would otherwise have to pass a key it never uses.
+  const chain = buildLlmChain({ openRouterKey, geminiKey, openAiKey, groqKey: cachedGroqApiKey || "", freeModels: freeModelIds, geminiModels: GEMINI_TEXT_MODELS })
   if (chain.length === 0) {
     const reason = "no LLM provider is configured"
     if (applicationId) await persistLog(applicationId, "error", `Custom-answer generation FAILED for ${freeTextQuestions.length} question(s): ${reason}`)
@@ -3127,6 +3130,7 @@ ${VM_DOM_HELPERS}
     if (nqIsGhost(el)) continue;
     // Already covered by the group entry above.
     if (el.name && groupedNames.has(el.name)) continue;
+
     const key = keyOf(el);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -3298,7 +3302,7 @@ ${VM_DOM_HELPERS}
       const nm = el.getAttribute('name') || '';
       if (!nm) return false;
       return !!document.querySelector(
-        'input[type="' + type + '"][name="' + nm.replace(/["\\]/g, '\\$&') + '"]:checked'
+        'input[type="' + type + '"][name="' + nm.replace(/["\\\\]/g, '\\\\$&') + '"]:checked'
       );
     }
     const ariaState = el.getAttribute('aria-checked') || el.getAttribute('aria-selected');
@@ -3356,11 +3360,25 @@ return result;
 `,
     timeout_sec: 20,
   })
-  if ((!res.success || res.error) && applicationId) {
+  if (!res.success || res.error) {
     // Same trap as the inventory scan: a thrown audit reads as "everything is
     // filled", which is the most dangerous possible default — it opens the
     // submit gate on a form nobody checked.
-    await persistLog(applicationId, "error", `auditForm FAILED in the browser: ${String(res.error || "unknown").slice(0, 300)}`)
+    //
+    // This block used to only LOG that, then fall through to the empty default
+    // and do exactly what the comment warns against. A live run proved it: the
+    // audit died on a syntax error and the very next line read
+    // "auditForm: 0 unfilled → all required fields filled".
+    //
+    // An audit that did not run knows nothing, so it reports the form as
+    // incomplete. That is the truth, and it keeps the gate shut.
+    if (applicationId) {
+      await persistLog(applicationId, "error", `auditForm FAILED in the browser: ${String(res.error || "unknown").slice(0, 300)}`)
+    }
+    return {
+      unfilledFields: ["form state unknown — the audit did not run"],
+      fields: [{ label: "form state unknown — the audit did not run", key: "audit:failed" }],
+    }
   }
   const result = (res.result as any) || { unfilledFields: [], fields: [] }
   if (!Array.isArray(result.fields)) result.fields = []
@@ -3729,6 +3747,16 @@ async function askModel(
   return text
 }
 
+/**
+ * Fields whose answer is a proper noun looked up in a closed list.
+ *
+ * For these, "my value is not in your list" is a real, correct answer that the
+ * form itself offers as "Other" — unlike a Yes/No or a preference question,
+ * where picking Other would be evasive.
+ */
+const LOOKUP_FIELD_RE =
+  /\b(school|university|college|institution|alma\s+mater|degree|discipline|major|field\s+of\s+study|course\s+of\s+study|employer|company|previous\s+employer)\b/i
+
 // ─── fillFieldWithHandler: dispatch to the right widget handler ───
 // Replaces the two ~300-line VM monoliths (fillFieldSmartInVM + fillTypeaheadInVM)
 // that grew by patching and could not be tested. Handler selection is now pure
@@ -3773,8 +3801,25 @@ ${VM_DOM_HELPERS}
     // Read the label back off the element we ACTUALLY resolved. The caller
     // compares it to the label it planned an answer for and refuses to write on
     // a mismatch — the last guard against a value landing in the wrong box.
+    // ─── A group member is named by its OPTION, not by its question ───
+    //
+    // A group: key resolves to the first member of the group, and asking that
+    // element for its label correctly returns "Yes" — the option it carries. The
+    // caller then compares that to the question it planned an answer for, sees a
+    // mismatch, and refuses to write.
+    //
+    // On an Ashby form that rejected all three Yes/No questions with
+    //   Refused to fill "Are you okay with a hybrid in-office sch" —
+    //   the element at group:...f83e278e is now "Yes". Re-scanning.
+    // and then rejected them again on the re-scan, because re-scanning cannot
+    // change what a radio button is called.
+    //
+    // The guard is right; it was being handed the wrong name. For a group the
+    // identity is the CONTAINER's question, which is what the planner matched on.
     resolvedLabel: (isButtonGroup
       ? nqTextWithoutOptions(el.querySelector('label,legend,[class*="label"]'))
+      : isCheckboxGroup
+      ? (nqTextWithoutOptions(el.closest('fieldset,[role="radiogroup"],[role="group"]') || nqWrapperOf(el)) || nqLabelOf(el))
       : nqLabelOf(el)).slice(0, 160),
     groupSize: isCheckboxGroup && el.name
       ? document.querySelectorAll('[name="' + nqEsc(el.name) + '"]').length
@@ -4883,7 +4928,9 @@ export async function fillJobApplicationWithKernel(
 
   const portal = detectPortal(portalUrl)
   const portalType = portal?.name || "Unknown"
-  const targetUrl = portal?.getApplyUrl(portalUrl) || portalUrl
+  // Resolved before the session is created, so start_url IS the application form
+  // and the run never lands on the advert it then has to find its way off.
+  const targetUrl = await resolveApplyUrl(portalUrl)
   const portalConfig = getPortalConfig(portalType)
   const WIZARD_MAX_STEPS = wizardStepsFor(portalType)
 
@@ -5848,6 +5895,33 @@ return await page.evaluate((want) => {
 
           // The widget offered real options and none matched — let the model
           // pick from what the page actually shows.
+          // ─── A proper noun that isn't on the list IS "Other" ───
+          //
+          // School, employer and discipline dropdowns are closed lists, and the
+          // candidate's actual institution is frequently absent from them. Handing
+          // that to the model asks it to pick the CLOSEST university instead —
+          // which is a different school, written onto a real application as though
+          // the candidate attended it.
+          //
+          // "Other" is both the honest answer and the one the form provides for
+          // exactly this case. Note the required-choice fallback further down
+          // deliberately excludes "Other" — correct there, where the goal is to
+          // avoid an evasive answer to a question we simply failed to read; wrong
+          // here, where "not in your list" is the literal truth.
+          if (widget.needsModelChoice && widget.options?.length && value && LOOKUP_FIELD_RE.test(label)) {
+            const other = widget.options.find(o => /^other\b|^not listed\b|^none of the above\b/i.test(o.trim()))
+            if (other) {
+              if (applicationId) {
+                await persistLog(applicationId, "info",
+                  `"${String(value).slice(0, 40)}" is not among the options for "${label.slice(0, 45)}" — choosing "${other}" rather than the nearest name`)
+              }
+              ledger.record(field.key, field.label, other, 'model-choice')
+              const pick = await fillFieldWithHandler(kernelClient, sid, field.key, label, other, portalType, applicationId, field.label)
+              totalSteps++
+              if (pick.filled) { progressed = true; ledger.settle(field.key); continue }
+            }
+          }
+
           if (widget.needsModelChoice && widget.options?.length) {
             const rejected = knownValidationErrors.find(e => norm(e).includes(norm(label)) || norm(label).includes(norm(e)))
             const ctx = {
@@ -6261,7 +6335,25 @@ return await page.evaluate((want) => {
       }
     }
 
-    if (!independentSolveCleared && (detectCaptcha(allAgentText) || !!structuralCaptcha)) {
+    // ─── reCAPTCHA v3 is not a challenge, so there is nothing to wait for ───
+    //
+    // v3 is invisible and score-based: it watches the session and hands the site
+    // a number when the form is submitted. No widget is ever shown, no token is
+    // ever "cleared", and no solve event will ever arrive — so waiting on one
+    // burns the full 60-second timeout and then reports a failure that never
+    // happened. A live Anyscale run spent 60 of its 181 seconds doing exactly
+    // that, a third of the wall clock, on a form with no visible challenge at all.
+    //
+    // The score is improved by the things that make a session look human — a
+    // consistent exit IP, a persisted profile, unhurried typing — not by waiting.
+    // So the submit proceeds and the score lands where it lands.
+    const invisibleOnly =
+      !!structuralCaptcha && (structuralCaptcha as any).type === "recaptchav3" && !detectCaptcha(allAgentText)
+    if (invisibleOnly && applicationId) {
+      await persistLog(applicationId, "info", "reCAPTCHA v3 is invisible and score-based — nothing to solve; continuing to the submit gate.")
+    }
+
+    if (!invisibleOnly && !independentSolveCleared && (detectCaptcha(allAgentText) || !!structuralCaptcha)) {
       if (applicationId) await persistLog(applicationId, "info", "CAPTCHA still present. Waiting for Kernel auto-solve via telemetry event...")
       if (onStep) onStep({ status: "in_progress", log: "CAPTCHA detected — waiting for Kernel auto-solve...", liveUrl })
       const autoSolved = await Promise.race([

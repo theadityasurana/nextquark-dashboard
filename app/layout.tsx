@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { DashboardShell } from '@/components/dashboard-shell'
 import { DataProvider } from '@/lib/data-context'
 import { LogsProvider } from '@/lib/logs-context'
+import { ThemeProvider } from '@/components/theme-provider'
 import { PWARegister } from '@/components/pwa-register'
 import './globals.css'
 
@@ -21,18 +22,9 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
+      { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: '/applogo.png',
   },
@@ -47,21 +39,19 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} dark`}>
       <body className="font-sans antialiased">
-        <DataProvider>
-          <LogsProvider>
-            <DashboardShell>
-              {children}
-            </DashboardShell>
-          </LogsProvider>
-        </DataProvider>
+        <ThemeProvider>
+          <DataProvider>
+            <LogsProvider>
+              <DashboardShell>
+                {children}
+              </DashboardShell>
+            </LogsProvider>
+          </DataProvider>
+        </ThemeProvider>
         <PWARegister />
         <Analytics />
       </body>

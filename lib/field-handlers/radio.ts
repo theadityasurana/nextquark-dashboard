@@ -33,8 +33,32 @@ const scope = host.tagName === 'INPUT'
   ? (host.closest('fieldset,[role="radiogroup"],[class*="field"],[class*="question"]') || document)
   : host;
 
+// ─── A hidden radio is still a radio ───
+//
+// This filtered on the INPUT's own box, which assumes the input is the thing you
+// see. Ashby's radio groups are the opposite: the real input is zero-sized and
+// the visible control is a styled span beside it, driven through the associated
+// label. Every option was therefore discarded and the handler returned
+// no-radios-found on three answered questions in a row.
+//
+// What matters is whether the option is REACHABLE, so a radio counts when either
+// it or the label pointing at it is rendered.
+const rendered = (n) => {
+  if (!n) return false;
+  const b = n.getBoundingClientRect();
+  return b.width > 0 || b.height > 0;
+};
+const labelFor = (r) => {
+  if (r.id) {
+    try {
+      const l = document.querySelector('label[for="' + (window.CSS && CSS.escape ? CSS.escape(r.id) : r.id) + '"]');
+      if (l) return l;
+    } catch {}
+  }
+  return r.closest('label');
+};
 const radios = Array.from(scope.querySelectorAll('input[type="radio"],[role="radio"]'))
-  .filter(r => { const b = r.getBoundingClientRect(); return b.width > 0 || b.height > 0; });
+  .filter(r => rendered(r) || rendered(labelFor(r)));
 
 if (!radios.length) return { handled: true, filled: false, reason: 'no-radios-found' };
 
@@ -68,8 +92,11 @@ if (idx < 0) {
 
 await sleep(rnd(180, 450));
 const target = radios[idx];
-target.scrollIntoView({ block: 'center' });
-clickVia(target);
+// Click the LABEL when the input itself has no box: a click dispatched at a
+// zero-sized element lands nowhere, and the label is what a person clicks.
+const clickTarget = rendered(target) ? target : (labelFor(target) || target);
+clickTarget.scrollIntoView({ block: 'center' });
+clickVia(clickTarget);
 await sleep(260);
 
 const ok = readState(document.querySelectorAll('input[type="radio"],[role="radio"]')[0] ? radios[idx] : null)

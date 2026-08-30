@@ -116,7 +116,7 @@ export async function GET(request: Request) {
         .select('portal_type, status, response_time_ms')
         .gte('timestamp', getTimeRange('24h')),
 
-      // Top users
+      // Top users — kept for potential future use but userActivity is now computed live
       supabase
         .from('profiles')
         .select('id, name, email, total_apps, successful_apps')
@@ -241,6 +241,8 @@ export async function GET(request: Request) {
     }
 
     // ── Portal health ──
+    // Primary: portal_metrics table (written by kernel.ts after each run)
+    // Fallback: derive from live_application_queue.portal_type when metrics table is empty
     const portalMap = new Map<string, { total: number; failures: number; totalTime: number }>()
     ;(portalMetrics || []).forEach(m => {
       const cur = portalMap.get(m.portal_type) || { total: 0, failures: 0, totalTime: 0 }
@@ -249,22 +251,63 @@ export async function GET(request: Request) {
       cur.totalTime += m.response_time_ms || 0
       portalMap.set(m.portal_type, cur)
     })
-    const portalHealth = Array.from(portalMap.entries()).map(([type, d]) => ({
-      portalType: type,
-      avgResponseTime: d.total > 0 ? Math.round(d.totalTime / d.total) : 0,
-      failureRate: d.total > 0 ? ((d.failures / d.total) * 100).toFixed(1) : '0.0',
-      status: d.failures / d.total > 0.3 ? 'down' : d.totalTime / d.total > 5000 ? 'slow' : 'active',
-    }))
+
+    let portalHealth: any[]
+    if (portalMap.size > 0) {
+      portalHealth = Array.from(portalMap.entries()).map(([type, d]) => ({
+        portalType: type,
+        avgResponseTime: d.total > 0 ? Math.round(d.totalTime / d.total) : 0,
+        failureRate: d.total > 0 ? ((d.failures / d.total) * 100).toFixed(1) : '0.0',
+        status: d.failures / d.total > 0.3 ? 'down' : d.totalTime / d.total > 5000 ? 'slow' : 'active',
+      }))
+    } else {
+      // Fallback: derive from completed/failed queue rows that have portal_type set
+      const { data: portalRows } = await supabase
+        .from('live_application_queue')
+        .select('portal_type, status, processing_time_ms')
+        .not('portal_type', 'is', null)
+        .gte('created_at', getTimeRange('7d'))
+      const fallbackMap = new Map<string, { total: number; failures: number; totalTime: number }>()
+      ;(portalRows || []).forEach((r: any) => {
+        if (!r.portal_type) return
+        const cur = fallbackMap.get(r.portal_type) || { total: 0, failures: 0, totalTime: 0 }
+        cur.total++
+        if (r.status === 'failed') cur.failures++
+        cur.totalTime += r.processing_time_ms || 0
+        fallbackMap.set(r.portal_type, cur)
+      })
+      portalHealth = Array.from(fallbackMap.entries()).map(([type, d]) => ({
+        portalType: type,
+        avgResponseTime: d.total > 0 ? Math.round(d.totalTime / d.total) : 0,
+        failureRate: d.total > 0 ? ((d.failures / d.total) * 100).toFixed(1) : '0.0',
+        status: d.failures / d.total > 0.3 ? 'down' : d.totalTime / d.total > 5000 ? 'slow' : 'active',
+      }))
+    }
 
     // ── User activity ──
-    const userActivity = (users || []).map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      totalApps: u.total_apps || 0,
-      successfulApps: u.successful_apps || 0,
-      successRate: u.total_apps > 0 ? ((u.successful_apps / u.total_apps) * 100).toFixed(1) : '0.0',
-    }))
+    // Compute live from the queue so it works even if the profile trigger hasn't run
+    const { data: userQueueRows } = await supabase
+      .from('live_application_queue')
+      .select('user_id, first_name, last_name, email, status')
+      .limit(5000)
+    const userMap = new Map<string, { name: string; email: string; total: number; completed: number }>()
+    ;(userQueueRows || []).forEach((r: any) => {
+      const cur = userMap.get(r.user_id) || { name: `${r.first_name} ${r.last_name}`, email: r.email || '', total: 0, completed: 0 }
+      cur.total++
+      if (r.status === 'completed') cur.completed++
+      userMap.set(r.user_id, cur)
+    })
+    const userActivity = Array.from(userMap.entries())
+      .map(([id, d]) => ({
+        id,
+        name: d.name,
+        email: d.email,
+        totalApps: d.total,
+        successfulApps: d.completed,
+        successRate: d.total > 0 ? ((d.completed / d.total) * 100).toFixed(1) : '0.0',
+      }))
+      .sort((a, b) => b.totalApps - a.totalApps)
+      .slice(0, 5)
 
     // ── Job insights ──
     const rightSwipeMap = new Map((jobs || []).map(j => [j.id, j.right_swipes || 0]))

@@ -30,11 +30,19 @@ describe("evaluatePage", () => {
     expect(evaluatePage(GREENHOUSE, "Complete a liveness check to continue").kind).toBe("unsafe")
   })
 
-  it("blocks payment, identity-number and bank-detail requests", () => {
+  it("blocks payment and bank-detail requests", () => {
     expect(evaluatePage(GREENHOUSE, "Enter your credit card number to continue").kind).toBe("unsafe")
-    expect(evaluatePage(GREENHOUSE, "Please provide your Social Security Number").kind).toBe("unsafe")
-    expect(evaluatePage(GREENHOUSE, "Aadhaar number is required").kind).toBe("unsafe")
     expect(evaluatePage(GREENHOUSE, "Enter the routing number for direct deposit").kind).toBe("unsafe")
+  })
+
+  // Identity and tax numbers no longer stop the run. Blocking the whole posting
+  // over one field threw away a Commvault form whose other 22 inputs were filled
+  // correctly; the field is answered with a reserved placeholder instead (see
+  // `national_id` in answer-policy). Money still blocks: a pre-offer application
+  // asking for card or bank details is a scam signal, not a form to complete.
+  it("no longer blocks identity-number requests", () => {
+    expect(evaluatePage(GREENHOUSE, "Please provide your Social Security Number").blocked).toBe(false)
+    expect(evaluatePage(GREENHOUSE, "Aadhaar number is required").blocked).toBe(false)
   })
 
   it("blocks device-permission and recording flows", () => {

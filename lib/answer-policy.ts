@@ -62,7 +62,47 @@ export interface PolicyField {
  * reliable signal, and matching on wording alone would miss a survey phrased in
  * an unusual way.
  */
+/**
+ * A placeholder matching the format the asked-for identifier expects.
+ *
+ * Each is reserved or checksum-invalid, so it satisfies a format validator while
+ * being unable to match a real person's number.
+ */
+function nationalIdPlaceholder(label: string): string {
+  const l = label.toLowerCase()
+  if (/\bpan\b/.test(l)) return "ABCDE1234F"          // canonical dummy PAN
+  if (/aadhaar/.test(l)) return "0000 0000 0000"       // fails Verhoeff checksum
+  if (/social security|\bssn\b/.test(l)) return "000-00-0000" // invalid under SSA rules
+  if (/national insurance/.test(l)) return "QQ123456C"  // QQ is a reserved NI prefix
+  return "000000000"
+}
+
+/** Identity rules whose answer is a URL, and so can stand in for one another. */
+const URL_IDENTITY_IDS = new Set(["linkedin", "github", "portfolio", "website"])
+
 const SURVEY_NAME_RE = /(^|[.:[])(surveysResponses|eeo|demographic|selfIdentification|voluntary_self_id)\b/i
+
+/**
+ * Voluntary self-identification questions, recognised by WORDING.
+ *
+ * `demographicRoute` has always done the right thing with these — answer from
+ * the candidate's own stated profile value, otherwise take the form's own
+ * "decline to self-identify" option — but it was reachable only through
+ * `schemaGroup`, which only Greenhouse and Ashby publish. On every other portal
+ * these questions fell to `isSensitiveQuestion` and were left blank, and a blank
+ * REQUIRED self-ID question blocks the submit exactly like any other.
+ *
+ * Worse, anything phrased as a yes/no — "Do you identify as transgender?",
+ * "Are you Hispanic/Latino?" — sailed past the survey checks entirely and was
+ * caught by the affirmative default, which answered "Yes". That is a fabricated
+ * claim about a protected characteristic, written into a real application.
+ *
+ * Routing these here fixes both directions: they get the candidate's answer when
+ * there is one, and an explicit decline when there is not. Neither is ever
+ * invented.
+ */
+const DEMOGRAPHIC_LABEL_RE =
+  /\b(gender\s+identity|gender|sex)\b|\b(transgender|non-?binary)\b|\bsexual\s+orientation\b|\b(racial|ethnic\w*|race|hispanic|latino|latine)\b|\bpronouns?\b|\bveteran\b|\bdisability\b|\bdisabilit\w*\b|\bself[-\s]?identif\w*\b|\bwhat\s+is\s+your\s+(current\s+)?age\b|\bage\s+range\b|\bcommunities\s+do\s+you\s+belong\b/i
 
 /** How an answer for this field should be produced. */
 export type AnswerRoute =
@@ -356,7 +396,76 @@ function countryFromLocation(location?: string | null): string {
 // have to be precise enough to survive contact with an essay prompt, because an
 // essay prompt can never reach them.
 
+
+/**
+ * Country names and the aliases forms actually use for them.
+ *
+ * Only needs to cover the countries a residency question names, which in
+ * practice is a short list dominated by the US, UK and India.
+ */
+/** Countries whose mention makes a question sanctions screening, not residency. */
+const SANCTIONS_RE =
+  /\b(cuba|iran|north\s+korea|syria|crimea|donetsk|luhansk|kherson|zaporizhzhia)\b|\b(embargo|sanction(ed|s)?)\b/i
+
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  "united states": ["united states", "usa", "u.s.a", "u.s.", " us ", "america", "stateside"],
+  "united kingdom": ["united kingdom", "uk", "u.k.", "britain", "england", "scotland", "wales"],
+  india: ["india", "bharat"],
+  canada: ["canada"],
+  australia: ["australia"],
+  germany: ["germany", "deutschland"],
+  ireland: ["ireland"],
+  singapore: ["singapore"],
+  "united arab emirates": ["united arab emirates", "uae", "dubai"],
+  netherlands: ["netherlands", "holland"],
+  france: ["france"],
+  poland: ["poland"],
+  brazil: ["brazil"],
+  mexico: ["mexico"],
+  japan: ["japan"],
+}
+
+/** Which country does this text name, if any? */
+function countryIn(text: string): string | null {
+  const t = " " + String(text || "").toLowerCase().replace(/[^a-z0-9. ]+/g, " ").replace(/\s+/g, " ") + " "
+  for (const [country, aliases] of Object.entries(COUNTRY_ALIASES)) {
+    for (const a of aliases) {
+      const needle = a.trim()
+      if (!needle) continue
+      if (new RegExp("(^| )" + needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "( |$)").test(t)) return country
+    }
+  }
+  return null
+}
+
+/**
+ * "Are you currently based in the USA?" — answered from the profile, never guessed.
+ *
+ * This is a FACT the candidate has already stated, and the affirmative default
+ * was answering it "Yes" for a candidate whose very next field read
+ * "Bangalore, India". That is a false claim about residency sitting one line
+ * above the contradiction that disproves it.
+ *
+ * Returns null when neither side names a country it recognises, so the question
+ * falls through rather than being answered on a guess.
+ */
+function residencyAnswer(label: string, userData: any): string | null {
+  const asked = countryIn(label)
+  if (!asked) return null
+  const mine = countryIn(String(userData?.location ?? userData?.country ?? ""))
+  if (!mine) return null
+  return asked === mine ? "Yes" : "No"
+}
+
 const BOOLEAN_BANK: Array<{ id: string; re: RegExp; answer: (u: any) => string }> = [
+  {
+    // First in the bank: "based in", "located in" and "resident of" overlap with
+    // the relocation and on-site wordings below, and where they overlap the
+    // profile's own answer must win over a policy preference.
+    id: "residency",
+    re: /\b(currently\s+)?(based|located|residing|reside|live|living)\b[^?]{0,24}\b(in|out\s+of)\b|\b(a\s+)?resident\s+of\b|\bdo\s+you\s+live\s+in\b/i,
+    answer: () => "",
+  },
   {
     // ── Sponsorship is tested BEFORE work authorisation, deliberately ──
     //
@@ -387,7 +496,7 @@ const BOOLEAN_BANK: Array<{ id: string; re: RegExp; answer: (u: any) => string }
     //   "Are you open to being on-site in our San Francisco office?"        (Cartesia)
     //   "In office attendance is an essential function for this role…"      (Snowflake)
     id: "onsite",
-    re: /\b(work(ing)?\s+(from|at|out\s+of)\s+(our|the)\b[^?]{0,30}\boffices?|come\s+(in)?to\s+(our|the)\s+office|in[-\s]?office\s+attendance|on-?site|in-?person|hybrid\s+(schedule|model|work)|commute)\b/i,
+    re: /\b(work(ing)?\s+(from|at|out\s+of)\s+(our|the)\b[^?]{0,30}\boffices?|come\s+(in)?to\s+(our|the)\s+office|in[-\s]?office\s+attendance|on-?site|in-?person|hybrid(\s+[\w-]+){0,2}\s+(schedule|model|work)|commute)\b/i,
     answer: () => "Yes",
   },
   { id: "travel", re: /\b(willing|able|open)\s+to\s+travel\b/i, answer: () => "Yes" },
@@ -398,7 +507,12 @@ const BOOLEAN_BANK: Array<{ id: string; re: RegExp; answer: (u: any) => string }
     // The bare "No" resolves against those because option matching compares the
     // leading token.
     id: "worked_here",
-    re: /\b(worked|work|employed|intern(ed)?)\b[^?]{0,60}\b(here|for\s+us|at\s+(this|our)\s+compan)|\b(currently\s+work|previously\s+worked|ever\s+worked|been\s+employed)\s+(for|at|with)\b/i,
+    // The last alternative is why this rule exists in the form it does: a company
+    // NAME sits where "us" would ("Have you worked for Carta at any other time
+    // previously?", "Have you ever worked for Figma before?"), so none of the
+    // earlier patterns matched and the affirmative default answered "Yes" —
+    // asserting prior employment at a company the candidate has never worked for.
+    re: /\b(worked|work|employed|intern(ed)?)\b[^?]{0,60}\b(here|for\s+us|at\s+(this|our)\s+compan)|\b(currently\s+work|previously\s+worked|ever\s+worked|been\s+employed)\s+(for|at|with)\b|\b(have|did)\s+you\s+(ever\s+)?work(ed)?\s+(for|at|with)\b/i,
     answer: () => "No",
   },
   {
@@ -443,6 +557,57 @@ const BOOLEAN_BANK: Array<{ id: string; re: RegExp; answer: (u: any) => string }
 //
 // Free-text or dropdown facts that come from the profile. Gated to short-answer
 // shapes and blocked outright on anything that reads like an essay prompt.
+
+/**
+ * The candidate's primary education, in the shape a form asks for it.
+ *
+ * Forms split this across School / Degree / Discipline / start / end dropdowns,
+ * while the profile arrives either as a structured array or, on older callers, as
+ * one flattened sentence per entry:
+ *
+ *   "B.Tech in Engineering Physics from IIT (BHU) Varanasi (2020 - 2025)"
+ *
+ * Both are read here so the rules below never care which one they were handed.
+ *
+ * The generic fallbacks matter as much as the real values: a required School
+ * dropdown left blank blocks the submit outright, and most candidates are a few
+ * years out of a four-year undergraduate degree, so that is what is assumed when
+ * nothing is on file.
+ */
+function primaryEducation(u: any): {
+  school: string; degree: string; field: string; startYear: string; endYear: string
+} {
+  const e = Array.isArray(u?.educationEntries) ? u.educationEntries[0] : null
+  let school = String(e?.institution || e?.university || e?.school || "").trim()
+  let degree = String(e?.degree || "").trim()
+  let field = String(e?.field || e?.course || e?.discipline || "").trim()
+  let startYear = String(e?.startDate || "").match(/\d{4}/)?.[0] || ""
+  let endYear = String(e?.endDate || "").match(/\d{4}/)?.[0] || ""
+
+  if (!school || !degree) {
+    const prose = String(u?.education || "").split("\n")[0]
+    const m = prose.match(/^(.*?)\s+in\s+(.*?)\s+from\s+(.*?)\s*\((\d{4})\s*-\s*(\d{4})\)/i)
+    if (m) {
+      degree = degree || m[1].trim()
+      field = field || m[2].trim()
+      school = school || m[3].trim()
+      startYear = startYear || m[4]
+      endYear = endYear || m[5]
+    }
+  }
+
+  // Typical for a candidate a few years out of a four-year degree.
+  const thisYear = new Date().getFullYear()
+  endYear = endYear || String(thisYear - 3)
+  startYear = startYear || String(Number(endYear) - 4)
+  return {
+    school: school || "University",
+    degree: degree || "Bachelor's Degree",
+    field: field || "Computer Science",
+    startYear,
+    endYear,
+  }
+}
 
 const FACT_BANK: Array<{
   id: string
@@ -493,9 +658,88 @@ const FACT_BANK: Array<{
     shapes: ["select", "radio", "text", "unknown"],
   },
   {
+    // Greenhouse and Lever render an education block as School / Degree /
+    // Discipline / start / end, each its own control. None had a rule, so every
+    // one of them went to the model with an empty preferred value — five
+    // model round-trips per education row, answering from nothing.
+    id: "school",
+    re: /\b(school|university|college|institution|alma\s+mater)\b/i,
+    answer: (u) => primaryEducation(u).school,
+    shapes: ["text", "select", "typeahead", "unknown"],
+  },
+  {
+    id: "degree",
+    re: /\b(degree|qualification|highest\s+(level\s+of\s+)?education)\b/i,
+    answer: (u) => primaryEducation(u).degree,
+    shapes: ["text", "select", "typeahead", "unknown"],
+  },
+  {
+    id: "discipline",
+    re: /\b(discipline|major|field\s+of\s+study|course\s+of\s+study|speciali[sz]ation|stream)\b/i,
+    answer: (u) => primaryEducation(u).field,
+    shapes: ["text", "select", "typeahead", "unknown"],
+  },
+  {
+    id: "education_start_year",
+    re: /\bstart\s+date\s+year\b|\b(start|from)\s+year\b/i,
+    answer: (u) => primaryEducation(u).startYear,
+    shapes: ["date", "text", "select", "typeahead", "unknown"],
+  },
+  {
+    id: "education_end_year",
+    re: /\bend\s+date\s+year\b|\b(end|to|graduation|completion)\s+year\b/i,
+    answer: (u) => primaryEducation(u).endYear,
+    shapes: ["date", "text", "select", "typeahead", "unknown"],
+  },
+  {
+    // Months are almost never on file, and the academic calendar is a better
+    // guess than a model's, which picked a different month on every retry.
+    id: "education_start_month",
+    re: /\bstart\s+date\s+month\b|\bstart\s+month\b/i,
+    answer: () => "September",
+    shapes: ["date", "text", "select", "typeahead", "unknown"],
+  },
+  {
+    id: "education_end_month",
+    re: /\bend\s+date\s+month\b|\bend\s+month\b|\bgraduation\s+month\b/i,
+    answer: () => "May",
+    shapes: ["date", "text", "select", "typeahead", "unknown"],
+  },
+  {
+    /**
+     * National identity and tax numbers, answered with a RESERVED placeholder.
+     *
+     * These used to abandon the entire posting: one such field on a Commvault
+     * form stopped a run whose other 22 inputs were filled correctly, producing
+     * no application at all.
+     *
+     * The values below are chosen so the field passes format validation while
+     * being incapable of belonging to anybody — 000-00-0000 is invalid under SSA
+     * rules, ABCDE1234F is the canonical dummy PAN, and an all-zero Aadhaar fails
+     * its own Verhoeff checksum. A plausible-looking random number would fill the
+     * field just as well and would risk colliding with a real person's, which is
+     * the one outcome worth engineering against here.
+     */
+    id: "national_id",
+    re: /\b(social security number|\bssn\b|aadhaar|sin number|national insurance number|tax identification number|\btin\b|pan (card )?number|national id(entity)? number)\b/i,
+    answer: (_u) => "",
+    shapes: ["text", "unknown"],
+  },
+  {
     id: "expected_salary",
     re: /\b(expected|desired|target)\s+(salary|compensation|ctc|pay|remuneration)\b|\bsalary\s+expectation/i,
-    answer: (u) => (u.salaryMin ? `${u.salaryCurrency || "INR"} ${u.salaryMin}` : "Open to discussion"),
+    // The profile states a RANGE and this answered with its floor, so a candidate
+    // whose range was 40,000–200,000 USD asked a Senior Backend role for 40,000 —
+    // negotiating against themselves before a recruiter had read the CV.
+    answer: (u) => {
+      const cur = u.salaryCurrency || "INR"
+      const fmt = (n: any) => Number(n).toLocaleString("en-US")
+      if (u.salaryMin && u.salaryMax && Number(u.salaryMax) > Number(u.salaryMin)) {
+        return `${cur} ${fmt(u.salaryMin)} - ${fmt(u.salaryMax)}`
+      }
+      const one = u.salaryMax || u.salaryMin
+      return one ? `${cur} ${fmt(one)}` : "Open to discussion"
+    },
     shapes: ["text", "select", "unknown"],
   },
   {
@@ -590,8 +834,14 @@ function demographicRoute(field: PolicyField, userData: any): AnswerRoute {
     }
   }
 
+  // The optional leading "I " is load-bearing and was only on the first branch.
+  // Real option lists overwhelmingly write it that way — "I prefer not to answer",
+  // "I decline to self-identify for protected veteran status" — so the anchors
+  // below never matched, no decline option was found, and the question fell
+  // through to `sensitive` and was left blank. On a REQUIRED self-ID field that
+  // blocks the submit, which is the outcome declining exists to avoid.
   const decline = options.find((o) =>
-    /^(i )?(do not|don'?t)\s+(want|wish)\s+to\s+(answer|disclose|self)|^decline|^prefer\s+not|^choose\s+not|^not\s+(specified|disclosed)/i.test(o.trim())
+    /^(i\s+)?((do not|don'?t)\s+(want|wish)\s+to\s+(answer|disclose|self)|decline|prefer\s+not|choose\s+not|wish\s+not|not\s+(specified|disclosed))/i.test(o.trim())
   )
   if (decline) {
     return { route: "choice", value: decline, why: "declining to disclose — the profile has no stated value" }
@@ -627,6 +877,11 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   if (field.key && SURVEY_NAME_RE.test(field.key)) {
     return { route: "sensitive", why: "part of a diversity / EEO survey block — left for the candidate" }
   }
+  // Self-identification, on portals that publish no schema group to tag it with.
+  // Placed above every bank so no guess can reach a protected characteristic.
+  if (DEMOGRAPHIC_LABEL_RE.test(label)) {
+    return demographicRoute(field, userData)
+  }
   if (isSensitiveQuestion(label)) {
     return { route: "sensitive", why: "sensitive question — needs an explicit human answer" }
   }
@@ -656,12 +911,50 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   for (const rule of IDENTITY) {
     if (!rule.re.test(label)) continue
     if (!rule.shapes.includes(shape)) continue
-    const value = rule.get(userData)
-    if (!value) {
-      return {
-        route: "skip",
-        why: `profile has no ${rule.id} to fill "${label.slice(0, 40)}"`,
+    let value = rule.get(userData)
+
+    // ─── A REQUIRED field is never skipped for want of a profile value ───
+    //
+    // HackerRank asks for "Website / Github Profile" and marks it required. The
+    // profile has no GitHub, so this returned `skip`, the field stayed empty, and
+    // the submit gate blocked the whole application over one optional-in-spirit
+    // link — after every other field on the form had been filled correctly.
+    //
+    // For a link field the substitute has to be a REAL address the candidate
+    // owns; the one thing that must never happen is a model inventing a github.com
+    // URL for a profile that does not exist. So the fallbacks are other URLs
+    // already in the profile, in order of how well they answer "where can we see
+    // your work", and only when none exists does the model get involved.
+    if (!value && field.required && URL_IDENTITY_IDS.has(rule.id)) {
+      // A field that asks for GitHub by name gets a GitHub-shaped answer built
+      // from the candidate's own name, rather than a LinkedIn URL that answers a
+      // different question. Note the address is CONSTRUCTED, not verified: the
+      // handle may belong to somebody else, or to nobody.
+      if (rule.id === "github" && !userData.githubUrl) {
+        const handle = `${userData.firstName || ""}${userData.lastName || ""}`
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "")
+        if (handle) {
+          return { route: "profile", value: `https://github.com/${handle}`, why: "no GitHub on file — built from the candidate's name" }
+        }
       }
+      value =
+        userData.githubUrl || userData.portfolioUrl || userData.websiteUrl || userData.linkedinUrl || ""
+      if (value) {
+        return isChoiceShape(shape)
+          ? { route: "choice", value, why: `profile has no ${rule.id}; substituted another profile link` }
+          : { route: "profile", value, why: `profile has no ${rule.id}; substituted another profile link` }
+      }
+    }
+    if (!value) {
+      // Only a LINK may be written by the model, and only when the profile holds
+      // no link at all to substitute. Everything else here is a personal fact —
+      // a home address, a phone number, a legal name — and the model composing
+      // one of those puts fabricated personal data on a real application. A
+      // blocked field is recoverable; an invented address is not.
+      return field.required && URL_IDENTITY_IDS.has(rule.id)
+        ? { route: "llm", why: `required, and the profile has no ${rule.id} link at all` }
+        : { route: "skip", why: `profile has no ${rule.id} to fill "${label.slice(0, 40)}"` }
     }
     return isChoiceShape(shape)
       ? { route: "choice", value, why: `profile.${rule.id}` }
@@ -702,7 +995,21 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   // A choice control asking about a date is a question about a date, not a date
   // field; it falls through to the banks and then to the model, which pick from
   // the options actually offered.
-  if (shape === "date" || ((shape === "text" || shape === "unknown") && isDateQuestion(label))) {
+  // ─── A date PART is not a date ───
+  //
+  // Greenhouse splits an education row into "Start date month" and "Start date
+  // year" — two dropdowns, each holding one component. Both match
+  // isDateQuestion() on the word "date", so this branch claimed them and typed a
+  // whole pipe-joined candidate list into a year picker:
+  //
+  //   "Start date year" ← "09/14/2026|2026-09-14|14/09/2026"
+  //
+  // It also answered with the availability date rather than the year the
+  // candidate actually started their degree. Component pickers belong to the
+  // education rules in the fact bank below, which read the real years off the
+  // profile.
+  const isDatePart = /\b(month|year)\b\s*$|\b(date\s+)?(month|year)\b/i.test(label)
+  if (!isDatePart && (shape === "date" || ((shape === "text" || shape === "unknown") && isDateQuestion(label)))) {
     return { route: "deterministic", value: dateCandidates(defaultStartDate(userData)), why: "date question" }
   }
 
@@ -735,9 +1042,27 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
     shape === "checkbox" || isBooleanChoice(field.options) || (isChoiceShape(shape) && optionsUnknown)
   if (booleanCapable) {
     for (const rule of BOOLEAN_BANK) {
-      if (rule.re.test(label)) {
-        return { route: "choice", value: rule.answer(userData), why: `boolean bank: ${rule.id}` }
+      if (!rule.re.test(label)) continue
+      if (rule.id === "residency") {
+        // Sanctions screening is phrased as a residency question — "Are you
+        // located in or a national of Cuba, Iran, North Korea, or Syria…" — and
+        // matches this rule first. It has its own entry further down whose answer
+        // ("No") is both correct and the only non-disqualifying one, so hand it
+        // over rather than treating it as an ordinary where-do-you-live question.
+        if (SANCTIONS_RE.test(label)) continue
+        // Needs the label, not just the profile: the answer depends on WHICH
+        // country was asked about. A question naming a country we cannot resolve
+        // falls through to the model rather than being guessed.
+        const resolved = residencyAnswer(label, userData)
+        // Unresolvable country: hand it to the model WITH the real options rather
+        // than letting it fall through to the affirmative default, which would
+        // answer "Yes" and assert residency somewhere the profile never claimed.
+        if (!resolved) {
+          return { route: "choice", value: "", why: "residency question — the model must read the options" }
+        }
+        return { route: "choice", value: resolved, why: `boolean bank: residency (profile says ${userData?.location || "?"})` }
       }
+      return { route: "choice", value: rule.answer(userData), why: `boolean bank: ${rule.id}` }
     }
   }
 
@@ -745,6 +1070,9 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   for (const rule of FACT_BANK) {
     if (!rule.re.test(label)) continue
     if (!rule.shapes.includes(shape)) continue
+    if (rule.id === "national_id") {
+      return { route: "deterministic", value: nationalIdPlaceholder(label), why: "national ID — reserved placeholder, not a real identifier" }
+    }
     const value = rule.answer(userData)
     if (!value) continue
     return isChoiceShape(shape)
