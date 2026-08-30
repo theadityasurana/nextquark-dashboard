@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
 import {
   buildHandlerProgram,
   HANDLERS,
@@ -221,5 +222,47 @@ describe("grouped inputs and pickers", () => {
     // A picker must be opened and its suggestion clicked; typing into it leaves
     // free text the portal never offered.
     expect(selectHandler(d({ role: "combobox", ariaAutocomplete: "list" }))?.name).toBe("typeahead")
+  })
+})
+
+// ─── bestIndex must not match a substring across word boundaries ───
+//
+// A live application was submitted with dial code +246 because "India" matched
+// inside "BRITISH INDIAN OCEAN TERRITORY", which sorts ahead of "India +91" in a
+// country list. The yes/no guard ("No" must not select "Norway") shows the class
+// was known; it had simply never been generalised.
+describe("option matching", () => {
+  // bestIndex lives in the VM prelude, so it is evaluated the way the browser gets it.
+  const bestIndex = (() => {
+    const src = readFileSync("lib/field-handlers/base.ts", "utf8").split("\n")
+    const s = src.findIndex((l) => l.includes("export const VM_PRELUDE"))
+    let e = s + 1
+    while (e < src.length && src[e].trim() !== "`") e++
+    const body = src.slice(s + 1, e).join("\n")
+    return new Function("return (()=>{" + body + "; return bestIndex })()")() as (w: string, o: string[]) => number
+  })()
+
+  const COUNTRIES = [
+    "United States +1", "Afghanistan +93", "British Indian Ocean Territory +246",
+    "Canada +1", "India +91", "Indonesia +62", "Norway +47",
+  ]
+  const pick = (want: string, opts = COUNTRIES) => {
+    const i = bestIndex(want, opts)
+    return i >= 0 ? opts[i] : null
+  }
+
+  it("does not match India to British Indian Ocean Territory", () => {
+    expect(pick("India")).toBe("India +91")
+  })
+
+  it("keeps every genuine match", () => {
+    expect(pick("Indonesia")).toBe("Indonesia +62")
+    expect(pick("United States")).toBe("United States +1")
+    expect(pick("No", ["Yes", "No", "Norway"])).toBe("No")
+    expect(pick("Yes", ["Yes", "No"])).toBe("Yes")
+  })
+
+  it("still matches when the option carries extra words around the answer", () => {
+    expect(pick("India", ["Republic of India", "Indiana"])).toBe("Republic of India")
   })
 })

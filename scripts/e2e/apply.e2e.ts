@@ -132,7 +132,16 @@ describe("auto-apply end-to-end", () => {
       // reach the console mirror) while the Supabase writes it triggers hit no real
       // row and are swallowed. Nothing in the production queue is touched.
       `e2e-${Date.now()}`,
-      undefined // no userId → no profile pool, no answer bank writes
+      // ─── Real userId, so the run gets a persisted browser profile ───
+      //
+      // This used to pass undefined to keep the answer bank clean, which also
+      // disabled profiles — every test run launched a browser with no cookies and
+      // no history. Kernel's bot-detection guide recommends profiles precisely to
+      // "mimic a returning user", so the harness was reproducing the least
+      // realistic session possible and then testing anti-spam behaviour against it.
+      //
+      // Set E2E_NO_PROFILE=1 to get the old cookie-less behaviour back.
+      process.env.E2E_NO_PROFILE === "1" ? undefined : profileId
     )
 
     banner("RESULT")

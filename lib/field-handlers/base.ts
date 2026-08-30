@@ -118,10 +118,31 @@ function bestIndex(want, labels) {
   let i = n.indexOf(w); if (i >= 0) return i;
   // Yes/No matches on the leading token so "No" never selects "Norway".
   if (w === 'yes' || w === 'no') return n.findIndex(x => x.split(' ')[0] === w);
+  // ─── Substrings must land on word boundaries ───
+  //
+  // A bare includes() matched "India" inside "BRITISH INDIAN OCEAN TERRITORY",
+  // which sorts ahead of "India +91" in a country list, so a live application was
+  // submitted with the dial code +246. The yes/no guard above shows this class was
+  // already known ("No" must not select "Norway"); it was simply never generalised.
+  //
+  // Requiring the match to begin and end on a token boundary keeps every genuine
+  // case — "India" still matches "India +91" and "Republic of India" — while
+  // "indian" stops counting as "india".
+  const bounded = (hay, needle) => {
+    const esc = needle.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^| )' + esc + '( |$)').test(hay);
+  };
+  i = n.findIndex(x => x && (bounded(x, w) || bounded(w, x))); if (i >= 0) return i;
+
+  // Prefix matching comes AFTER the boundary check, not before. It exists so a
+  // partially typed query still finds its row ("Ban" -> "Bangalore"), but as the
+  // first rule it also let "India" settle on "Indiana" while "Republic of India"
+  // sat in the same list. A whole-word hit is always the better answer; a prefix
+  // is the fallback for when there is no whole word to match.
   i = n.findIndex(x => x && (x.startsWith(w) || w.startsWith(x))); if (i >= 0) return i;
-  i = n.findIndex(x => x && (x.includes(w) || w.includes(x))); if (i >= 0) return i;
+
   const toks = w.split(' ').filter(Boolean);
-  i = n.findIndex(x => x && toks.every(t => x.includes(t)));
+  i = n.findIndex(x => x && toks.every(t => bounded(x, t)));
   if (i >= 0) return i;
 
   // ── Place names, allowing for renamed cities ──

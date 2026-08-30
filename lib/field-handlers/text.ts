@@ -35,8 +35,37 @@ el.scrollIntoView({ block: 'center' });
 el.focus();
 await sleep(rnd(120, 320));
 
-if (setter) setter.call(el, WANT); else el.value = WANT;
-el.dispatchEvent(new Event('input', { bubbles: true }));
+// ─── Typed, not pasted ───
+//
+// Setting .value assigns the whole string in a single tick with no keydown,
+// keypress or keyup at all. Kernel's bot-detection guide names uniform typing
+// speed as a giveaway; an entire field appearing instantly, with no key events
+// behind it, is a stronger one. A real Lever submission came back "flagged as
+// possible spam", and this is the most visible bot signal we control.
+//
+// Phase 1 already types character by character. This brings the handler that
+// fills everything else into line: per-character events, a jittered delay, and
+// an occasional longer pause of the kind a person makes without meaning to.
+//
+// Long values are still assigned outright — nobody hand-types a 400-character
+// cover letter into a single-line box, and pretending otherwise costs seconds
+// per field for no gain.
+if (WANT.length > 120) {
+  if (setter) setter.call(el, WANT); else el.value = WANT;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+} else {
+  if (setter) setter.call(el, ''); else el.value = '';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  for (let i = 0; i < WANT.length; i++) {
+    const ch = WANT[i];
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
+    if (setter) setter.call(el, el.value + ch); else el.value += ch;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keyup', { key: ch, bubbles: true }));
+    // Roughly 45-110ms between keys, with the odd hesitation.
+    await sleep(Math.random() < 0.07 ? rnd(180, 420) : rnd(45, 110));
+  }
+}
 el.dispatchEvent(new Event('change', { bubbles: true }));
 await sleep(rnd(100, 250));
 el.blur();

@@ -74,6 +74,13 @@ const PORTAL_CONFIGS: Record<string, PortalConfig> = {
   // Claude: cua:true for Workday/iCIMS (non-standard components), cua:false for clean-DOM portals
   // Claude: domSettleTimeout 8000 for Workday (async section loads after Next), 5000 elsewhere
   Greenhouse:      { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  // Lever rejected a real submission as "possible spam" on the default stealth ISP
+  // proxy, whose exit IP is static ACROSS SESSIONS — every application this system
+  // has sent Lever came from one address. Residential would fix that (the docs rank
+  // it least detectable) but attaching any proxy returns
+  //   403 Proxies require a paid plan
+  // on this account, and a run that dies at session creation is worse than one that
+  // gets flagged. Flip this to true once the plan allows it.
   Lever:           { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
   Ashby:           { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
   Workday:         { maxSteps: 40, timeout: 600,  model: "google/gemini-2.5-flash", residential: false, gpu: true,  cua: true,  domSettleTimeout: 8000 },
@@ -174,6 +181,49 @@ export function clearCachedKernelKey() {
   cachedOpenRouterApiKey = null
   cachedGroqApiKey = null
   cachedCaptchaSolverKey = null
+}
+
+/**
+ * A reusable residential proxy for one country, created once and cached.
+ *
+ * browsers.create does NOT accept an inline proxy object. It wants
+ * `proxy_id`/`proxy.name`/`proxy.mode`, and passing the config inline fails with
+ *
+ *   400 provide exactly one of proxy.mode, proxy.id, or proxy.name
+ *
+ * which is what every residential-portal run had been dying on before reaching a
+ * page. Proxies are separate, reusable resources: create one per country and
+ * attach it by id.
+ *
+ * Named deterministically so repeated runs reuse the same configuration rather
+ * than accumulating one per run — Kernel prunes unused configs once an org has
+ * more than a hundred, and churning them would also churn the exit-IP pool we
+ * are trying to keep coherent.
+ */
+const residentialProxyIds = new Map<string, string>()
+
+async function ensureResidentialProxy(
+  kernel: InstanceType<typeof Kernel>,
+  country: string
+): Promise<string | null> {
+  const iso = (country || "US").toUpperCase()
+  const cached = residentialProxyIds.get(iso)
+  if (cached) return cached
+
+  const name = `nq-res-${iso.toLowerCase()}`
+  try {
+    const p: any = await (kernel as any).proxies.create({ type: "residential", name, config: { country: iso } })
+    if (p?.id) { residentialProxyIds.set(iso, p.id); return p.id }
+  } catch (err) {
+    // Already created by an earlier run or another worker — find it by name.
+    try {
+      const raw: any = await (kernel as any).proxies.list()
+      const list: any[] = Array.isArray(raw) ? raw : (raw?.data ?? raw?.proxies ?? raw?.items ?? [])
+      const hit = list.find((x) => x?.name === name)
+      if (hit?.id) { residentialProxyIds.set(iso, hit.id); return hit.id }
+    } catch {}
+  }
+  return null
 }
 
 // ─── Build the ordered list of Stagehand model configs to try ───
@@ -839,7 +889,7 @@ async function selectCountryCodeInPage(
   sessionId: string,
   country: { name: string; dial: string; iso: string },
   applicationId?: string
-): Promise<{ selected: boolean }> {
+): Promise<{ selected: boolean; matchedPattern?: string }> {
   const result = await kernelClient.browsers.playwright.execute(sessionId, {
     code: `
 // Derived from the candidate's own profile. This was hardcoded to India/+91,
@@ -1043,7 +1093,10 @@ return { selected: false, matchedPattern };
       `Country code: ${r.selected ? `${country.dial} ${country.name} selected` : "NOT selected"} [${r.matchedPattern || "none"}]`
     )
   }
-  return { selected: !!r.selected }
+  // The pattern is returned, not just the boolean: the caller has to tell
+  // "no country control exists" apart from "one exists and is still empty",
+  // because only the first justifies writing the dial code into the phone box.
+  return { selected: !!r.selected, matchedPattern: String(r.matchedPattern || "none") }
 }
 
 // ─── Wait for CAPTCHA solve via telemetry stream (replaces DOM polling) ───
@@ -1296,6 +1349,12 @@ const OTP_KEYWORDS = [
   "enter the code", "confirmation code", "one-time code", "one-time password",
   "we sent a code", "sent you a code", "6-digit code", "six-digit code",
   "enter the 6 digit", "security code we sent",
+  // Greenhouse gates submit behind an emailed code and words it "Security code
+  // for your application to <Company>". The phrase above requires "we sent"
+  // immediately after "security code", so the real thing never matched and the
+  // OTP challenge read as an ordinary page.
+  "security code", "verification required", "verify it's you", "verify its you",
+  "check your email", "code we emailed", "code sent to your email",
 ]
 const CAPTCHA_KEYWORDS = ["captcha_verification_required", "captcha", "recaptcha", "hcaptcha", "cloudflare", "i am not a robot", "verify you are human"]
 
@@ -3331,6 +3390,24 @@ ${VM_DOM_HELPERS}
     return false;
   };
 
+  // ─── An empty page is not a completed form ───
+  //
+  // With no candidates the filter below yields an empty list, which the caller
+  // reads as "0 unfilled → all required fields filled". That is how a page with
+  // NO FORM AT ALL reports success: a SmartRecruiters run logged
+  // "Form inventory: 0 total controls" and, seconds later, "all required fields
+  // filled" — the same false pass that let applications submit against a JSON
+  // endpoint for 1,566 postings.
+  //
+  // Nothing to fill means we are not on the form, which is a failure to report
+  // rather than a form to celebrate.
+  if (!candidates.length) {
+    return {
+      unfilledFields: ['no form on this page — nothing to fill'],
+      fields: [{ label: 'no form on this page — nothing to fill', key: 'audit:no-form' }],
+    };
+  }
+
   const unfilled = candidates.filter(el => {
     if (el.type === 'file') return false;               // résumé tracked separately
     if (el.type === 'hidden') return false;
@@ -4166,12 +4243,104 @@ return errors;
   return (res.result as any) || []
 }
 
+/**
+ * Type an emailed verification code into the form and report what it found.
+ *
+ * Written deterministically after act() failed ten times on
+ * "Enter NePiD0p0 into the security code field", then clicked Apply instead of
+ * Submit. The same lesson as the react-select work: when the control can be
+ * identified by its own attributes, an LLM instruction is a slower and less
+ * reliable way to reach it.
+ *
+ * Greenhouse adds this input to the existing form rather than a modal, and its
+ * accessible name comes from the wording in the email itself — "security code".
+ * Candidates are ranked so a genuine code box beats any leftover text input.
+ *
+ * Returns the inputs it considered when it fails, because a miss here is a DOM
+ * we have not seen and guessing at it twice has already cost a run.
+ */
+async function enterVerificationCode(
+  kernelClient: InstanceType<typeof Kernel>,
+  sessionId: string,
+  code: string,
+  applicationId?: string
+): Promise<{ entered: boolean; reason: string; candidates?: string[] }> {
+  const res = await kernelClient.browsers.playwright.execute(sessionId, {
+    code: `
+const CODE = ${JSON.stringify(code)};
+return await page.evaluate(async (code) => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const vis = (el) => {
+    const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
+  const describe = (el) => [el.id, el.name, el.placeholder, el.getAttribute('aria-label')]
+    .filter(Boolean).join(' | ').slice(0, 80) || '(unnamed)';
+
+  const inputs = Array.from(document.querySelectorAll('input[type="text"],input[type="tel"],input[type="number"],input:not([type])'))
+    .filter(vis).filter((el) => !el.value);
+
+  // Rank by how much the control says it is a verification code.
+  const score = (el) => {
+    const hay = [el.id, el.name, el.placeholder, el.getAttribute('aria-label'), el.getAttribute('autocomplete')]
+      .filter(Boolean).join(' ').toLowerCase();
+    let s = 0;
+    if (/security[_\s-]?code/.test(hay)) s += 10;
+    if (/verification|verify/.test(hay)) s += 8;
+    if (/\botp\b|one[_\s-]?time/.test(hay)) s += 8;
+    if (/\bcode\b/.test(hay)) s += 5;
+    if (el.getAttribute('autocomplete') === 'one-time-code') s += 12;
+    if (el.maxLength > 0 && el.maxLength <= 10) s += 3;
+    return s;
+  };
+  const ranked = inputs.map((el) => ({ el, s: score(el) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
+  if (!ranked.length) {
+    return { entered: false, reason: 'no-code-input-found', candidates: inputs.slice(0, 12).map(describe) };
+  }
+
+  const el = ranked[0].el;
+  el.scrollIntoView({ block: 'center' });
+  el.focus();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  if (setter) setter.call(el, ''); else el.value = '';
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  for (const ch of code) {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
+    if (setter) setter.call(el, el.value + ch); else el.value += ch;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keyup', { key: ch, bubbles: true }));
+    await sleep(40 + Math.random() * 70);
+  }
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  await sleep(300);
+
+  const got = (el.value || '').trim();
+  return got === code
+    ? { entered: true, reason: 'typed', field: describe(el) }
+    : { entered: false, reason: 'value-did-not-stick', field: describe(el), got };
+}, CODE);
+`,
+    timeout_sec: 30,
+  }).catch(() => null)
+
+  const r = (res?.result as any) || { entered: false, reason: "execute-failed" }
+  if (applicationId) {
+    await persistLog(
+      applicationId,
+      r.entered ? "info" : "warn",
+      `Verification code entry: ${r.entered ? "typed into" : "FAILED —"} ${r.field || r.reason}` +
+        (r.candidates?.length ? ` | inputs on page: ${r.candidates.join(" / ").slice(0, 300)}` : "")
+    )
+  }
+  return r
+}
+
 // ─── clickSubmitButton: the ONLY thing that clicks Submit — agent never does ───
 async function clickSubmitButton(
   kernelClient: InstanceType<typeof Kernel>,
   sessionId: string,
   applicationId?: string
-): Promise<{ clicked: boolean; url: string; bodyText: string }> {
+): Promise<{ clicked: boolean; url: string; bodyText: string; submitStatus?: number }> {
   // ── Dry run: report the button, do not press it ──
   // Everything upstream has already happened for real — the form is filled and
   // the audit has passed. This stops at the single step that cannot be undone.
@@ -4244,6 +4413,25 @@ const submitSels = [
   'input[type="submit"]',
   'button:has-text("Apply")',
 ];
+// ─── Watch the submit response, not just the page ───
+//
+// Greenhouse answers a submit it will not accept with HTTP 428 Precondition
+// Required and emails a security code, WITHOUT changing the page: the form stays
+// up, the URL stays put, and no visible text says anything about a code. A real
+// run clicked Submit, took a 428, and reported "no confirmation signal" — while
+// the email "Security code for your application to Speechify" sat unread in the
+// mailbox, because nothing ever told the OTP path it was needed.
+//
+// The status code is the only reliable signal here, so it is captured alongside
+// the click.
+let submitStatus = 0;
+page.on('response', (r) => {
+  try {
+    const req = r.request();
+    if (req.method() === 'POST' && r.status() >= 400) submitStatus = r.status();
+  } catch {}
+});
+
 let clicked = false;
 for (const sel of submitSels) {
   try {
@@ -4269,11 +4457,11 @@ for (const sel of submitSels) {
 }
 await page.waitForTimeout(4000);
 const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 500));
-return { clicked, url: page.url(), bodyText };
+return { clicked, url: page.url(), bodyText, submitStatus };
 `,
     timeout_sec: 30,
   })
-  const result = (res.result as any) || { clicked: false, url: '', bodyText: '' }
+  const result = (res.result as any) || { clicked: false, url: '', bodyText: '', submitStatus: 0 }
   if (applicationId) {
     await persistLog(applicationId, result.clicked ? 'info' : 'warn',
       `clickSubmitButton: clicked=${result.clicked} | url=${(result.url || '').substring(0, 80)}`
@@ -5056,7 +5244,26 @@ export async function fillJobApplicationWithKernel(
       sessionParams.profile = { name: profileName, save_changes: safeToWrite }
     }
     if (portalConfig.residential) {
-      sessionParams.proxy = { type: "residential", config: { country: "US" } }
+      // ─── Exit from where the candidate says they are ───
+      //
+      // This was hardcoded to the US, so an applicant whose form reads
+      // "Bangalore, India" arrived on a US residential IP. The docs list
+      // inconsistent metadata among the primary detection signals, and a
+      // location that contradicts the application is about as inconsistent as
+      // it gets. The candidate's own country is both more honest and less
+      // detectable.
+      const proxyCountry = (resolvePhoneCountry(userData).iso || "us").toUpperCase()
+      const proxyId = await ensureResidentialProxy(kernelClient, proxyCountry)
+      if (proxyId) {
+        sessionParams.proxy_id = proxyId
+        if (applicationId) {
+          await persistLog(applicationId, "info", `Residential proxy exiting from ${proxyCountry} — matched to the candidate's stated location`)
+        }
+      } else if (applicationId) {
+        // Falling back to stealth's default ISP proxy is worse for detection but
+        // strictly better than failing the run before it opens a page.
+        await persistLog(applicationId, "warn", `Could not provision a residential proxy for ${proxyCountry} — continuing on the default stealth proxy`)
+      }
     }
     if (portalConfig.gpu) {
       sessionParams.gpu = true
@@ -5083,7 +5290,26 @@ export async function fillJobApplicationWithKernel(
       // settle wait below to wait for.
       alreadyNavigated = true
     } else {
-      const kernelBrowser = await kernelClient.browsers.create(sessionParams)
+      // ─── A proxy the plan does not allow must not end the run ───
+      //
+      // proxies.create succeeds on any plan; ATTACHING one returns
+      //   403 Proxies require a paid plan
+      // so a portal configured for residential died at session creation, ten
+      // seconds in, before a page ever loaded. Anti-detection is a preference and
+      // the application is the point, so the run continues on stealth's default
+      // proxy and says so.
+      let kernelBrowser
+      try {
+        kernelBrowser = await kernelClient.browsers.create(sessionParams)
+      } catch (err) {
+        const forbidden = (err as any)?.status === 403 || /require[sd]? a paid plan/i.test(String((err as any)?.message || ""))
+        if (!forbidden || !sessionParams.proxy_id) throw err
+        delete sessionParams.proxy_id
+        if (applicationId) {
+          await persistLog(applicationId, "warn", "Proxies are not available on this Kernel plan — falling back to the default stealth proxy")
+        }
+        kernelBrowser = await kernelClient.browsers.create(sessionParams)
+      }
       sessionId = kernelBrowser.session_id
       cdpWsUrl = kernelBrowser.cdp_ws_url
       liveUrl = kernelBrowser.browser_live_view_url || null
@@ -5378,7 +5604,18 @@ export async function fillJobApplicationWithKernel(
     if (userData.phone) {
       const phoneCountry = resolvePhoneCountry(userData)
       const ccResult = await selectCountryCodeInPage(kernelClient, sessionId, phoneCountry, applicationId)
-      if (ccResult.selected) {
+      // ─── "Not selected yet" is not "no selector exists" ───
+      //
+      // The A0 branch DEFERS an empty react-select country picker to the fill
+      // plan, which then answers it properly ("India +91"). The restore below
+      // read that deferral as "this form has no country control" and prepended
+      // the dial code to the phone box — so the application went out with the
+      // country chosen in the dropdown AND repeated in the number:
+      //   Country: India +91     Phone: +91 7776004343
+      // A picker that exists but is empty needs nothing put back; it needs the
+      // fill plan, which is already coming.
+      const hasCountryPicker = /deferred|already-correct|selected/i.test(ccResult.matchedPattern || "")
+      if (ccResult.selected || hasCountryPicker) {
         preFillResults.phone = true
       } else {
         // ── No separate country control on this form ──
@@ -6559,6 +6796,58 @@ return await page.evaluate((want) => {
         // in JS and don't set [required] on DOM elements, so auditForm can miss them.
         // If submit was clicked but confirmation fails, extract the specific fields that failed
         // and run one more targeted fill round before giving up.
+        // ─── 428 Precondition Required means "verify your email first" ───
+        //
+        // Greenhouse refuses the submit with a 428, emails a security code, and
+        // leaves the page exactly as it was — same URL, same form, no message.
+        // Every text-based check therefore reports nothing wrong, so a live run
+        // clicked Submit, took the 428, and gave up with "no confirmation signal"
+        // while the code sat unread in the mailbox.
+        //
+        // Forcing the OTP path on this status is what connects the two halves that
+        // already worked: the mailbox has the mail, and extractOtp parses
+        // Greenhouse's 8-character alphanumeric code correctly.
+        if (submitClicked && clickRes.submitStatus === 428) {
+          if (applicationId) {
+            await persistLog(applicationId, "info",
+              "Submit returned 428 Precondition Required — the portal wants an emailed verification code. Fetching it.")
+          }
+          if (onStep) onStep({ status: "in_progress", log: "Verification code required — checking email...", liveUrl })
+
+          const otpAddress = (userData as any).proxyEmail || (userData as any).proxy_email || userData.email || ""
+          let code = await fetchOtpViaApi(applicationId || "", otpAddress, 60000)
+          if (!code) {
+            if (applicationId) await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
+            code = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId || "", otpAddress, applicationId)
+          }
+
+          if (code) {
+            if (applicationId) await persistLog(applicationId, "info", `Verification code obtained: ${code} — entering it and resubmitting.`)
+            const typed = await enterVerificationCode(kernelClient, sessionId, code, applicationId)
+            if (!typed.entered) {
+              // Only now is the model worth the round trip: the deterministic
+              // path has already reported which inputs it could see.
+              await actWithFallback(
+                stagehand, modelChain,
+                `Enter "${code}" into the security code / verification code input field.`,
+                applicationId
+              )
+            }
+            await new Promise(r => setTimeout(r, 2000))
+            const retry = await clickSubmitButton(kernelClient, sessionId, applicationId)
+            submitClicked = retry.clicked || submitClicked
+            if (applicationId) {
+              await persistLog(applicationId, "info", `Resubmitted after entering the code (status ${retry.submitStatus ?? "n/a"})`)
+            }
+          } else {
+            captchaUnresolved = true
+            if (applicationId) {
+              await persistLog(applicationId, "error",
+                `Portal asked for an emailed code and none arrived for ${otpAddress}. The application is filled but unsubmitted.`)
+            }
+          }
+        }
+
         if (submitClicked) {
           await new Promise(r => setTimeout(r, 2000))
           // An anti-bot rejection is terminal for this run. Retrying the fill
