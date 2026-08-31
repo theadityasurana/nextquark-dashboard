@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_2ZFLsY9X_JtbZwnxNj9Rm8WyxNL6nJK74"
+const RESEND_API_KEY = process.env.RESEND_API_KEY
 
 function extractOtp(bodyText: string | null, bodyHtml: string | null): string | null {
   const plainFromHtml = bodyHtml ? htmlToPlainText(bodyHtml) : ""

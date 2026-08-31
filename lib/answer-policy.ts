@@ -77,6 +77,22 @@ function nationalIdPlaceholder(label: string): string {
   return "000000000"
 }
 
+/**
+ * The "I do not have this" option a form offers for its own optional facts.
+ *
+ * Distinct from the EEO decline list: that one refuses to disclose something the
+ * candidate HAS, this one states plainly that there is nothing to disclose.
+ *
+ * SpaceX asks for SAT, ACT, GRE and three separate GPAs, and offers "Did not
+ * take/Do not recall" and "Not applicable/Do not recall" for each. An Indian
+ * candidate has none of those tests and grades on a 10-point scale, so the
+ * form's own escape hatch IS the correct answer — yet all seven went to the
+ * model, which matched nothing, and three required fields kept the submit gate
+ * shut on an otherwise complete application.
+ */
+const NOT_APPLICABLE_RE =
+  /^(n\/?a\b|not applicable|do not recall|don'?t recall|did not (take|attend|apply)|didn'?t (take|attend)|none( of the above)?$|no( formal)? (degree|qualification)|other\s*[/-]\s*not applicable|not applicable\s*[/-]\s*do not recall)/i
+
 /** Identity rules whose answer is a URL, and so can stand in for one another. */
 const URL_IDENTITY_IDS = new Set(["linkedin", "github", "portfolio", "website"])
 
@@ -103,6 +119,17 @@ const SURVEY_NAME_RE = /(^|[.:[])(surveysResponses|eeo|demographic|selfIdentific
  */
 const DEMOGRAPHIC_LABEL_RE =
   /\b(gender\s+identity|gender|sex)\b|\b(transgender|non-?binary)\b|\bsexual\s+orientation\b|\b(racial|ethnic\w*|race|hispanic|latino|latine)\b|\bpronouns?\b|\bveteran\b|\bdisability\b|\bdisabilit\w*\b|\bself[-\s]?identif\w*\b|\bwhat\s+is\s+your\s+(current\s+)?age\b|\bage\s+range\b|\bcommunities\s+do\s+you\s+belong\b/i
+
+/**
+ * Criminal-history and background-check attestations.
+ *
+ * Kept deliberately narrow. It has to catch the real wordings — "convicted of a
+ * felony", "pleaded no contest", "pending criminal charges", "background check"
+ * — without swallowing the ordinary screener questions around them, which under
+ * the answer-everything policy must still be answered.
+ */
+const CRIMINAL_HISTORY_RE =
+  /\b(convicted|conviction|felony|felonies|misdemeanou?r|criminal\s+(record|history|charge|offen[cs]e)|plead(ed)?\s+(guilty|no\s+contest)|nolo\s+contendere|background\s+(check|investigation)|arrest(ed|\s+record)?|incarcerat\w*|on\s+probation|sex\s+offender)\b/i
 
 /** How an answer for this field should be produced. */
 export type AnswerRoute =
@@ -726,6 +753,21 @@ const FACT_BANK: Array<{
     shapes: ["text", "unknown"],
   },
   {
+    // Citizenship, derived from the candidate's own stated work authorisation.
+    // The handler matches this against whatever the list actually offers, and
+    // falls back to the form's not-applicable option when nothing lines up.
+    id: "citizenship",
+    re: /\b(citizenship status|citizenship|are you a citizen|national origin)\b/i,
+    answer: (u) => {
+      const w = String(u.workAuthorization || u.work_authorization_status || "").toLowerCase()
+      if (/citizen/.test(w)) return "Citizen"
+      if (/permanent resident|green\s?card/.test(w)) return "Permanent Resident"
+      if (/visa|sponsor|h-?1b|opt/.test(w)) return "Require sponsorship"
+      return "Not a citizen or permanent resident"
+    },
+    shapes: ["select", "radio", "typeahead", "text", "unknown"],
+  },
+  {
     id: "expected_salary",
     re: /\b(expected|desired|target)\s+(salary|compensation|ctc|pay|remuneration)\b|\bsalary\s+expectation/i,
     // The profile states a RANGE and this answered with its floor, so a candidate
@@ -812,7 +854,10 @@ function demographicRoute(field: PolicyField, userData: any): AnswerRoute {
   const l = field.label.toLowerCase()
   const stated =
     /\b(sex|gender)\b/.test(l) ? userData.gender :
-    /\b(race|ethnic)\w*\b/.test(l) ? userData.ethnicity :
+    // "racial" contains no "race" — r-a-c-i-a-l — so the original alternation
+    // silently missed every form that asks about "racial background" and fell
+    // through to a decline while the profile held the answer.
+    /\b(rac(e|ial)|ethnic)\w*\b/.test(l) ? userData.ethnicity :
     /\bveteran\b|\bmilitary\b/.test(l) ? userData.veteranStatus :
     /\bdisab\w*\b/.test(l) ? userData.disabilityStatus :
     /\bpronoun/.test(l) ? userData.pronouns :
@@ -840,6 +885,21 @@ function demographicRoute(field: PolicyField, userData: any): AnswerRoute {
   // below never matched, no decline option was found, and the question fell
   // through to `sensitive` and was left blank. On a REQUIRED self-ID field that
   // blocks the submit, which is the outcome declining exists to avoid.
+  // ─── A self-ID question with no readable options still has an answer ───
+  //
+  // demographicRoute can only offer what it can see, and a portal that renders
+  // its EEO block without a scannable option list left `options` empty — so no
+  // decline could be found and the question fell to `sensitive`, meaning blank.
+  // On OpenAI's form the Race question did exactly that while gender, veteran
+  // and disability beside it were all answered.
+  //
+  // Proposing the standard decline wording gives the handler something to match
+  // against the options that actually render, the same way the boolean bank now
+  // works when a portal exposes no schema.
+  if (!options.length) {
+    return { route: "choice", value: "Decline to self-identify", why: "self-ID question with no readable options — proposing a decline" }
+  }
+
   const decline = options.find((o) =>
     /^(i\s+)?((do not|don'?t)\s+(want|wish)\s+to\s+(answer|disclose|self)|decline|prefer\s+not|choose\s+not|wish\s+not|not\s+(specified|disclosed))/i.test(o.trim())
   )
@@ -847,7 +907,43 @@ function demographicRoute(field: PolicyField, userData: any): AnswerRoute {
     return { route: "choice", value: decline, why: "declining to disclose — the profile has no stated value" }
   }
 
-  return { route: "sensitive", why: `${field.schemaGroup ?? "demographic"} question — left for the candidate` }
+  // ─── Nothing is left blank ───
+  //
+  // Falling through to `sensitive` meant the field went out empty, and on a
+  // REQUIRED self-ID question that blocks the submit outright — the run does all
+  // the work and then refuses at the gate. The operator's instruction is that
+  // every question gets an answer, so the fallback is the least-committal option
+  // the form itself offers rather than no option at all.
+  const fallback = leastCommittalOption(options)
+  if (fallback) {
+    return { route: "choice", value: fallback, why: "no stated value and no decline option — taking the least-committal choice offered" }
+  }
+  return { route: "choice", value: "Prefer not to say", why: "no stated value and no options to choose from — proposing a neutral answer" }
+}
+
+/**
+ * The most neutral answer a form actually offers.
+ *
+ * Ranked, because "least committal" is not the same as "first in the list".
+ * An explicit decline beats a not-applicable, which beats anything else; only
+ * when a form offers no neutral wording at all does this fall back to the last
+ * option, which on self-ID and survey blocks is overwhelmingly the opt-out.
+ *
+ * This never invents an answer — it can only return wording the form itself
+ * put on the page.
+ */
+function leastCommittalOption(options: string[]): string | null {
+  const real = options.filter((o) => o.trim() && !isPlaceholderOption(o))
+  if (!real.length) return null
+  const ranked = [
+    /^(i\s+)?((do not|don'?t)\s+(want|wish)\s+to\s+(answer|disclose|self)|decline|prefer\s+not|choose\s+not|wish\s+not|not\s+(specified|disclosed))/i,
+    /\b(not\s+applicable|n\s*\/\s*a|none|no\s+answer|unspecified|other)\b/i,
+  ]
+  for (const re of ranked) {
+    const hit = real.find((o) => re.test(o.trim()))
+    if (hit) return hit
+  }
+  return real[real.length - 1]
 }
 
 /**
@@ -875,16 +971,44 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
     return demographicRoute(field, userData)
   }
   if (field.key && SURVEY_NAME_RE.test(field.key)) {
-    return { route: "sensitive", why: "part of a diversity / EEO survey block — left for the candidate" }
+    return demographicRoute(field, userData)
   }
   // Self-identification, on portals that publish no schema group to tag it with.
   // Placed above every bank so no guess can reach a protected characteristic.
   if (DEMOGRAPHIC_LABEL_RE.test(label)) {
     return demographicRoute(field, userData)
   }
-  if (isSensitiveQuestion(label)) {
-    return { route: "sensitive", why: "sensitive question — needs an explicit human answer" }
+  // ─── The one question that is still never auto-answered ───
+  //
+  // Everything else on this form gets an answer, blank or not. Criminal-history
+  // and background-check attestations do not, and the reason is not squeamishness
+  // about the topic: there is no least-committal option here. "No" is not a
+  // neutral placeholder, it is a factual assertion to an employer that is either
+  // true or a lie, and it is the assertion that gets an offer rescinded or
+  // employment terminated when it turns out to be wrong.
+  //
+  // Note what this does NOT do: it does not defer whenever the profile knows the
+  // answer. If the candidate has stated one, the banks below answer from it like
+  // any other fact. This only refuses to GUESS.
+  if (CRIMINAL_HISTORY_RE.test(label)) {
+    return { route: "sensitive", why: "criminal-history attestation — answered by the candidate, never guessed" }
   }
+
+  // ─── Other sensitive questions are answered, not deferred ───
+  //
+  // This used to short-circuit to `sensitive`, which meant blank. Blank is not a
+  // neutral outcome: on a required question it blocks the submit, and the whole
+  // run is wasted at the gate.
+  //
+  // Deliberately NOT replaced with a canned answer. Falling through hands the
+  // question to the normal chain — the answer bank, then the profile-backed
+  // boolean and fact banks, then the model — all of which answer FROM the
+  // candidate's own data. Citizenship, work authorisation and clearance are
+  // answered from the profile that way, which is both more likely correct and
+  // more defensible than picking the blandest option on the page.
+  //
+  // isSensitiveQuestion still gates RETENTION in saveAnswer: using a sensitive
+  // answer on one form and keeping it on file remain separate decisions.
 
   // Consent / certification boxes. Checked before the essay test because their
   // labels are frequently long legal paragraphs.
@@ -1153,6 +1277,19 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
         value: yes,
         why: "required yes/no screener with no bank rule — affirmative default",
       }
+    }
+  }
+
+  // ─── The form's own "not applicable" beats asking a model ───
+  //
+  // When nothing in the profile answers the question and the form itself offers
+  // an explicit way to say so, that option is the honest answer and it needs no
+  // round trip. Only reached after every bank has passed, so a question we DO
+  // have an answer for can never land here.
+  if (isChoiceShape(shape)) {
+    const na = field.options.find((o) => NOT_APPLICABLE_RE.test(o.trim()))
+    if (na) {
+      return { route: "choice", value: na, why: "nothing on file, and the form offers a not-applicable option" }
     }
   }
 

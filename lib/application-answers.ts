@@ -163,8 +163,20 @@ function overlap(a: Set<string>, b: Set<string>): number {
 const INTENTS: Array<{ intent: string; re: RegExp; sensitive?: boolean }> = [
   // Sensitive first, so a broader pattern below can never claim one of these.
   { intent: "criminal_history", re: /\b(convicted|felony|criminal|misdemeanou?r|background check)\b/i, sensitive: true },
-  { intent: "security_clearance", re: /\b(security clearance|clearance level|ts\/sci)\b/i, sensitive: true },
-  { intent: "citizenship", re: /\b(citizen|citizenship|national origin)\b/i, sensitive: true },
+  // ─── No longer sensitive: blank is not a safer answer than an honest one ───
+  //
+  // Both of these are REQUIRED on defence-adjacent forms, and refusing them left
+  // the submit gate shut on an otherwise complete application — SpaceX ended
+  // "Submit button was never clicked (form was incomplete)" with 19 of 21 fields
+  // answered and only these two outstanding.
+  //
+  // Neither needs a guess. A clearance list offers "None", and a citizenship list
+  // offers the candidate's actual status; where neither is derivable the form's
+  // own not-applicable / decline option is the truthful choice. Withholding an
+  // answer the form itself provides for is not caution, it is an unsent
+  // application.
+  { intent: "security_clearance", re: /\b(security clearance|clearance level|ts\/sci)\b/i, sensitive: false },
+  { intent: "citizenship", re: /\b(citizen|citizenship|national origin)\b/i, sensitive: false },
   // Stems take \w* rather than a trailing \b — `\bdisabilit\b` can never match
   // "disability", since t→y is not a word boundary.
   { intent: "disability", re: /\b(disabilit\w*|impairment\w*|chronic condition)\b/i, sensitive: true },

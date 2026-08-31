@@ -62,6 +62,27 @@ if (preChecked.length) {
 // The value may name several options: "LinkedIn, Referral" or "LinkedIn|Event".
 const wanted = ${JSON.stringify(ctx.value)}.split(/[|,;]/).map((s) => s.trim()).filter(Boolean);
 if (!wanted.length) {
+  // ─── A one-option group is an acknowledgement, not a choice ───
+  //
+  // Ashby renders "Applicant Arbitration Agreement Acknowledgement" as a group
+  // of exactly ONE checkbox. There is nothing to choose between: the only way
+  // to answer is to tick it, and leaving it blank blocks the submit. Asking a
+  // model which of one option to pick costs a round trip to be told the obvious
+  // — which is what happened, twice, before the retry finally ticked it.
+  //
+  // Groups with real alternatives still go to the model; only the degenerate
+  // single-option case is decided here.
+  if (members.length === 1) {
+    const only = members[0];
+    only.scrollIntoView({ block: 'center' });
+    await sleep(rnd(150, 380));
+    clickVia(only);
+    await sleep(200);
+    if (!only.checked) { try { only.click(); await sleep(180); } catch {} }
+    if (only.checked) {
+      return { handled: true, filled: true, reason: 'sole-option-acknowledged', picked: options[0], options };
+    }
+  }
   return { handled: true, filled: false, reason: 'no-value-to-select', options, needsModelChoice: true };
 }
 

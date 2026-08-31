@@ -52,9 +52,37 @@ export async function loadSkills(supabase: SupabaseClient, domain: string): Prom
     if (error) throw error
     return (data ?? []).map(rowToSkill)
   } catch (err) {
-    console.warn("[domain-skills] load failed, continuing without learned hints:", err)
+    warnSkillStoreUnavailable(err)
     return []
   }
+}
+
+/**
+ * Say "the table is missing" once, and say what to do about it.
+ *
+ * PGRST205 is PostgREST reporting that `domain_skills` is not in its schema
+ * cache — i.e. scripts/058_add_domain_skills.sql was written but never run
+ * against this database. That is a one-line fix, but the old handler dumped a
+ * full error object on EVERY load, on every run, which read like a transient
+ * failure and buried the actual instruction. Worse, it looks identical to a
+ * real outage, so nobody chased it.
+ *
+ * A genuinely transient error still logs every time — that one you do want to
+ * see repeatedly.
+ */
+let missingTableReported = false
+function warnSkillStoreUnavailable(err: unknown): void {
+  const code = (err as { code?: string } | null)?.code
+  if (code === "PGRST205" || code === "42P01") {
+    if (missingTableReported) return
+    missingTableReported = true
+    console.warn(
+      "[domain-skills] table domain_skills does not exist — site knowledge is disabled for this run. " +
+      "Apply scripts/058_add_domain_skills.sql to enable it."
+    )
+    return
+  }
+  console.warn("[domain-skills] load failed, continuing without learned hints:", err)
 }
 
 /**

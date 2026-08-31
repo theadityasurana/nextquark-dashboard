@@ -48,10 +48,19 @@ describe("questionIntent", () => {
 describe("isSensitiveQuestion", () => {
   it("flags the legally consequential questions", () => {
     expect(isSensitiveQuestion("Have you ever been convicted of a felony?")).toBe(true)
-    expect(isSensitiveQuestion("Do you hold an active security clearance?")).toBe(true)
-    expect(isSensitiveQuestion("Are you a US citizen?")).toBe(true)
     expect(isSensitiveQuestion("Do you have a disability?")).toBe(true)
     expect(isSensitiveQuestion("What is your current salary?")).toBe(true)
+  })
+
+  // Superseded: clearance and citizenship are REQUIRED on defence-adjacent forms,
+  // and refusing them left the gate shut on an otherwise complete application —
+  // SpaceX ended "form was incomplete" with 19 of 21 answered and only these two
+  // outstanding. Neither needs a guess: a clearance list carries "None" and a
+  // citizenship list carries the candidate's actual status, so the answer comes
+  // from the form's own options rather than from withholding one.
+  it("no longer withholds clearance and citizenship", () => {
+    expect(isSensitiveQuestion("Do you hold an active security clearance?")).toBe(false)
+    expect(isSensitiveQuestion("Are you a US citizen?")).toBe(false)
   })
 
   it("does not flag ordinary questions", () => {

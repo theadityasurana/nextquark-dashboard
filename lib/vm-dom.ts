@@ -304,6 +304,30 @@ function nqKeyOf(el) {
 const NQ_CONTROL_SELECTOR =
   'input,select,textarea,fieldset,[role="combobox"],[role="radiogroup"],[role="group"],[role="listbox"]';
 
+/**
+ * Does this container hold a control a PERSON can actually use?
+ *
+ * Ashby and Greenhouse both park a validation sentinel inside a button-group
+ * container:
+ *
+ *   <input required tabindex="-1" aria-hidden="true" class="...requiredInput">
+ *
+ * It has no type attribute, so a bare input:not([type=hidden]) matches it and
+ * a caller concludes the container is an ordinary field. It is not: the sentinel
+ * is the thing that COMPLAINS when the real answer control is unanswered, not
+ * the answer control itself.
+ *
+ * Both nqFindButtonGroups and nqResolveKey('btn:') must ask this question the
+ * same way. They had two copies of the test, only one of which was corrected —
+ * so discovery found the three required OpenAI questions and then the describe
+ * step could not resolve them again, failing every one with element-not-found
+ * while the inventory happily listed them. One definition, two callers.
+ */
+function nqHasRealControl(c) {
+  return Array.from(c.querySelectorAll('input:not([type="hidden"]),select,textarea'))
+    .some((el) => nqIsVisible(el) && el.getAttribute('aria-hidden') !== 'true' && el.tabIndex !== -1);
+}
+
 /** Find the control a key refers to. The inverse of nqKeyOf. */
 function nqResolveKey(key) {
   if (!key) return null;
@@ -340,7 +364,7 @@ function nqResolveKey(key) {
       const containers = Array.from(document.querySelectorAll('[class*="field"],[class*="question"],[class*="form-group"],fieldset'))
         .filter((c) => nqIsVisible(c) && !nqIsDecoy(c) && !nqInPopup(c))
         .filter((c) => !c.querySelector('[class*="fieldEntry"],[class*="field-entry"]'))
-        .filter((c) => !c.querySelector('input:not([type="hidden"]),select,textarea'));
+        .filter((c) => !nqHasRealControl(c));
       return containers.find((c) => {
         const lbl = c.querySelector('label,legend,[class*="label"]');
         return nqNormLabel(nqTextWithoutOptions(lbl)) === want;
@@ -467,8 +491,10 @@ function nqFindButtonGroups() {
     if (!nqIsVisible(c) || nqIsDecoy(c) || nqInPopup(c)) continue;
     // Innermost container only — a section also matches [class*="field"].
     if (c.querySelector('[class*="fieldEntry"],[class*="field-entry"]')) continue;
-    // If it already holds a real control, the normal scan covers it.
-    if (c.querySelector('input:not([type="hidden"]),select,textarea')) continue;
+    // Skip containers that already hold a usable control — see nqHasRealControl
+    // for why "usable" has to exclude Ashby's and Greenhouse's validation
+    // sentinels, and why this test lives in one place.
+    if (nqHasRealControl(c)) continue;
 
     const buttons = Array.from(c.querySelectorAll('button,[role="button"],[role="radio"],[role="checkbox"]'))
       .filter(nqIsVisible)

@@ -12,7 +12,7 @@ import { selectHandler, buildHandlerProgram, type ElementDescriptor, type Handle
 import { buildOptionPrompt, buildOptionRetryPrompt, matchReplyToOption } from "./answer-prompts"
 import { resolvePhoneCountry } from "./phone-country"
 import { coverage, isSensitiveQuestion, recallAnswer, type AnswerCoverage } from "./application-answers"
-import { loadAnswerBank, recordAnswerUsage, recordMissingAnswer } from "./answer-bank-store"
+import { loadAnswerBank, recordAnswerUsage, recordMissingAnswer, saveAnswer } from "./answer-bank-store"
 import { classifyControl, decideNextStep, fingerprintPage, StepTracker } from "./wizard"
 import { CAPTCHA_DETECT_CODE, buildInjectCode, isSolvable, solveCaptcha, type CaptchaDetection } from "./captcha"
 import { buildJudgePrompt, parseJudgeReply, reconcile, type SubmissionEvidence } from "./submission-judge"
@@ -73,7 +73,12 @@ const PORTAL_CONFIGS: Record<string, PortalConfig> = {
   // Claude: Greenhouse/Lever/Ashby bumped to 30 — 15 was too low for 10+ custom questions + scroll-verify pass
   // Claude: cua:true for Workday/iCIMS (non-standard components), cua:false for clean-DOM portals
   // Claude: domSettleTimeout 8000 for Workday (async section loads after Next), 5000 elsewhere
-  Greenhouse:      { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  // 480s, not 300s: Greenhouse gates submit behind an emailed code, so the run
+  // has to survive fill + submit + wait-for-mail + enter + resubmit inside ONE
+  // session. A live run reached submit at 90s and finished at 118s, but a slower
+  // fill (190s observed) plus the OTP wait lands near 275s — close enough to the
+  // old ceiling to lose the application after the code had already been used.
+  Greenhouse:      { maxSteps: 30, timeout: 480,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
   // Lever rejected a real submission as "possible spam" on the default stealth ISP
   // proxy, whose exit IP is static ACROSS SESSIONS — every application this system
   // has sent Lever came from one address. Residential would fix that (the docs rank
@@ -82,7 +87,7 @@ const PORTAL_CONFIGS: Record<string, PortalConfig> = {
   // on this account, and a run that dies at session creation is worse than one that
   // gets flagged. Flip this to true once the plan allows it.
   Lever:           { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
-  Ashby:           { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  Ashby:           { maxSteps: 30, timeout: 480,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
   Workday:         { maxSteps: 40, timeout: 600,  model: "google/gemini-2.5-flash", residential: false, gpu: true,  cua: true,  domSettleTimeout: 8000 },
   iCIMS:           { maxSteps: 35, timeout: 480,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: true,  domSettleTimeout: 5000 },
   SmartRecruiters: { maxSteps: 25, timeout: 420,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
@@ -3180,6 +3185,38 @@ ${VM_DOM_HELPERS}
     });
   }
 
+  // ─── Questions built out of bare <button>s ───
+  //
+  // allControls selects inputs, selects, textareas, fieldsets and ARIA groups —
+  // no buttons. Ashby renders its Yes/No screeners as a pair of plain <button>s
+  // with no id, no name and no role="radio", so three REQUIRED questions on an
+  // OpenAI form — work authorisation, visa sponsorship, and office attendance —
+  // were invisible to this scan. The run reported "0 required still open" and the
+  // browser's own validation then rejected the submit with "Missing entry for
+  // required field" for all three.
+  //
+  // nqFindButtonGroups already existed for exactly this shape, and so did the
+  // buttongroup handler and the btn: key convention. Nothing ever called it.
+  const buttonGroups = nqFindButtonGroups();
+  for (const g of buttonGroups) {
+    if (seen.has(g.key)) continue;
+    // A group whose question already arrived as a real control is the same
+    // question twice; the input-backed one is the better handle.
+    const norm = nqNormLabel(g.label);
+    if (out.some((i) => nqNormLabel(i.label) === norm)) continue;
+    seen.add(g.key);
+    out.push({
+      key: g.key,
+      label: g.label.replace(/[*\u2731\uff0a\u2217\u066d]+/g, '').trim(),
+      kind: 'buttongroup',
+      required: g.required,
+      options: g.options,
+      value: g.answered ? 'answered' : '',
+      checked: g.answered,
+      honeypot: null,
+    });
+  }
+
   for (const el of allControls) {
     if (!isVisible(el)) continue;
     // Portal chrome (résumé-autofill panes, cookie banners, site search) and the
@@ -3408,8 +3445,25 @@ ${VM_DOM_HELPERS}
     };
   }
 
+  // ─── The résumé is attached; stop reporting it as missing ───
+  //
+  // The file input itself is excluded below, but a form also carries a LABELLED
+  // résumé control beside it — Greenhouse's "or paste it instead" textarea, and a
+  // required marker on the upload block. Those are alternates to the file, not
+  // additional requirements, so once the file is on the page they are satisfied.
+  //
+  // Without this, a SpaceX run that logged "Resume attached from buffer" and
+  // "Resume confirmed" was still told by its own audit that Resume/CV was empty,
+  // and the submit gate stayed shut on a fully completed form. It is a permanent
+  // block, not a retryable one: no amount of re-filling can satisfy a field whose
+  // answer is a file that is already there.
+  const resumeAttached = Array.from(document.querySelectorAll('input[type="file"]'))
+    .some((f) => f.files && f.files.length > 0)
+    || /\.(pdf|docx?|rtf|txt)\b/i.test(document.body.innerText || '');
+
   const unfilled = candidates.filter(el => {
     if (el.type === 'file') return false;               // résumé tracked separately
+    if (resumeAttached && /\b(resume|cv|curriculum vitae)\b/i.test(nqLabelOf(el) || '')) return false;
     if (el.type === 'hidden') return false;
     if (nqIsGhost(el)) return false;                    // react-select sentinel
     if (nqIsDecoy(el) || nqInPopup(el)) return false;
@@ -5728,13 +5782,62 @@ return await page.evaluate((want) => {
       // Overlay the schema BEFORE deciding whether vision is needed — a form the
       // ATS has fully described never needs a vision pass.
       if (atsSchema && !atsSchema.jobClosed && atsSchema.fields.length > 0) {
-        const { items, unmatchedRequired } = applySchema(combined as any, atsSchema)
-        combined = items as InventoryItem[]
+        let applied = applySchema(combined as any, atsSchema)
+        combined = applied.items as InventoryItem[]
+
+        // ─── The ATS says there are questions we cannot see ───
+        //
+        // unmatchedRequired is the schema's own list of REQUIRED questions with
+        // no control in our inventory. It was logged and then ignored, so a run
+        // could report "0 required still open" having never laid eyes on five of
+        // them — an OpenAI form declared Work Authorisation, Sponsorship and
+        // office attendance, all required, and the application was submitted
+        // without any of them.
+        //
+        // Ashby renders long forms in sections that only mount as they scroll
+        // into view, so the questions genuinely are not in the DOM at scan time.
+        // Scrolling the page the way a person filling it would, then scanning
+        // again, is what makes them exist.
+        if (applied.unmatchedRequired.length > 0) {
+          if (applicationId) {
+            await persistLog(applicationId!, "warn",
+              `${applied.unmatchedRequired.length} required question(s) the ATS declares are not in the DOM — scrolling to render them: ${applied.unmatchedRequired.map(f => f.label.slice(0, 40)).join(" | ")}`)
+          }
+          await kernelClient.browsers.playwright.execute(sessionId as string, {
+            code: `
+return await page.evaluate(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const step = Math.max(300, Math.round(window.innerHeight * 0.8));
+  for (let y = 0; y < document.body.scrollHeight; y += step) {
+    window.scrollTo({ top: y, behavior: 'instant' });
+    await sleep(220);
+  }
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+  await sleep(600);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  await sleep(300);
+  return document.querySelectorAll('input,select,textarea,fieldset,[role="radiogroup"],[role="combobox"]').length;
+});
+`,
+            timeout_sec: 30,
+          }).catch(() => null)
+
+          const rescanned = await scanFormInventory(kernelClient, sessionId as string, applicationId)
+          if (rescanned.length > combined.length) {
+            if (applicationId) {
+              await persistLog(applicationId, "info",
+                `Re-scan after scrolling found ${rescanned.length} controls, up from ${combined.length}`)
+            }
+            applied = applySchema(rescanned as any, atsSchema)
+            combined = applied.items as InventoryItem[]
+          }
+        }
+
         const enriched = combined.filter((i: any) => i.schemaName).length
         if (applicationId) {
           await persistLog(applicationId, "info",
             `Schema applied (${stepLabel}): ${enriched}/${combined.length} controls matched an ATS question` +
-            (unmatchedRequired.length ? ` | ${unmatchedRequired.length} required question(s) not on this page: ${unmatchedRequired.map(f => f.label.slice(0, 35)).join(" | ")}` : "")
+            (applied.unmatchedRequired.length ? ` | ${applied.unmatchedRequired.length} required question(s) STILL not on this page: ${applied.unmatchedRequired.map(f => f.label.slice(0, 35)).join(" | ")}` : "")
           )
         }
       }
@@ -6121,6 +6224,30 @@ return await page.evaluate((want) => {
               `FILLED "${label.slice(0, 60)}" via ${widget.handler} (${widget.reason})` +
               (widget.picked ? ` → selected "${String(widget.picked).slice(0, 60)}"` : ` ← "${String(value).slice(0, 60)}"`)
             )
+            // ─── Write what we answered back to the bank ───
+            //
+            // saveAnswer and recordAnswerUsage were both written, exported and
+            // imported, and then called by nothing — so application_answers
+            // stayed empty run after run (337 log rows, 0 answer rows) while
+            // loadAnswerBank faithfully read that empty table back. Every run
+            // started cold, and every question the model had already answered
+            // once was paid for again the next time.
+            //
+            // The answer we store is what actually LANDED on the page — picked
+            // where the handler chose from a list, otherwise the value we sent —
+            // because the option text is what has to match next time.
+            if (userId) {
+              const learned = String(widget.picked || value || "").trim()
+              if (learned) {
+                try {
+                  await saveAnswer(supabase, userId, label, learned, "derived", { context: scopeContext })
+                  await recordAnswerUsage(supabase, userId, [label])
+                } catch (err) {
+                  // Never let bookkeeping fail a run that is otherwise going fine.
+                  console.warn("[answer-bank] could not persist answer (non-fatal):", err)
+                }
+              }
+            }
             continue
           }
           if (applicationId) {
@@ -6815,7 +6942,12 @@ return await page.evaluate((want) => {
           if (onStep) onStep({ status: "in_progress", log: "Verification code required — checking email...", liveUrl })
 
           const otpAddress = (userData as any).proxyEmail || (userData as any).proxy_email || userData.email || ""
-          let code = await fetchOtpViaApi(applicationId || "", otpAddress, 60000)
+          // 150s. The mail arrived in 6s on a good run, but this is the one wait
+          // where giving up early is unrecoverable: the portal has ALREADY
+          // accepted the application and issued a code, so abandoning here means
+          // a submission that exists on their side and never completed on ours.
+          // The session timeout above is sized to outlast this.
+          let code = await fetchOtpViaApi(applicationId || "", otpAddress, 150000)
           if (!code) {
             if (applicationId) await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
             code = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId || "", otpAddress, applicationId)

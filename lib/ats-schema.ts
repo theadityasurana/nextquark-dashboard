@@ -474,6 +474,52 @@ export function applySchema<T extends EnrichableItem>(
     }
   })
 
-  const unmatchedRequired = schema.fields.filter((f) => f.required && !matched.has(f.name))
+  // ─── Second pass: a control whose label merely EXTENDS the schema's ───
+  //
+  // Greenhouse's schema calls the field "Location"; the page renders it as
+  // "Location (City)". Exact-label matching missed it, so a control that was
+  // sitting right there in the inventory was reported as "required question the
+  // ATS declares is not in the DOM" — and the run scrolled the page looking for
+  // something already on screen, then refused to submit over it.
+  //
+  // Only unmatched schema fields and un-enriched items take part, and the match
+  // must be a prefix in one direction or the other, so "Location" can claim
+  // "Location (City)" without "Name" claiming "Company Name". A single candidate
+  // is required: if two controls both extend one schema label there is no
+  // principled way to choose, and guessing writes an answer into the wrong box.
+  for (const f of schema.fields) {
+    if (matched.has(f.name)) continue
+    const want = normLabel(f.label)
+    if (!want || want.length < 4) continue
+    const candidates = enriched.filter(
+      (it) => !it.schemaName && normLabel(it.label).startsWith(want)
+    )
+    if (candidates.length !== 1) continue
+    const it = candidates[0] as T & Record<string, unknown>
+    it.schemaName = f.name
+    it.schemaGroup = f.group
+    it.required = f.required
+    if (f.options.length > 0) it.options = f.options
+    it.kind = preferDomKind(it.kind, f.type)
+    matched.add(f.name)
+  }
+
+  // ─── One question, however many schema rows describe it ───
+  //
+  // Greenhouse publishes its résumé question twice — a file entry and a text
+  // entry sharing the label "Resume/CV" — and byLabel deliberately binds only
+  // the first. The second could therefore never be matched by anything, so it
+  // sat in unmatchedRequired on every single run: the log reported "Resume/CV"
+  // missing twice while the résumé had in fact been attached, and the submit
+  // gate counted two phantom blockers.
+  //
+  // A question is answered when SOMETHING carrying its label was matched. Track
+  // that by label, not by field name.
+  const satisfiedLabels = new Set(
+    schema.fields.filter((f) => matched.has(f.name)).map((f) => normLabel(f.label))
+  )
+  const unmatchedRequired = schema.fields.filter(
+    (f) => f.required && !matched.has(f.name) && !satisfiedLabels.has(normLabel(f.label))
+  )
   return { items: enriched, unmatchedRequired }
 }

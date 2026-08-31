@@ -23,7 +23,12 @@ export function isDateQuestion(label: string): boolean {
  * that gate submission on most ATS forms.
  */
 export function isConsentQuestion(label: string): boolean {
-  return /\b(i (?:hereby )?certify|i agree|i acknowledge|i consent|i confirm|i have read|i understand|terms and conditions|privacy (?:policy|notice)|gdpr|data protection)\b/i.test(
+  // Every alternative here is first-person except the last group, because an
+  // agreement is normally worded as the candidate speaking. OpenAI titles one
+  // "Applicant Arbitration Agreement Acknowledgement" — third person, no "I" —
+  // so it matched nothing and a document you must accept to proceed was routed
+  // as an ordinary unanswered question.
+  return /\b(i (?:hereby )?certify|i agree|i acknowledge|i consent|i confirm|i have read|i understand|terms and conditions|privacy (?:policy|notice)|gdpr|data protection|arbitration agreement|acknowledgement|acknowledgment|e-?sign(ature)? (consent|disclosure)|electronic signature)\b/i.test(
     label
   )
 }

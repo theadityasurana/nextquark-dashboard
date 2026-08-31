@@ -1,6 +1,7 @@
 "use client"
 
 import useSWR from "swr"
+import { formatCost } from "@/lib/run-cost"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -18,12 +19,24 @@ interface PaidUser {
 
 interface Stats { total: number; premium: number; free: number }
 
+interface CostStats {
+  totalCost: number
+  billedRuns: number
+  totalSeconds: number
+  costPerApplication: number
+  averageSeconds: number
+  completedCost: number
+  completedRuns: number
+  costPerCompleted: number
+}
+
 const PRICES = { monthly: 49.99 }
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 export function PricingScreen() {
   const { data: stats, isLoading: statsLoading } = useSWR<Stats>("/api/pricing", fetcher, { revalidateOnFocus: false })
   const { data: paidUsers = [], isLoading: paidLoading } = useSWR<PaidUser[]>("/api/pricing/paid", fetcher, { revalidateOnFocus: false })
+  const { data: cost } = useSWR<CostStats>("/api/pricing/cost", fetcher, { revalidateOnFocus: false })
 
   const total = stats?.total ?? 0
   const premium = stats?.premium ?? 0
@@ -53,6 +66,56 @@ export function PricingScreen() {
       <div>
         <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Revenue</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Subscription breakdown, revenue metrics, and user insights</p>
+      </div>
+
+      {/* ── Cost of running the automation ──
+          The cards below report what the product EARNS. This reports what it
+          costs: Kernel bills browser time by the second, so every application
+          that ran has a real price, and the two only mean anything together. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-card border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Total Run Cost</p>
+            <span className="text-2xl font-bold tracking-tight tabular-nums">{formatCost(cost?.totalCost)}</span>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {cost ? `${cost.billedRuns} runs · ${(cost.totalSeconds / 60).toFixed(0)} min of browser time` : "—"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Cost / Application</p>
+            <span className="text-2xl font-bold tracking-tight tabular-nums">{formatCost(cost?.costPerApplication)}</span>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {cost ? `avg ${cost.averageSeconds.toFixed(0)}s per run` : "—"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Cost / Completed</p>
+            <span className="text-2xl font-bold tracking-tight tabular-nums">{formatCost(cost?.costPerCompleted)}</span>
+            {/* The true unit cost: failed runs burn browser time too, so this is
+                always the higher — and more honest — of the two figures. */}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {cost ? `${cost.completedRuns} completed · ${formatCost(cost.completedCost)} of the total` : "—"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2">Wasted on Failures</p>
+            <span className="text-2xl font-bold tracking-tight tabular-nums">
+              {formatCost(cost ? cost.totalCost - cost.completedCost : undefined)}
+            </span>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {cost ? `${cost.billedRuns - cost.completedRuns} runs that produced no application` : "—"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Summary Cards */}

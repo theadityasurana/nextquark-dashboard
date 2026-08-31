@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DateRange } from "react-day-picker"
 import { stepLabel } from "@/lib/run-timeline"
+import { runCost, runSeconds, formatCost, KERNEL_RATES } from "@/lib/run-cost"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { PortalHealthStrip } from "@/components/portal-health-strip"
 import {
@@ -888,6 +889,19 @@ export function QueueScreen() {
                       <Badge variant="outline" className="text-[9px] text-red-500 border-red-500/30 gap-1">
                         <ShieldAlert className="h-2.5 w-2.5" /> CAPTCHA Required
                       </Badge>
+                    )}
+                    {/* Kernel bills browser time by the second, so a finished run
+                        has a real, knowable cost. Shown only when there IS one:
+                        runSeconds returns null for anything still in flight or
+                        never launched, and "$0.00" there would read as free
+                        rather than as unknown. */}
+                    {runCost(app) !== null && (
+                      <span
+                        className="text-[10px] tabular-nums text-muted-foreground px-1"
+                        title={`Kernel browser time: ${runSeconds(app)!.toFixed(1)}s at $${KERNEL_RATES.headful}/sec (excludes LLM tokens)`}
+                      >
+                        {formatCost(runCost(app))}
+                      </span>
                     )}
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setSelectedApp(app) }}>
                       <Eye className="h-3 w-3" />

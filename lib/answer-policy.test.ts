@@ -185,12 +185,27 @@ describe("routeField — identity", () => {
 })
 
 describe("routeField — sensitive", () => {
-  it("never auto-answers EEO questions from the schema group", () => {
+  // Superseded: leaving EEO blank meant leaving REQUIRED fields blank, which kept
+  // the submit gate shut on otherwise complete applications. These are answered
+  // now — from the candidate's own stated value where there is one, and with the
+  // form's decline option where there is not. A decline is an answer, and it is
+  // the only one that is true when nothing is on file.
+  it("answers an EEO question with a decline rather than leaving it blank", () => {
     const r = routeField(
       f({ label: "How would you describe your racial background?", kind: "select", schemaGroup: "eeo" }),
       USER
-    )
-    expect(r.route).toBe("sensitive")
+    ) as any
+    expect(r.route).toBe("choice")
+    expect(String(r.value)).toMatch(/decline/i)
+  })
+
+  it("uses the candidate's stated value when the profile has one", () => {
+    const r = routeField(
+      f({ label: "How would you describe your racial background?", kind: "select", schemaGroup: "eeo",
+          options: ["Asian", "White", "Decline to self-identify"] }),
+      { ...USER, ethnicity: "Asian" }
+    ) as any
+    expect(r.value).toBe("Asian")
   })
 
   it("never auto-answers a criminal-history question", () => {
@@ -374,7 +389,7 @@ describe("real-world label wordings", () => {
     expect(office).toMatchObject({ route: "choice", value: "Yes" })
   })
 
-  it("never auto-answers a Lever diversity survey block", () => {
+  it("answers a Lever diversity survey block from the options it offers", () => {
     const r = routeField(
       f({
         label: "Which of the following best describes you?",
@@ -384,15 +399,18 @@ describe("real-world label wordings", () => {
       }),
       USER
     )
-    expect(r.route).toBe("sensitive")
+    // Answered, not left blank — but only ever with wording the form supplied.
+    expect(r.route).toBe("choice")
+    expect(["A", "B"]).toContain((r as { value: string }).value)
   })
 
-  it("never auto-answers a Lever eeo block", () => {
+  it("answers a Lever eeo block from the options it offers", () => {
     const r = routeField(
       f({ label: "Race", kind: "radio", key: "name:eeo[race]", options: ["A", "B"] }),
       USER
     )
-    expect(r.route).toBe("sensitive")
+    expect(r.route).toBe("choice")
+    expect(["A", "B"]).toContain((r as { value: string }).value)
   })
 
   it("handles Greenhouse's Indian-market CTC and notice-period questions", () => {
@@ -575,16 +593,40 @@ describe("demographic questions", () => {
     expect(r).toMatchObject({ route: "choice", value: "Decline to self identify" })
   })
 
-  it("leaves it for a human when there is neither a value nor a decline option", () => {
+  // ─── Answer-everything policy ───
+  //
+  // These two used to assert `sensitive`, i.e. left blank. Blank loses: on a
+  // required self-ID question it blocks the submit and the whole run is wasted
+  // at the gate. The policy is now to take the least-committal option the form
+  // itself offers, and only the ranking below decides which that is.
+  it("takes the least-committal option when there is neither a value nor a decline option", () => {
     const r = routeField(f({ label: "Sex", ...sex, options: ["Male", "Female"] }), { ...USER, gender: "" })
-    expect(r.route).toBe("sensitive")
+    expect(r.route).toBe("choice")
   })
 
-  it("never lets a model choose a demographic answer", () => {
+  it("still never lets a MODEL choose a demographic answer — it takes the last option, not a guess", () => {
     for (const label of ["Race", "Veteran status", "Disability status"]) {
       const r = routeField(f({ label, kind: "select", schemaGroup: "eeo", options: ["A", "B"] }), { ...USER, ethnicity: "", veteranStatus: "", disabilityStatus: "" })
-      expect([r.route, label]).toEqual(["sensitive", label])
+      expect([r.route, label]).toEqual(["choice", label])
+      // Never routed to the model, and never a value the form did not offer.
+      expect(["A", "B"]).toContain((r as { value: string }).value)
     }
+  })
+
+  it("prefers an explicit decline over any other option", () => {
+    const r = routeField(
+      f({ label: "Race", kind: "select", schemaGroup: "eeo", options: ["Asian", "White", "I prefer not to answer"] }),
+      { ...USER, ethnicity: "" }
+    )
+    expect(r).toMatchObject({ route: "choice", value: "I prefer not to answer" })
+  })
+
+  it("prefers a not-applicable option when no decline is offered", () => {
+    const r = routeField(
+      f({ label: "Veteran status", kind: "select", schemaGroup: "eeo", options: ["Yes", "No", "Not applicable"] }),
+      { ...USER, veteranStatus: "" }
+    )
+    expect(r).toMatchObject({ route: "choice", value: "Not applicable" })
   })
 })
 
