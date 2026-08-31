@@ -27,6 +27,41 @@
  *
  * All names are `nq`-prefixed so they cannot collide with page globals.
  */
+/**
+ * Buttons that DO something rather than answer something.
+ *
+ * "Upload File", "Add another", "Cancel" — plainly actions.
+ */
+export const NQ_ACTION_BUTTON_RE =
+  /^(upload|add|remove|replace|browse|choose file|cancel|back|next|submit)\b/i
+
+/**
+ * Buttons that are a widget's own furniture.
+ *
+ * Greenhouse renders a combobox as "Clear selections" + "Toggle flyout" — two
+ * clickable things and not one answer among them. Counting them as options made
+ * every such field look like a button group, and then handed the model
+ *   set "Veteran Status" to "Toggle flyout"
+ * as though that were a real choice.
+ */
+export const NQ_CHROME_BUTTON_RE =
+  /^(clear|toggle|locate|reset|deselect|select all|close|open|edit|search)\b/i
+
+/**
+ * Does this button's text name an ANSWER?
+ *
+ * Exported and interpolated into the VM helpers below so the browser-side
+ * scanner and these unit tests apply one definition. nqFindButtonGroups runs
+ * inside page.evaluate and cannot be imported by a test, and this predicate has
+ * now silently broken twice — once letting validation sentinels block real
+ * groups, once letting combobox chrome masquerade as options. Keeping the rule
+ * here is what makes it possible to test at all.
+ */
+export function isAnswerButtonLabel(text: string): boolean {
+  const t = (text || "").replace(/\s+/g, " ").trim()
+  return !!t && t.length <= 40 && !NQ_ACTION_BUTTON_RE.test(t) && !NQ_CHROME_BUTTON_RE.test(t)
+}
+
 export const VM_DOM_HELPERS = `
 /**
  * Cities that were officially renamed but are still written both ways.
@@ -498,11 +533,29 @@ function nqFindButtonGroups() {
 
     const buttons = Array.from(c.querySelectorAll('button,[role="button"],[role="radio"],[role="checkbox"]'))
       .filter(nqIsVisible)
+      // ─── A control that OPENS the answers is not one of the answers ───
+      //
+      // Greenhouse renders its comboboxes as a "Clear selections" button plus a
+      // "Toggle flyout" trigger — two clickable things, which sailed past the
+      // >= 2 count below and made every one of them look like a button group.
+      // The real options only exist after the flyout opens.
+      //
+      // The damage was not just a wrong classification: "Toggle flyout" was
+      // scraped into the option list and then handed to the model AS AN ANSWER
+      //   find the field labeled "Veteran Status" and set it to "Toggle flyout"
+      // and each of those wrong guesses cost a 3-15s round trip. 59% of a SpaceX
+      // run was spent in model calls that existed only because of this.
+      //
+      // A popup trigger announces itself in ARIA, so believe it.
+      .filter((b) => !b.hasAttribute('aria-haspopup') && !b.hasAttribute('aria-expanded'))
       .filter((b) => {
         const t = nqClean(b.innerText || b.getAttribute('aria-label'));
         // Option buttons are short. This excludes "Upload File", "Add another",
-        // and anything that is plainly an action rather than an answer.
-        return t && t.length <= 40 && !/^(upload|add|remove|replace|browse|choose file|cancel|back|next|submit)\\b/i.test(t);
+        // and anything that is plainly an action rather than an answer —
+        // including the widget chrome that sits beside a real option list.
+        return t && t.length <= 40 &&
+          !${NQ_ACTION_BUTTON_RE}.test(t) &&
+          !${NQ_CHROME_BUTTON_RE}.test(t);
       });
     if (buttons.length < 2) continue;
 

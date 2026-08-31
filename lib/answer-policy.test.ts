@@ -5,6 +5,7 @@ import {
   isBooleanChoice,
   looksLikeEssay,
   shapeOf,
+  leastCommittalOption,
   type PolicyField,
 } from "./answer-policy"
 
@@ -319,6 +320,25 @@ describe("real Greenhouse form — regressions", () => {
   it("skips the résumé paste box rather than inventing a second CV", () => {
     const r = routeField(f({ label: "Resume/CV", kind: "textarea", required: false }), USER)
     expect(r.route).toBe("skip")
+  })
+
+  // Greenhouse's actual résumé control is a drag-and-drop DIV, so the scan
+  // reports no recognisable kind. That used to fall through to the essay path,
+  // and a model answered it with the candidate's biography:
+  //   act "Resume/CV" ← "I am an AI Engineering Intern at S&P Glo..." FAIL
+  // Typing prose into an upload cannot work, and one run spent ~55s retrying it
+  // across the whole model chain. Note this must NOT collapse into the paste-box
+  // rule above — that one is a textarea and is still skipped.
+  it("routes the drag-and-drop résumé dropzone to the upload path, never to prose", () => {
+    const r = routeField(f({ label: "Resume/CV*", kind: "unknown", required: true }), USER)
+    expect(r.route).toBe("file")
+  })
+
+  it("does not mistake a cover letter for the résumé upload", () => {
+    // A different document with its own upload — swallowing it here would hide
+    // a real blocker.
+    const r = routeField(f({ label: "Cover Letter", kind: "unknown", required: true }), USER)
+    expect(r.route).not.toBe("file")
   })
 
   it("does not write model prose into an empty Twitter URL box", () => {
@@ -984,5 +1004,64 @@ describe("education fields", () => {
     const r = ask("Earliest start date", STRUCTURED, "text") as any
     expect(r.why).toBe("date question")
     expect(r.value).toContain("|")
+  })
+})
+
+// ─── leastCommittalOption ───
+//
+// This is the last thing standing between a required dropdown nobody could
+// answer and a fabricated claim on a real application. Every option list below
+// is copied from a live SpaceX Greenhouse form.
+describe("leastCommittalOption", () => {
+  // The one that mattered. The previous neutral-option regex required a leading
+  // "I " ("i do not wish"), so "Do not wish to disclose" did not match and the
+  // fallback took the FIRST option instead — asserting a Top Secret clearance
+  // to a defence contractor on behalf of a candidate who holds none.
+  const CLEARANCE = [
+    "Top Secret SCI with Polygraph",
+    "Top Secret SCI/SAP",
+    "Top Secret",
+    "DOE Level Q",
+    "Secret",
+    "Expired Clearance",
+    "Never held a clearance",
+    "Do not wish to disclose",
+  ]
+
+  it("never picks a security clearance the candidate does not hold", () => {
+    const picked = leastCommittalOption(CLEARANCE)
+    expect(picked).not.toMatch(/top secret|secret|doe level/i)
+    expect(picked).toBe("Do not wish to disclose")
+  })
+
+  it("prefers 'never held' wording over a not-applicable when no decline exists", () => {
+    const picked = leastCommittalOption(CLEARANCE.filter((o) => o !== "Do not wish to disclose"))
+    expect(picked).toBe("Never held a clearance")
+  })
+
+  it("answers the SpaceX employment-history question truthfully", () => {
+    const picked = leastCommittalOption([
+      "I have never worked for SpaceX, SpaceXAI, xAI, X, or Twitter",
+      "I am a former SpaceX, SpaceXAI, xAI, X, or Twitter employee",
+      "I am a current SpaceX employee",
+    ])
+    expect(picked).toBe("I have never worked for SpaceX, SpaceXAI, xAI, X, or Twitter")
+  })
+
+  it("handles the GPA and test-score lists without claiming a score", () => {
+    expect(leastCommittalOption(["Not applicable/Do not recall", "4.0 out of 4.0", "3.9 out of 4.0"]))
+      .toBe("Not applicable/Do not recall")
+    expect(leastCommittalOption(["Did not take/Do not recall", "1600 out of 1600", "1590 out of 1600"]))
+      .toBe("Did not take/Do not recall")
+  })
+
+  it("falls back to the LAST option, which on these lists is the opt-out", () => {
+    // Never the first, which is the most senior / most committal claim.
+    expect(leastCommittalOption(["Yes", "No"])).toBe("No")
+  })
+
+  it("ignores placeholders and returns null when there is nothing real", () => {
+    expect(leastCommittalOption(["-- Select --", "  "])).toBeNull()
+    expect(leastCommittalOption([])).toBeNull()
   })
 })

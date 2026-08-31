@@ -109,6 +109,37 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
  * catalogue endpoint needs no credentials, so this works even when the key is
  * the thing that is broken.
  */
+/**
+ * Does this catalogue entry emit text and nothing else?
+ *
+ * The test is "text and NOTHING ELSE", not "text among other things", because
+ * Google's Lyria — a MUSIC generator — advertises itself as:
+ *
+ *   "modality": "text+image->text+audio"
+ *   "output_modalities": ["text", "audio"]
+ *
+ * An `includes("text")` check passes that, which is how lyria-3-pro-preview and
+ * lyria-3-clip-preview ended up in a chain used for reading job-application
+ * forms. Every call to them was a guaranteed failure that still cost a full
+ * round trip, on every field, twice.
+ *
+ * A model that can emit audio or images is a generation model. The ones this
+ * codebase can use emit text, full stop.
+ */
+export function emitsOnlyText(model: unknown): boolean {
+  const arch = (model as { architecture?: Record<string, unknown> } | null)?.architecture
+  const outs = arch?.output_modalities
+  if (Array.isArray(outs) && outs.length) return outs.every((o) => o === "text")
+  const modality = String(arch?.modality || "")
+  // "text+image->text+audio" — everything after the arrow must be text.
+  if (modality.includes("->")) {
+    return (modality.split("->").pop() || "").split("+").every((o) => o.trim() === "text")
+  }
+  // An unlabelled entry is far more likely an ordinary chat model than a
+  // generator, and dropping it would silently shrink the chain.
+  return true
+}
+
 export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
@@ -119,7 +150,21 @@ export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
     const isFree = (m: any) =>
       String(m?.id || "").endsWith(":free") ||
       (["0", "0.0"].includes(String(m?.pricing?.prompt)) && ["0", "0.0"].includes(String(m?.pricing?.completion)))
-    const live: string[] = (data?.data ?? []).filter(isFree).map((m: any) => String(m.id))
+
+    // ─── Free is not the same as usable ───
+    //
+    // The catalogue prices music, image and TTS models at zero too, so discovery
+    // happily appended google/lyria-3-pro-preview and lyria-3-clip-preview —
+    // Lyria generates MUSIC — to a chain used for form observation. Each one is
+    // a guaranteed failure that still costs a full round trip, and a live SpaceX
+    // run burned two of them on every single field.
+    //
+    // OpenRouter declares modality per model; a model we can use must be able to
+    // emit text. Where the field is absent, keep the model: an unlabelled entry
+    // is far more likely to be an ordinary chat model than a music generator.
+    const usable = (m: any) => isFree(m) && emitsOnlyText(m)
+
+    const live: string[] = (data?.data ?? []).filter(usable).map((m: any) => String(m.id))
     if (live.length === 0) return FREE_OPENROUTER_MODELS
     const liveSet = new Set(live)
     // Keep our preferred order for models that still exist, then append the rest
@@ -131,7 +176,7 @@ export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
     // models, and growing) turns one unanswerable question into 70+ sequential
     // HTTP round trips and can outlast the browser session itself.
     const extras = (data.data as any[])
-      .filter((m) => isFree(m) && !known.has(String(m.id)))
+      .filter((m) => usable(m) && !known.has(String(m.id)))
       .sort((a, b) => (b.context_length ?? 0) - (a.context_length ?? 0))
       .map((m) => String(m.id))
       .slice(0, MAX_DISCOVERED_FREE_MODELS)

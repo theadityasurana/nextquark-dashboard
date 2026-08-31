@@ -131,6 +131,15 @@ const DEMOGRAPHIC_LABEL_RE =
 const CRIMINAL_HISTORY_RE =
   /\b(convicted|conviction|felony|felonies|misdemeanou?r|criminal\s+(record|history|charge|offen[cs]e)|plead(ed)?\s+(guilty|no\s+contest)|nolo\s+contendere|background\s+(check|investigation)|arrest(ed|\s+record)?|incarcerat\w*|on\s+probation|sex\s+offender)\b/i
 
+/**
+ * Labels that name the résumé question, whatever widget renders it.
+ *
+ * Anchored on whole words so "CV" cannot match inside another word, and
+ * deliberately NOT matching "cover letter" — that is a different document with
+ * its own upload, and swallowing it here would hide a real blocker.
+ */
+const RESUME_LABEL_RE = /\b(resum[eé]|cv|curriculum\s+vitae)\b/i
+
 /** How an answer for this field should be produced. */
 export type AnswerRoute =
   /** Identity taken straight from the candidate profile. Never guessed. */
@@ -932,11 +941,18 @@ function demographicRoute(field: PolicyField, userData: any): AnswerRoute {
  * This never invents an answer — it can only return wording the form itself
  * put on the page.
  */
-function leastCommittalOption(options: string[]): string | null {
+export function leastCommittalOption(options: string[]): string | null {
   const real = options.filter((o) => o.trim() && !isPlaceholderOption(o))
   if (!real.length) return null
   const ranked = [
+    // An explicit decline. The leading "I " is optional — requiring it is what
+    // made a clearance dropdown skip "Do not wish to disclose" and fall through
+    // to the FIRST option, which was "Top Secret SCI with Polygraph".
     /^(i\s+)?((do not|don'?t)\s+(want|wish)\s+to\s+(answer|disclose|self)|decline|prefer\s+not|choose\s+not|wish\s+not|not\s+(specified|disclosed))/i,
+    // The truthful "none of these applies to me" wording that real forms use.
+    // SpaceX offers "Never held a clearance" and "I have never worked for
+    // SpaceX…"; those are answers, and they are the correct ones here.
+    /\b(never\s+(held|worked|attended|taken)|did\s+not\s+take|do\s+not\s+recall|none\s+of\s+(the\s+)?(these|above))\b/i,
     /\b(not\s+applicable|n\s*\/\s*a|none|no\s+answer|unspecified|other)\b/i,
   ]
   for (const re of ranked) {
@@ -964,6 +980,26 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
 
   if (shape === "file") return { route: "file", why: "handled by the résumé upload path" }
   if (!label) return { route: "skip", why: "no label to answer against" }
+
+  // ─── A résumé question is a file question whatever it is made of ───
+  //
+  // Greenhouse renders its résumé control as a drag-and-drop DIV, so the scan
+  // reports kind "unknown", shapeOf gives "unknown", and the file check above
+  // does not fire. The question then fell through to the essay path and a model
+  // was asked to ANSWER it — which it did, with the candidate's bio:
+  //
+  //   act "Resume/CV" ← "I am an AI Engineering Intern at S&P Glo..." FAIL
+  //
+  // Typing a biography into a file upload cannot succeed, and every attempt cost
+  // a full model round trip; one run spent ~55s on this single field. The label
+  // is what identifies the question, not the widget someone built for it.
+  // Gated on shape "unknown" — the drop zone specifically. A résumé TEXTAREA is
+  // Greenhouse's optional paste box, and that is a different decision: it is
+  // skipped further down so we never invent a second CV. Routing every résumé
+  // label to `file` would swallow that case too.
+  if (shape === "unknown" && RESUME_LABEL_RE.test(label)) {
+    return { route: "file", why: "résumé question on an unidentifiable widget — handled by the upload path, never typed into" }
+  }
 
   // EEO and demographic questions are declined as a matter of policy, not
   // capability. The schema tells us plainly when we are in one of those blocks.
