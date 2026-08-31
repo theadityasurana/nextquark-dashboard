@@ -106,12 +106,12 @@ export function PortalHealthStrip() {
             return (
               <div
                 key={p.portal}
-                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 ${cls}`}
+                className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 min-w-0 ${cls}`}
                 title={p.lastError ? `Last error: ${p.lastError}` : undefined}
               >
                 <Icon className="h-3 w-3 shrink-0" />
-                <span className="text-[11px] font-medium">{p.portal}</span>
-                <span className="text-[10px] opacity-80">{p.label}</span>
+                <span className="text-[11px] font-medium truncate">{p.portal}</span>
+                <span className="text-[10px] opacity-80 shrink-0">{p.label}</span>
               </div>
             )
           })}

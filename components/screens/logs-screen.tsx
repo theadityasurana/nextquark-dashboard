@@ -27,10 +27,12 @@ export function LogsScreen() {
   const [levelFilter, setLevelFilter] = useState("all")
   const [agentFilter, setAgentFilter] = useState("all")
   const [refreshing, setRefreshing] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(15)
 
   const handleRefresh = async () => {
     setRefreshing(true)
     await refreshLogs()
+    setVisibleCount(15)
     setRefreshing(false)
   }
 
@@ -44,6 +46,8 @@ export function LogsScreen() {
     return agentId
   }
 
+  const PAGE_SIZE = 15
+
   const filteredLogs = logs.filter((log) => {
     if (levelFilter !== "all" && log.level !== levelFilter) return false
     if (agentFilter !== "all" && log.agentId !== agentFilter) return false
@@ -53,6 +57,27 @@ export function LogsScreen() {
     }
     return true
   })
+
+  const visibleLogs = filteredLogs.slice(0, visibleCount)
+
+  const handleDownload = () => {
+    const rows = [
+      ["Time", "Level", "Agent", "Message"],
+      ...filteredLogs.map((log) => [
+        log.timestamp,
+        log.level,
+        getAgentDisplayName(log.agentId),
+        `"${log.message.replace(/"/g, '""')}"`
+      ])
+    ]
+    const csv = rows.map((r) => r.join(",")).join("\n")
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `system-logs-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,11 +119,11 @@ export function LogsScreen() {
             <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownload}>
               <Download className="h-3 w-3" /> Download
             </Button>
             {(levelFilter !== "all" || agentFilter !== "all" || searchQuery) && (
-              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery("") }}>
+              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery(""); setVisibleCount(15) }}>
                 <X className="h-3 w-3" /> Clear
               </Button>
             )}
@@ -123,7 +148,7 @@ export function LogsScreen() {
             <span>Message</span>
           </div>
           <div className="divide-y divide-border font-mono text-sm">
-            {filteredLogs.map((log) => (
+            {visibleLogs.map((log) => (
               <div
                 key={log.id}
                 className={cn(
@@ -141,9 +166,13 @@ export function LogsScreen() {
             ))}
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-            <span className="text-xs text-muted-foreground">Showing {filteredLogs.length} of {logs.length} entries</span>
+            <span className="text-xs text-muted-foreground">Showing {visibleLogs.length} of {filteredLogs.length} entries</span>
+            {visibleCount < filteredLogs.length && (
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}>
+                Load more
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

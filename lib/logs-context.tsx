@@ -35,7 +35,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
 
   const fetchLogs = useCallback(async () => {
       try {
-        const response = await fetch('/api/logs')
+        const response = await fetch('/api/logs?limit=1000')
         const data = await response.json()
         if (data.logs) {
           const formattedLogs = data.logs.map((log: any) => ({

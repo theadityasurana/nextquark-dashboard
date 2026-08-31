@@ -563,22 +563,22 @@ export function QueueScreen() {
       {/* ── Dispatch controls (toggles + start) ── */}
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dispatch Controls</p>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
 
           {/* Premium Only */}
-          <div className="flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-2.5 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-2.5 py-2">
             <Switch
               checked={premiumOnly}
               onCheckedChange={setPremiumOnly}
               className={premiumOnly ? "data-[state=checked]:bg-yellow-500" : ""}
             />
-            <Crown className="h-3 w-3 text-yellow-500" />
+            <Crown className="h-3 w-3 text-yellow-500 shrink-0" />
             <span className="text-xs font-medium">Premium Only</span>
             <InfoTip text="When ON, Auto Start and Start All only process premium-flagged applications. Non-premium apps stay in the queue untouched." />
           </div>
 
           {/* Auto Start */}
-          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
+          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-2 transition-colors ${
             autoStart ? 'border-green-500/40 bg-green-500/5' : 'border-border bg-accent/30'
           }`}>
             <Switch
@@ -586,13 +586,13 @@ export function QueueScreen() {
               onCheckedChange={setAutoStart}
               className={autoStart ? "data-[state=checked]:bg-green-500" : ""}
             />
-            <Play className="h-3 w-3" />
+            <Play className="h-3 w-3 shrink-0" />
             <span className="text-xs font-medium">Auto Start</span>
             <InfoTip text="When ON, every eligible pending application starts automatically 2 seconds after it arrives. Extras queue up and start as slots free." />
           </div>
 
           {/* Concurrency slider */}
-          <div className="flex items-center gap-2 rounded-md border border-border bg-accent/30 px-2.5 py-1.5">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-accent/30 px-2.5 py-2">
             <span className="text-xs font-medium whitespace-nowrap">Concurrency</span>
             <input
               type="range"
@@ -600,159 +600,154 @@ export function QueueScreen() {
               max={10}
               value={maxConcurrent}
               onChange={(e) => setPrefs({ maxConcurrent: Number(e.target.value) })}
-              className="w-20 accent-primary cursor-pointer"
+              className="flex-1 accent-primary cursor-pointer"
             />
-            <span className="text-xs font-mono w-4 text-center">{maxConcurrent}</span>
+            <span className="text-xs font-mono w-4 text-center shrink-0">{maxConcurrent}</span>
             <InfoTip text="Controls how many SSE streams this browser opens at once. The server-side Kernel gate may queue further — this is the client dispatch limit." />
           </div>
 
-          {/* Fix #10: local queue backlog indicator */}
-          {localQueueDepth > 0 && (
-            <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
-              <span className="text-xs text-blue-500 font-medium">{localQueueDepth} waiting</span>
-              <InfoTip text="Applications queued locally, waiting for a concurrency slot to free up." />
-            </div>
-          )}
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-border hidden sm:block" />
-
-          {/* Start All — only when Auto Start is OFF */}
-          {!autoStart && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setIsStartingAll(true)
-                  for (const app of eligiblePending) enqueueOrStart(app)
-                  setIsStartingAll(false)
-                }}
-                disabled={isStartingAll || eligiblePending.length === 0}
-                className="gap-1.5 h-8"
-              >
-                {isStartingAll
-                  ? <><Loader className="h-3.5 w-3.5 animate-spin" /> Starting...</>
-                  : <><Play className="h-3.5 w-3.5" /> Start All{eligiblePending.length > 0 ? ` (${eligiblePending.length})` : ''}</>
-                }
-              </Button>
-              <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs ${maxConcurrent} at a time — the rest wait in line.`} />
-            </div>
-          )}
-
-          {/* Active mode pill */}
-          {(autoStart || premiumOnly) && (
-            <div className="ml-auto flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium
-              border-green-500/30 bg-green-500/5 text-green-600">
-              {autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Auto · Premium only</>}
-              {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
-              {!autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Premium filter on</>}
-            </div>
-          )}
+          {/* Start All + backlog in one cell */}
+          <div className="flex items-center gap-2">
+            {!autoStart && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setIsStartingAll(true)
+                    for (const app of eligiblePending) enqueueOrStart(app)
+                    setIsStartingAll(false)
+                  }}
+                  disabled={isStartingAll || eligiblePending.length === 0}
+                  className="gap-1.5 h-8 flex-1 min-[480px]:flex-none"
+                >
+                  {isStartingAll
+                    ? <><Loader className="h-3.5 w-3.5 animate-spin" /> Starting...</>
+                    : <><Play className="h-3.5 w-3.5" /> Start All{eligiblePending.length > 0 ? ` (${eligiblePending.length})` : ''}</>
+                  }
+                </Button>
+                <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs ${maxConcurrent} at a time — the rest wait in line.`} />
+              </>
+            )}
+            {localQueueDepth > 0 && (
+              <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
+                <span className="text-xs text-blue-500 font-medium">{localQueueDepth} waiting</span>
+                <InfoTip text="Applications queued locally, waiting for a concurrency slot to free up." />
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Active mode pill — full width below the grid */}
+        {(autoStart || premiumOnly) && (
+          <div className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium self-start
+            border-green-500/30 bg-green-500/5 text-green-600">
+            {autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Auto · Premium only</>}
+            {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
+            {!autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Premium filter on</>}
+          </div>
+        )}
       </div>
 
-      {/* ── Rejection controls (collapsed into one row) ── */}
+      {/* ── Rejection controls ── */}
       {applications.length > 0 && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Reject &amp; Remove</p>
-          <div className="flex flex-wrap items-center gap-2">
 
-            {/* Reject All */}
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="outline"
-                className="gap-1.5 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={handleRejectAll} disabled={isSendingRejectionAll}
-              >
-                {isSendingRejectionAll ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-                {isSendingRejectionAll ? 'Sending...' : `Reject All (${applications.length})`}
-              </Button>
-              <InfoTip text="Sends a rejection email to every applicant in the queue and removes them from the list." />
-            </div>
+          {/* Row 1: Reject All */}
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline"
+              className="gap-1.5 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectAll} disabled={isSendingRejectionAll}
+            >
+              {isSendingRejectionAll ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {isSendingRejectionAll ? 'Sending...' : `Reject All (${applications.length})`}
+            </Button>
+            <InfoTip text="Sends a rejection email to every applicant in the queue and removes them from the list." />
+          </div>
 
-            <div className="h-5 w-px bg-border hidden sm:block" />
+          {/* Row 2: By company */}
+          <div className="flex items-center gap-1.5">
+            <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="By company..." />
+              </SelectTrigger>
+              <SelectContent>
+                {[...new Set(applications.map(a => a.company_name))].sort().map(company => (
+                  <SelectItem key={company} value={company} className="text-xs">
+                    {company} ({applications.filter(a => a.company_name === company).length})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline"
+              className="gap-1 h-8 shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByCompany} disabled={!selectedRejectCompany || isSendingRejectionByCompany}
+            >
+              {isSendingRejectionByCompany ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+              {isSendingRejectionByCompany ? '...' : 'Reject'}
+            </Button>
+            <InfoTip text="Reject all applicants for a specific company." />
+          </div>
 
-            {/* Reject by company */}
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-              <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
-                <SelectTrigger className="h-8 text-xs w-full sm:w-40">
-                  <SelectValue placeholder="By company..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...new Set(applications.map(a => a.company_name))].sort().map(company => (
-                    <SelectItem key={company} value={company} className="text-xs">
-                      {company} ({applications.filter(a => a.company_name === company).length})
+          {/* Row 3: By user */}
+          <div className="flex items-center gap-1.5">
+            <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="By user..." />
+              </SelectTrigger>
+              <SelectContent>
+                {[...new Map(applications.map(a => [a.user_id, a])).values()]
+                  .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
+                  .map(a => (
+                    <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
+                      {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id).length})
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="outline"
-                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={handleRejectByCompany} disabled={!selectedRejectCompany || isSendingRejectionByCompany}
-              >
-                {isSendingRejectionByCompany ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-                {isSendingRejectionByCompany ? '...' : 'Reject'}
-              </Button>
-              <InfoTip text="Reject all applicants for a specific company." />
-            </div>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline"
+              className="gap-1 h-8 shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByUser} disabled={!selectedRejectUser || isSendingRejectionByUser}
+            >
+              {isSendingRejectionByUser ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+              {isSendingRejectionByUser ? '...' : 'Reject'}
+            </Button>
+            <InfoTip text="Reject all applications from a specific user." />
+          </div>
 
-            {/* Reject by user */}
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-              <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
-                <SelectTrigger className="h-8 text-xs w-full sm:w-40">
-                  <SelectValue placeholder="By user..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...new Map(applications.map(a => [a.user_id, a])).values()]
-                    .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
-                    .map(a => (
-                      <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
-                        {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id).length})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="outline"
-                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={handleRejectByUser} disabled={!selectedRejectUser || isSendingRejectionByUser}
-              >
-                {isSendingRejectionByUser ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-                {isSendingRejectionByUser ? '...' : 'Reject'}
-              </Button>
-              <InfoTip text="Reject all applications from a specific user." />
-            </div>
-
-            {/* Reject by date */}
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full sm:w-44 justify-start font-normal">
-                    <CalendarIcon className="h-3 w-3 shrink-0" />
+          {/* Row 4: By date */}
+          <div className="flex items-center gap-1.5">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 flex-1 min-w-0 justify-start font-normal">
+                  <CalendarIcon className="h-3 w-3 shrink-0" />
+                  <span className="truncate">
                     {rejectDateRange?.from
                       ? rejectDateRange.to
                         ? `${rejectDateRange.from.toLocaleDateString()} – ${rejectDateRange.to.toLocaleDateString()}`
                         : rejectDateRange.from.toLocaleDateString()
                       : 'By date range...'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="range" selected={rejectDateRange} onSelect={setRejectDateRange} numberOfMonths={2} />
-                </PopoverContent>
-              </Popover>
-              <Button size="sm" variant="outline"
-                className="gap-1 h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-                onClick={handleRejectByDate} disabled={!rejectDateRange?.from || isSendingRejectionByDate}
-              >
-                {isSendingRejectionByDate ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-                {isSendingRejectionByDate ? '...' : (() => {
-                  if (!rejectDateRange?.from) return 'Reject'
-                  const from = rejectDateRange.from.getTime()
-                  const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
-                  const count = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to }).length
-                  return `Reject (${count})`
-                })()}
-              </Button>
-              <InfoTip text="Reject all applicants whose applications were created within a date range." />
-            </div>
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="range" selected={rejectDateRange} onSelect={setRejectDateRange} numberOfMonths={1} />
+              </PopoverContent>
+            </Popover>
+            <Button size="sm" variant="outline"
+              className="gap-1 h-8 shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={handleRejectByDate} disabled={!rejectDateRange?.from || isSendingRejectionByDate}
+            >
+              {isSendingRejectionByDate ? <Loader className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+              {isSendingRejectionByDate ? '...' : (() => {
+                if (!rejectDateRange?.from) return 'Reject'
+                const from = rejectDateRange.from.getTime()
+                const to = rejectDateRange.to ? rejectDateRange.to.getTime() + 86400000 - 1 : from + 86400000 - 1
+                const count = applications.filter(a => { const t = new Date(a.created_at).getTime(); return t >= from && t <= to }).length
+                return `Reject (${count})`
+              })()}
+            </Button>
+            <InfoTip text="Reject all applicants whose applications were created within a date range." />
           </div>
         </div>
       )}
@@ -761,72 +756,75 @@ export function QueueScreen() {
 
       {/* Search + tabs */}
       <div className="flex flex-col gap-3">
-        <div className="relative sm:max-w-sm">
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name, company or job title..."
-            className="pl-9 bg-card border-border"
+            placeholder="Search name, company or job..."
+            className="pl-9 bg-card border-border w-full"
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
           />
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — always horizontally scrollable, never wraps */}
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }} className="w-full">
-          <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
-            <TabsList className="bg-card border border-border w-max sm:w-auto inline-flex">
-              <TabsTrigger value="all" className="text-xs">All ({applications.length})</TabsTrigger>
-              <TabsTrigger value="premium" className="text-xs">
+          <div className="-mx-3 sm:mx-0 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <TabsList className="bg-card border border-border inline-flex w-max px-1 mx-3 sm:mx-0">
+              <TabsTrigger value="all" className="text-xs px-2.5">All ({applications.length})</TabsTrigger>
+              <TabsTrigger value="premium" className="text-xs px-2.5">
                 <Crown className="h-3 w-3 text-yellow-500 mr-1" />Premium ({premiumApps.length})
               </TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs">Pending ({pending.length})</TabsTrigger>
-              <TabsTrigger value="processing" className="text-xs">Processing ({processing.length})</TabsTrigger>
-              <TabsTrigger value="completed" className="text-xs">Done ({completed.length})</TabsTrigger>
-              <TabsTrigger value="failed" className="text-xs">Failed ({failed.length})</TabsTrigger>
-              <TabsTrigger value="awaiting_otp" className="text-xs">Awaiting OTP ({awaitingOtp.length})</TabsTrigger>
-              <TabsTrigger value="awaiting_captcha" className="text-xs">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
-              <TabsTrigger value="blocked" className="text-xs">Won&apos;t Apply ({blocked.length})</TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs px-2.5">Pending ({pending.length})</TabsTrigger>
+              <TabsTrigger value="processing" className="text-xs px-2.5">Processing ({processing.length})</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs px-2.5">Done ({completed.length})</TabsTrigger>
+              <TabsTrigger value="failed" className="text-xs px-2.5">Failed ({failed.length})</TabsTrigger>
+              <TabsTrigger value="awaiting_otp" className="text-xs px-2.5">OTP ({awaitingOtp.length})</TabsTrigger>
+              <TabsTrigger value="awaiting_captcha" className="text-xs px-2.5">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
+              <TabsTrigger value="blocked" className="text-xs px-2.5">Blocked ({blocked.length})</TabsTrigger>
             </TabsList>
           </div>
         </Tabs>
       </div>
 
       {/* Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
           const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
           return (
             <Card key={app.id} className={`bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold">{fullName}</p>
+              <CardContent className="p-3">
+                {/* Name + status */}
+                <div className="flex items-start justify-between gap-2 mb-2.5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-sm font-semibold truncate">{fullName}</p>
                       {app.is_premium && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Crown className="h-3 w-3 text-yellow-500 shrink-0" />
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">Premium user — prioritised by Auto Start and Start All when Premium Only is ON</TooltipContent>
+                          <TooltipContent side="top" className="text-xs">Premium user</TooltipContent>
                         </Tooltip>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">{app.phone}</p>
+                    <p className="text-xs text-muted-foreground truncate">{app.phone}</p>
                   </div>
-                  <StatusBadge status={app.status} />
+                  <StatusBadge status={app.status} className="shrink-0" />
                 </div>
 
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-[10px] font-bold text-accent-foreground">
+                {/* Company + job */}
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[10px] font-bold text-accent-foreground">
                     {app.company_name[0]}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium">{app.company_name}</p>
-                    <p className="text-[11px] text-muted-foreground">{app.job_title}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{app.company_name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{app.job_title}</p>
                   </div>
                 </div>
 
+                {/* Badges */}
                 {app.knockout_blocked && (
                   <div className="flex items-start gap-1.5 mb-2">
                     <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30 shrink-0">
@@ -835,70 +833,52 @@ export function QueueScreen() {
                     <span className="text-[9px] text-muted-foreground line-clamp-2">{app.knockout_reason || app.last_error}</span>
                   </div>
                 )}
-
                 {!app.knockout_blocked && (app.coverage_blocking_missing?.length ?? 0) > 0 && (
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-orange-500 border-orange-500/30">
-                      <TriangleAlert className="h-2.5 w-2.5 shrink-0" /> Missing: {app.coverage_blocking_missing!.join(", ")}
+                  <div className="mb-2">
+                    <Badge variant="outline" className="text-[9px] gap-1 text-orange-500 border-orange-500/30 max-w-full">
+                      <TriangleAlert className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">Missing: {app.coverage_blocking_missing!.join(", ")}</span>
                     </Badge>
                   </div>
                 )}
-
                 {!app.knockout_blocked && app.coverage_percent != null && app.coverage_percent < 100 && !(app.coverage_blocking_missing?.length) && (
-                  <div className="flex items-center gap-1.5 mb-2">
+                  <div className="mb-2">
                     <Badge variant="outline" className="text-[9px] gap-1 text-muted-foreground">{app.coverage_percent}% fillable</Badge>
                   </div>
                 )}
-
                 {app.confirmation_id && (
-                  <div className="flex items-center gap-1.5 mb-2">
+                  <div className="mb-2">
                     <Badge variant="outline" className="text-[9px] gap-1 text-green-600 border-green-500/30 font-mono max-w-full">
                       <Receipt className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{app.confirmation_id}</span>
                     </Badge>
                   </div>
                 )}
-
                 {app.failed_step && app.status === 'failed' && (
-                  <div className="flex items-center gap-1.5 mb-2">
+                  <div className="mb-2">
                     <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30">
                       <XCircle className="h-2.5 w-2.5 shrink-0" /> Failed at: {stepLabel(app.failed_step)}
                     </Badge>
                   </div>
                 )}
-
                 {app.attempt_count > 0 && (
                   <div className="flex items-center gap-1.5 mb-2">
                     <Badge variant="outline" className={`text-[9px] gap-1 ${app.status === 'failed' ? 'text-destructive border-destructive/30' : 'text-orange-500 border-orange-500/30'}`}>
                       Attempt {app.attempt_count}/{app.max_attempts || 2}
                     </Badge>
                     {app.last_error && app.status === 'pending' && (
-                      <span className="text-[9px] text-orange-500 truncate max-w-[180px]">Retrying...</span>
+                      <span className="text-[9px] text-orange-500 truncate">Retrying...</span>
                     )}
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">{createdDate}</span>
-                  <div className="flex items-center gap-1">
-                    {app.status === 'awaiting_otp' && (
-                      <Badge variant="outline" className="text-[9px] text-orange-500 border-orange-500/30 gap-1">
-                        <KeyRound className="h-2.5 w-2.5" /> OTP Required
-                      </Badge>
-                    )}
-                    {app.status === 'awaiting_captcha' && (
-                      <Badge variant="outline" className="text-[9px] text-red-500 border-red-500/30 gap-1">
-                        <ShieldAlert className="h-2.5 w-2.5" /> CAPTCHA Required
-                      </Badge>
-                    )}
-                    {/* Kernel bills browser time by the second, so a finished run
-                        has a real, knowable cost. Shown only when there IS one:
-                        runSeconds returns null for anything still in flight or
-                        never launched, and "$0.00" there would read as free
-                        rather than as unknown. */}
+                {/* Footer row */}
+                <div className="flex items-center justify-between gap-1 mt-1">
+                  <span className="text-[10px] text-muted-foreground shrink-0">{createdDate}</span>
+                  <div className="flex items-center gap-0.5 shrink-0">
                     {runCost(app) !== null && (
                       <span
                         className="text-[10px] tabular-nums text-muted-foreground px-1"
-                        title={`Kernel browser time: ${runSeconds(app)!.toFixed(1)}s at $${KERNEL_RATES.headful}/sec (excludes LLM tokens)`}
+                        title={`Kernel browser time: ${runSeconds(app)!.toFixed(1)}s at $${KERNEL_RATES.headful}/sec`}
                       >
                         {formatCost(runCost(app))}
                       </span>
@@ -912,23 +892,25 @@ export function QueueScreen() {
                   </div>
                 </div>
 
+                {/* OTP input */}
                 {app.status === 'awaiting_otp' && (
                   <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
-                      <Input placeholder="Enter OTP..." className="h-7 text-xs flex-1" value={otpInputs[app.id] || ''} onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))} />
-                      <Button size="sm" className="h-7 text-xs gap-1" disabled={!otpInputs[app.id] || savingOtp[app.id]} onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}>
+                      <Input placeholder="Enter OTP..." className="h-7 text-xs flex-1 min-w-0" value={otpInputs[app.id] || ''} onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))} />
+                      <Button size="sm" className="h-7 text-xs gap-1 shrink-0" disabled={!otpInputs[app.id] || savingOtp[app.id]} onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}>
                         {savingOtp[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-                        {savingOtp[app.id] ? 'Saving...' : 'Submit OTP'}
+                        {savingOtp[app.id] ? 'Saving...' : 'Submit'}
                       </Button>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Enter the OTP — backend will automatically pick it up and resume</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Backend will pick it up and resume automatically</p>
                   </div>
                 )}
 
+                {/* CAPTCHA */}
                 {app.status === 'awaiting_captcha' && (
                   <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
-                    <p className="text-[10px] text-muted-foreground mb-2">Browser session is live. Open it, solve the CAPTCHA, then mark as solved.</p>
-                    <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-muted-foreground mb-2">Browser session is live. Solve the CAPTCHA then mark as solved.</p>
+                    <div className="flex items-center gap-2 flex-wrap">
                       {app.live_url && (
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => window.open(app.live_url!, '_blank')}>
                           <ExternalLink className="h-3 w-3" /> Open Browser
@@ -1014,7 +996,7 @@ export function QueueScreen() {
            Clicking outside the modal no longer kills the run — it moves here.
            Each card shows live status and can be minimized or dismissed once done. */}
       {activeTray.length > 0 && (
-        <div className="fixed bottom-4 right-2 sm:right-4 z-50 flex flex-col-reverse gap-2 items-end max-w-[calc(100vw-1rem)] sm:max-w-none">
+        <div className="fixed bottom-4 right-2 sm:right-4 z-50 flex flex-col-reverse gap-2 items-end" style={{ maxWidth: 'calc(100vw - 1rem)' }}>
           {activeTray.map(({ app, minimized }) => {
             const isRunning = streamingApps.has(app.id)
             const isDone = app.status === 'completed' || app.status === 'failed'
@@ -1026,7 +1008,8 @@ export function QueueScreen() {
                   app.status === 'failed'    ? 'border-destructive/40' :
                   isRunning                  ? 'border-blue-500/40' :
                   'border-border'
-                } ${minimized ? 'w-56 sm:w-64' : 'w-72 sm:w-80'}`}
+                }`}
+                style={{ width: minimized ? 'min(14rem, calc(100vw - 1rem))' : 'min(18rem, calc(100vw - 1rem))' }}
               >
                 {/* Tray card header — always visible */}
                 <div
