@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail, getTemplate, renderTemplate, getUserEmails } from '@/lib/email-service'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,12 @@ export async function POST(req: NextRequest) {
 
     if (!record?.email) {
       return NextResponse.json({ error: 'No email found' }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+    const { data: settings } = await supabase.from('settings').select('application_submitted_emails_enabled').single()
+    if (settings?.application_submitted_emails_enabled === false) {
+      return NextResponse.json({ success: true, skipped: true })
     }
 
     const template = await getTemplate('application_submitted')

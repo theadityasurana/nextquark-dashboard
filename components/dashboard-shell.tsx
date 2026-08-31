@@ -9,7 +9,7 @@ import { useTheme } from "@/components/theme-provider"
 import {
   LayoutDashboard, Zap, Users, Building2, Briefcase, Bot,
   ScrollText, Settings, ChevronLeft, LogOut, Menu,
-  Mail, DollarSign, Globe, Sun, Moon,
+  Mail, DollarSign, Globe, Sun, Moon, BellRing,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,8 +33,9 @@ const navItems = [
   { label: "Companies",     href: "/companies",   icon: Building2 },
   { label: "Jobs",          href: "/jobs",        icon: Briefcase },
   { label: "AI Agents",     href: "/agents",      icon: Bot },
-  { label: "Email Manager", href: "/emails",      icon: Mail },
-  { label: "Revenue",       href: "/pricing",     icon: DollarSign },
+  { label: "Email Manager",        href: "/emails",        icon: Mail },
+  { label: "Notification Manager", href: "/notifications",  icon: BellRing },
+  { label: "Revenue",              href: "/pricing",        icon: DollarSign },
   { label: "Logs",          href: "/logs",        icon: ScrollText },
 ]
 

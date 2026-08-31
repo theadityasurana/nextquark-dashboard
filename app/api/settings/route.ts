@@ -27,7 +27,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { browserUseApiKey, browserbaseApiKey, browserbaseProjectId, geminiApiKey, kernelApiKey, openAiApiKey, captchaSolverApiKey, automationProvider, ui_preferences } = body
+    const { browserUseApiKey, browserbaseApiKey, browserbaseProjectId, geminiApiKey, kernelApiKey, openAiApiKey, captchaSolverApiKey, automationProvider, ui_preferences, application_submitted_emails_enabled } = body
 
     const updateData: Record<string, any> = { id: 1 }
     if (browserUseApiKey !== undefined) updateData.browserUseApiKey = browserUseApiKey
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     if (captchaSolverApiKey !== undefined) updateData.captchaSolverApiKey = captchaSolverApiKey
     if (automationProvider !== undefined) updateData.automationProvider = automationProvider
     if (ui_preferences !== undefined) updateData.ui_preferences = ui_preferences
+    if (application_submitted_emails_enabled !== undefined) updateData.application_submitted_emails_enabled = application_submitted_emails_enabled
 
     const { data, error } = await supabase
       .from("settings")

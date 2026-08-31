@@ -1065,3 +1065,67 @@ describe("leastCommittalOption", () => {
     expect(leastCommittalOption([])).toBeNull()
   })
 })
+
+// ─── Credential attestations ───
+//
+// The live regression this exists to prevent: an Anduril run answered
+//   "CLEARANCE ELIGIBILITY …" ← "Yes, I hold an active U.S. security clearance"
+// for a candidate in Bangalore with no US work authorisation — a false claim of
+// a security clearance, to a defence contractor. Two compounding causes:
+// isBooleanChoice accepts THREE options, so a list with two distinct "Yes, …"
+// variants read as a yes/no screener; and the affirmative default then took the
+// first, which was the strongest possible claim.
+describe("credential and clearance attestations", () => {
+  const ANDURIL_CLEARANCE = [
+    "Yes, I hold an active U.S. security clearance",
+    "Yes, I am eligible for a U.S. security clearance",
+    "No",
+  ]
+
+  it("never claims a security clearance the profile does not evidence", () => {
+    const r = routeField(
+      f({ label: "CLEARANCE ELIGIBILITY - This position requires eligibility to obtain a U.S. security clearance", kind: "typeahead", required: true, options: ANDURIL_CLEARANCE }),
+      USER
+    ) as any
+    expect(r.value).not.toMatch(/i hold an active/i)
+    expect(r.value).toBe("No")
+  })
+
+  it("answers rather than leaving it blank — the negative IS the answer", () => {
+    const r = routeField(
+      f({ label: "Do you hold an active U.S. security clearance?", kind: "select", required: true, options: ["Yes", "No"] }),
+      USER
+    )
+    expect(r).toMatchObject({ route: "choice", value: "No" })
+  })
+
+  it("does not claim US citizenship for a candidate with no US status", () => {
+    const r = routeField(
+      f({ label: "Citizenship Status", kind: "select", required: true, options: ["A United States citizen", "A lawful permanent resident", "None of the above"] }),
+      USER
+    ) as any
+    expect(r.value).not.toMatch(/united states citizen/i)
+  })
+
+  it("defers to the model when a form offers two different affirmatives", () => {
+    // Not a clearance question, so the credential guard does not claim it — but
+    // "Yes" is still ambiguous between two materially different claims, and
+    // picking by list order is guessing at the most consequential end.
+    const r = routeField(
+      f({ label: "Do you have production experience with Kubernetes?", kind: "select", required: true, options: ["Yes, professionally", "Yes, personal projects only", "No"] }),
+      USER
+    ) as any
+    expect(r.route).toBe("choice")
+    expect(r.value).toBe("")
+  })
+
+  it("still answers an ordinary required screener affirmatively", () => {
+    // The affirmative default must survive: a single Yes against a single No is
+    // a claim of experience, and a blank required screener blocks the submit.
+    const r = routeField(
+      f({ label: "Do you have hands-on experience with SQL?", kind: "select", required: true, options: ["Yes", "No"] }),
+      USER
+    )
+    expect(r).toMatchObject({ route: "choice", value: "Yes" })
+  })
+})

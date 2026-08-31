@@ -206,6 +206,8 @@ export function EmailsScreen() {
   const [broadcastHeadline, setBroadcastHeadline] = useState('')
   const [broadcastContent, setBroadcastContent] = useState('')
   const [broadcastLoading, setBroadcastLoading] = useState(false)
+  const [appSubmittedEmailsEnabled, setAppSubmittedEmailsEnabled] = useState(true)
+  const [appSubmittedEmailsLoading, setAppSubmittedEmailsLoading] = useState(false)
 
   const filteredPresets = BROADCAST_PRESETS.filter((p) => p.type === broadcastType)
 
@@ -220,7 +222,35 @@ export function EmailsScreen() {
   useEffect(() => {
     fetchTemplates()
     fetchLogs()
+    fetchAppSubmittedEmailToggle()
   }, [])
+
+  const fetchAppSubmittedEmailToggle = async () => {
+    const res = await fetch('/api/settings')
+    const data = await res.json()
+    setAppSubmittedEmailsEnabled(data.application_submitted_emails_enabled !== false)
+  }
+
+  const toggleAppSubmittedEmails = async (enabled: boolean) => {
+    setAppSubmittedEmailsLoading(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_submitted_emails_enabled: enabled }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAppSubmittedEmailsEnabled(enabled)
+        toast.success(enabled ? 'Application emails enabled' : 'Application emails disabled')
+      } else {
+        toast.error('Failed to update setting')
+      }
+    } catch {
+      toast.error('Failed to update setting')
+    }
+    setAppSubmittedEmailsLoading(false)
+  }
 
   const fetchTemplates = async () => {
     const res = await fetch('/api/email/templates')
@@ -369,7 +399,7 @@ export function EmailsScreen() {
         <p className="text-sm text-muted-foreground">Manage email templates and monitor sent emails</p>
       </div>
 
-      <Tabs defaultValue="templates" className="space-y-4">
+      <Tabs id="email-manager-tabs" defaultValue="templates" className="space-y-4">
         <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
           <TabsList className="flex h-auto gap-1 w-max">
             <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
@@ -381,6 +411,19 @@ export function EmailsScreen() {
         </div>
 
         <TabsContent value="templates" className="space-y-4">
+          <Card>
+            <CardContent className="flex items-center justify-between py-4">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Application Submitted Emails</p>
+                <p className="text-xs text-muted-foreground">When enabled, an email is sent to the candidate every time an application is submitted. This setting is synced globally.</p>
+              </div>
+              <Switch
+                checked={appSubmittedEmailsEnabled}
+                onCheckedChange={toggleAppSubmittedEmails}
+                disabled={appSubmittedEmailsLoading}
+              />
+            </CardContent>
+          </Card>
           <div className="grid gap-4 grid-cols-1 md:grid-cols-[280px_1fr]">
             <Card>
               <CardHeader>

@@ -128,6 +128,19 @@ const DEMOGRAPHIC_LABEL_RE =
  * — without swallowing the ordinary screener questions around them, which under
  * the answer-everything policy must still be answered.
  */
+/**
+ * Questions asserting a legal status or credential, not experience.
+ *
+ * Answering one of these affirmatively is a factual claim an employer will
+ * verify — a security clearance, citizenship, export-control eligibility. They
+ * must come from the profile, never from a default.
+ *
+ * Deliberately does NOT include ordinary work-authorisation questions, which the
+ * boolean bank already answers correctly from the profile.
+ */
+const CREDENTIAL_ATTESTATION_RE =
+  /\b(security\s+clearance|clearance\s+(eligib|status|level)|active\s+clearance|polygraph|export\s+control|itar|ear99|u\.?s\.?\s+citizen(ship)?|citizenship\s+status|permanent\s+resident|green\s+card)\b/i
+
 const CRIMINAL_HISTORY_RE =
   /\b(convicted|conviction|felony|felonies|misdemeanou?r|criminal\s+(record|history|charge|offen[cs]e)|plead(ed)?\s+(guilty|no\s+contest)|nolo\s+contendere|background\s+(check|investigation)|arrest(ed|\s+record)?|incarcerat\w*|on\s+probation|sex\s+offender)\b/i
 
@@ -139,6 +152,21 @@ const CRIMINAL_HISTORY_RE =
  * its own upload, and swallowing it here would hide a real blocker.
  */
 const RESUME_LABEL_RE = /\b(resum[eé]|cv|curriculum\s+vitae)\b/i
+
+/**
+ * A URL a strict validator will accept.
+ *
+ * The profile stores links bare — a live run typed "github.com/theadityasurana"
+ * into Perplexity's required URL box. Ashby accepted it, but plenty of portals
+ * run `type="url"` validation or their own regex and reject a scheme-less
+ * string, which turns a filled field back into a blocked submit on a portal we
+ * have not tested yet. Cheap to normalise, and harmless when already correct.
+ */
+export function withScheme(url: string): string {
+  const u = (url || "").trim()
+  if (!u) return u
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(u) || u.startsWith("mailto:") ? u : `https://${u}`
+}
 
 /** How an answer for this field should be produced. */
 export type AnswerRoute =
@@ -1014,6 +1042,38 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   if (DEMOGRAPHIC_LABEL_RE.test(label)) {
     return demographicRoute(field, userData)
   }
+  // ─── A credential is a fact about the candidate, never a default ───
+  //
+  // Security clearances, citizenship and export-control eligibility are not
+  // screener questions where "Yes" merely claims experience — they assert a
+  // legal status that either exists or does not, to an employer who will verify
+  // it. The affirmative default below explicitly documents that it is safe only
+  // because isSensitiveQuestion claimed immigration and status questions before
+  // it. That short-circuit was removed earlier to satisfy "answer everything",
+  // which left this class of question falling through to the default — and a
+  // live Anduril run duly answered
+  //   "CLEARANCE ELIGIBILITY …" ← "Yes, I hold an active U.S. security clearance"
+  // for a candidate in Bangalore with no US work authorisation, two fields
+  // before answering "N/A - have never held U.S. security clearance" to the very
+  // next question.
+  //
+  // Nothing is left blank, per the answer-everything policy: the question is
+  // still answered, just from what the profile actually evidences. Absent proof
+  // of US status, the truthful answer is the negative one the form already
+  // offers — and if the candidate genuinely holds a clearance, the profile is
+  // where that belongs.
+  if (CREDENTIAL_ATTESTATION_RE.test(label) && field.options.length) {
+    const evidenced = /\b(u\.?s\.?|united states)\b/i.test(String(userData.workAuthorization || "")) ||
+      /\b(us|u\.s\.|united states|american)\b/i.test(String(userData.citizenship || ""))
+    if (!evidenced) {
+      const negative = field.options.find((o) => NEGATIVE.test(o.trim()) && !AFFIRMATIVE.test(o.trim()))
+      const answer = negative || leastCommittalOption(field.options)
+      if (answer) {
+        return { route: "choice", value: answer, why: "credential/status attestation — the profile evidences no US status, so the truthful answer is the negative" }
+      }
+    }
+  }
+
   // ─── The one question that is still never auto-answered ───
   //
   // Everything else on this form gets an answer, blank or not. Criminal-history
@@ -1305,8 +1365,48 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
   // fires on anchored, question-shaped patterns that identify a specific question;
   // this default fires on anything left over, and asserting "Yes" into a control we
   // cannot even see the options of is a guess with no evidence behind it at all.
+  // ─── A required URL field gets a real link, never a blocked submit ───
+  //
+  // Perplexity marks "Exercise Submission (Shared URL)" required. There is no
+  // take-home to link to, so the model wrote prose — "I have submitted the
+  // required …" — the URL validator rejected it, and the whole application was
+  // abandoned over one box.
+  //
+  // The identity rules above only substitute for links they RECOGNISE (github,
+  // portfolio, linkedin); an unrecognised URL question reaches none of them.
+  // This is the same substitution, generalised: a real link the candidate owns
+  // is a better answer than an empty required field, and it is at least
+  // something a reviewer can follow.
+  // Triggered by the WIDGET's own type as well as the label, so this is agnostic
+  // to how a given ATS words the question. "Exercise Submission (Shared URL)",
+  // "Where can we see your work?", "Portfolio link", a bare url-typed box on a
+  // board we have never seen — all reach here. Label-only matching would miss
+  // every URL field that does not happen to say "url".
+  const wantsUrl = String(field.kind || "").toLowerCase() === "url" || /\b(url|link|website)\b/i.test(label)
+  if (field.required && wantsUrl && !isProseShape(shape)) {
+    const link = userData.githubUrl || userData.portfolioUrl || userData.websiteUrl || userData.linkedinUrl || ""
+    if (link) {
+      return { route: "profile", value: withScheme(link), why: "required URL field with no specific value — substituting a real profile link" }
+    }
+  }
+
   if (isBooleanChoice(field.options) && field.required) {
-    const yes = field.options.find((o) => AFFIRMATIVE.test(o.trim()))
+    const affirmatives = field.options.filter((o) => AFFIRMATIVE.test(o.trim()))
+    // ─── "Yes" is not one answer when the form offers two of them ───
+    //
+    // Anduril's clearance question offers:
+    //   "Yes, I hold an active U.S. security clearance"
+    //   "Yes, I am eligible for a U.S. security clearance"
+    //   "No"
+    // isBooleanChoice accepts three options, so this read as a yes/no screener,
+    // and `find(AFFIRMATIVE)` took the FIRST — asserting an active clearance the
+    // candidate does not hold. Those two options are materially different
+    // claims; picking by list order is not answering, it is guessing at the most
+    // consequential end. Hand it to the model with the real options instead.
+    if (affirmatives.length > 1) {
+      return { route: "choice", value: "", why: "several distinct affirmative options — the model picks from the real list" }
+    }
+    const yes = affirmatives[0]
     if (yes) {
       return {
         route: "choice",

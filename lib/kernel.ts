@@ -3636,25 +3636,55 @@ const selectors = [
   '[role="button"]:has-text("Apply")',
 ];
 
+// ─── Never hand the application to a third party ───
+//
+// has-text is a SUBSTRING match, so 'button:has-text("Apply")' matches
+// "Apply With Indeed" — and SmartRecruiters renders its social-apply buttons
+// ABOVE the native one, so .first() picked it every time. A live run clicked
+//   <BUTTON> "Apply With Indeed" @ .external-apply-button
+// landed on secure.indeed.com/auth, and then filled INDEED'S LOGIN FORM as if
+// it were the application: "Form inventory: 1 total controls — Email address".
+//
+// These buttons hand the candidate to an OAuth flow on a site we have no
+// account for. The application is never submitted, and the run burns its
+// session typing into a stranger's login box.
+const EXTERNAL_BRAND = /\\b(indeed|linkedin|google|facebook|xing|seek|apple|glassdoor|monster|ziprecruiter|naukri|dice)\\b/i;
+const EXTERNAL_ACTION = /\\b(apply|continue|sign\\s*in|sign\\s*up|log\\s*in|register)\\s+(with|using|via)\\b/i;
+const skipped = [];
+
 for (const sel of selectors) {
   try {
-    const btn = page.locator(sel).first();
-    if (await btn.count() === 0) continue;
-    if (!(await btn.isVisible({ timeout: 2000 }).catch(() => false))) continue;
-    await btn.scrollIntoViewIfNeeded().catch(() => {});
-    await btn.click({ timeout: 5000 });
-    await page.waitForTimeout(2500);
-    const after = await page.evaluate(() => document.querySelectorAll('input,textarea').length);
-    return { clicked: true, reason: 'clicked:' + sel, inputsAfter: after };
+    const loc = page.locator(sel);
+    const n = await loc.count();
+    for (let i = 0; i < n && i < 8; i++) {
+      const btn = loc.nth(i);
+      if (!(await btn.isVisible({ timeout: 2000 }).catch(() => false))) continue;
+      const txt = ((await btn.innerText().catch(() => '')) || '').replace(/\\s+/g, ' ').trim();
+      const cls = ((await btn.getAttribute('class').catch(() => '')) || '');
+      if (EXTERNAL_BRAND.test(txt) || EXTERNAL_ACTION.test(txt) || /external-apply/i.test(cls)) {
+        skipped.push(txt.slice(0, 40));
+        continue;
+      }
+      await btn.scrollIntoViewIfNeeded().catch(() => {});
+      await btn.click({ timeout: 5000 });
+      await page.waitForTimeout(2500);
+      const after = await page.evaluate(() => document.querySelectorAll('input,textarea').length);
+      return { clicked: true, reason: 'clicked:' + sel, inputsAfter: after, skipped };
+    }
   } catch (e) { /* try the next selector */ }
 }
-return { clicked: false, reason: 'no-apply-button-found', inputs: existing };
+return { clicked: false, reason: 'no-apply-button-found', inputs: existing, skipped };
 `,
       timeout_sec: 45,
     })
     const r = (res.result as any) || {}
     if (applicationId) {
-      await persistLog(applicationId, "info", `ensureApplyFormOpen: ${r.reason}${r.inputsAfter != null ? ` (inputs after: ${r.inputsAfter})` : ""}`)
+      await persistLog(applicationId, "info",
+        `ensureApplyFormOpen: ${r.reason}${r.inputsAfter != null ? ` (inputs after: ${r.inputsAfter})` : ""}` +
+        // Name what was passed over. A run that finds no apply button on a page
+        // covered in "Apply With …" buttons is otherwise indistinguishable from
+        // a run that found nothing at all.
+        (Array.isArray(r.skipped) && r.skipped.length ? ` | skipped third-party apply: ${r.skipped.map((s: string) => `"${s}"`).join(", ")}` : ""))
     }
     return { clicked: !!r.clicked, reason: r.reason || "unknown" }
   } catch (err) {
@@ -4077,13 +4107,32 @@ ${VM_DOM_HELPERS}
     const resolvedLabel: string = String(desc.resolvedLabel || "")
     if (expectedLabel && resolvedLabel) {
       const canon = (s: string) => s.replace(/[*✱＊]+/g, " ").replace(/\(optional\)|\(required\)/gi, " ").replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase()
+      // ─── An asterisk must not invent a word boundary ───
+      //
+      // canon turns "*" into a SPACE, so a required marker sitting mid-label
+      // splits one word into two. Mercury's phone control scans as
+      // "PhoneCountryPhone" and re-reads as "PhoneCountry*Phone*":
+      //
+      //   want = "phonecountryphone"   got = "phonecountry phone"
+      //
+      // Neither is a prefix or substring of the other, so the guard refused to
+      // fill it on every round. The field never settled, and the submit gate
+      // blocked the application over it while the audit reported the page fully
+      // filled. Comparing with ALL separators removed as well lets cosmetic
+      // drift through while a genuine change of identity still trips the guard.
+      const squash = (s: string) => s.replace(/[^a-z0-9]+/gi, "").toLowerCase()
+      const wantSq = squash(expectedLabel)
+      const gotSq = squash(resolvedLabel)
       const want = canon(expectedLabel)
       const got = canon(resolvedLabel)
       const compatible =
         !want || !got ||
         want === got ||
         want.startsWith(got) || got.startsWith(want) ||
-        want.includes(got) || got.includes(want)
+        want.includes(got) || got.includes(want) ||
+        wantSq === gotSq ||
+        wantSq.startsWith(gotSq) || gotSq.startsWith(wantSq) ||
+        wantSq.includes(gotSq) || gotSq.includes(wantSq)
       if (!compatible) {
         return {
           handled: false, filled: false, handler: "none",
@@ -7115,7 +7164,30 @@ return await page.evaluate(async () => {
       // filled, so a run with a question nobody answered looked identical to a
       // perfect one right up to the moment the audit failed for a reason the
       // logs could not explain.
-      const inventoryBlockers = formInventory.filter(i => i.required && !ledger.isSettled(i.key))
+      // ─── A control that is not on the page cannot be an unfilled field ───
+      //
+      // Mercury's scan merges the phone country selector and the phone box into
+      // one pseudo-field, "PhoneCountryPhone", typed as a radio group. No such
+      // control exists, so every attempt reports
+      //   [radio] "PhoneCountryPhone" ← "": FAILED (no-radios-found)
+      //   NOT FILLED "PhoneCountryPhone" via none: element-not-found
+      // it never settles, and the gate refuses the application — while the real
+      // Phone and Country fields beside it are both filled and the page audit
+      // says "0 unfilled → all required fields filled".
+      //
+      // The page is the authority on what is actually on it. An inventory item
+      // the audit does not also report as empty is a scan artefact, not a
+      // blocker. If the audit did miss a genuinely empty field, the portal
+      // rejects the submit with a validation error the run already handles —
+      // which is a recoverable outcome, unlike abandoning a complete form.
+      const auditLabels = new Set((finalAudit.fields || []).map((f: { label: string }) => norm(f.label)))
+      const rawInventoryBlockers = formInventory.filter(i => i.required && !ledger.isSettled(i.key))
+      const phantomBlockers = rawInventoryBlockers.filter(i => !auditLabels.has(norm(i.label)))
+      const inventoryBlockers = rawInventoryBlockers.filter(i => auditLabels.has(norm(i.label)))
+      if (phantomBlockers.length && applicationId) {
+        await persistLog(applicationId, "warn",
+          `${phantomBlockers.length} inventory item(s) never settled but the page does not show them as empty — treating as scan artefacts: ${phantomBlockers.map(i => `"${i.label.slice(0, 40)}"`).join(" | ")}`)
+      }
       const knownBlockers = ledger.requiredBlockers()
 
       // ─── When the audit and the handler disagree about the same field ───

@@ -672,9 +672,9 @@ export function QueueScreen() {
             <div className="h-5 w-px bg-border hidden sm:block" />
 
             {/* Reject by company */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <Select value={selectedRejectCompany} onValueChange={setSelectedRejectCompany}>
-                <SelectTrigger className="h-8 text-xs w-40">
+                <SelectTrigger className="h-8 text-xs w-full sm:w-40">
                   <SelectValue placeholder="By company..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -696,9 +696,9 @@ export function QueueScreen() {
             </div>
 
             {/* Reject by user */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <Select value={selectedRejectUser} onValueChange={setSelectedRejectUser}>
-                <SelectTrigger className="h-8 text-xs w-40">
+                <SelectTrigger className="h-8 text-xs w-full sm:w-40">
                   <SelectValue placeholder="By user..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -722,10 +722,10 @@ export function QueueScreen() {
             </div>
 
             {/* Reject by date */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-44 justify-start font-normal">
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full sm:w-44 justify-start font-normal">
                     <CalendarIcon className="h-3 w-3 shrink-0" />
                     {rejectDateRange?.from
                       ? rejectDateRange.to
@@ -1014,7 +1014,7 @@ export function QueueScreen() {
            Clicking outside the modal no longer kills the run — it moves here.
            Each card shows live status and can be minimized or dismissed once done. */}
       {activeTray.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2 items-end">
+        <div className="fixed bottom-4 right-2 sm:right-4 z-50 flex flex-col-reverse gap-2 items-end max-w-[calc(100vw-1rem)] sm:max-w-none">
           {activeTray.map(({ app, minimized }) => {
             const isRunning = streamingApps.has(app.id)
             const isDone = app.status === 'completed' || app.status === 'failed'
@@ -1026,7 +1026,7 @@ export function QueueScreen() {
                   app.status === 'failed'    ? 'border-destructive/40' :
                   isRunning                  ? 'border-blue-500/40' :
                   'border-border'
-                } ${minimized ? 'w-64' : 'w-80'}`}
+                } ${minimized ? 'w-56 sm:w-64' : 'w-72 sm:w-80'}`}
               >
                 {/* Tray card header — always visible */}
                 <div
