@@ -94,30 +94,40 @@ async function handler(request: NextRequest) {
 
   const supabase = createAdminClient()
 
-  const { data: entries, error } = await supabase
-    .from('job_sync_queue')
-    .select('id, company_id')
-    .eq('status', 'pending')
-    .lte('scheduled_at', new Date().toISOString())
-    .order('scheduled_at', { ascending: true })
-    .limit(BATCH_SIZE)
+  // When called from the Edge Function, a single entry is passed in the body.
+  // When called directly (Vercel cron fallback), we query for the batch ourselves.
+  let entries: Array<{ id: string; company_id: string }> | null = null
 
-  if (error || !entries || entries.length === 0) {
-    return NextResponse.json({ message: 'No pending syncs due' })
+  const body = request.method === 'POST'
+    ? await request.json().catch(() => ({}))
+    : {}
+
+  if (body.entryId && body.companyId) {
+    // Single-entry mode: Edge Function already marked it running
+    entries = [{ id: body.entryId, company_id: body.companyId }]
+  } else {
+    const { data, error } = await supabase
+      .from('job_sync_queue')
+      .select('id, company_id')
+      .eq('status', 'pending')
+      .lte('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(BATCH_SIZE)
+
+    if (error || !data || data.length === 0) {
+      return NextResponse.json({ message: 'No pending syncs due' })
+    }
+
+    entries = data
+    const entryIds = entries.map(e => e.id)
+    const companyIds = entries.map(e => e.company_id)
+    await Promise.all([
+      supabase.from('job_sync_queue').update({ status: 'running' }).in('id', entryIds),
+      supabase.from('companies').update({ sync_status: 'running' }).in('id', companyIds),
+    ])
   }
 
-  const entryIds  = entries.map(e => e.id)
-  const companyIds = entries.map(e => e.company_id)
-
-  // Mark all as running atomically before responding
-  await Promise.all([
-    supabase.from('job_sync_queue').update({ status: 'running' }).in('id', entryIds),
-    supabase.from('companies').update({ sync_status: 'running' }).in('id', companyIds),
-  ])
-
-  // Respond immediately so pg_net / Vercel cron doesn't time out waiting.
-  // The actual sync runs in the background via after().
   after(runSyncBatch(entries))
 
-  return NextResponse.json({ message: `Sync started for ${entries.length} companies`, entryIds })
+  return NextResponse.json({ message: `Sync started for ${entries.length} companies`, entryIds: entries.map(e => e.id) })
 }

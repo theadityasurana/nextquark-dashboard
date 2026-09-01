@@ -28,6 +28,23 @@ import {
   Receipt, XCircle, CircleSlash, TriangleAlert, Info, Crown, Play
 } from "lucide-react"
 
+const ATS_PATTERNS: { name: string; pattern: RegExp }[] = [
+  { name: "Lever",           pattern: /lever\.co/ },
+  { name: "Greenhouse",      pattern: /greenhouse\.io/ },
+  { name: "Ashby",           pattern: /ashbyhq\.com/ },
+  { name: "Workday",         pattern: /myworkdayjobs\.com|workday\.com/ },
+  { name: "SmartRecruiters", pattern: /smartrecruiters\.com/ },
+  { name: "BambooHR",        pattern: /bamboohr\.com/ },
+  { name: "Jobvite",         pattern: /jobvite\.com/ },
+  { name: "iCIMS",           pattern: /icims\.com/ },
+  { name: "LinkedIn",        pattern: /linkedin\.com\/jobs/ },
+]
+
+function detectAts(url: string): string | null {
+  if (!url) return null
+  return ATS_PATTERNS.find(p => p.pattern.test(url))?.name ?? null
+}
+
 // Small inline tooltip helper so every control gets an (i) icon
 function InfoTip({ text }: { text: string }) {
   return (
@@ -75,6 +92,7 @@ export function QueueScreen() {
   const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
   const [realtimeConnected, setRealtimeConnected] = useState(true)
   const [queuePage, setQueuePage] = useState(1)
+  const [selectedCandidateFilter, setSelectedCandidateFilter] = useState<string>("")
 
   const QUEUE_PER_PAGE = 10
 
@@ -495,6 +513,7 @@ export function QueueScreen() {
   const filteredApps = applications.filter(app => {
     if (activeTab === "premium") { if (!app.is_premium) return false }
     else if (activeTab !== "all" && app.status !== activeTab) return false
+    if (selectedCandidateFilter && app.user_id !== selectedCandidateFilter) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const fullName = `${app.first_name} ${app.last_name}`.toLowerCase()
@@ -756,21 +775,41 @@ export function QueueScreen() {
 
       {/* Search + tabs */}
       <div className="flex flex-col gap-3">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search name, company or job..."
-            className="pl-9 bg-card border-border w-full"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search name, company or job..."
+              className="pl-9 bg-card border-border w-full"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
+            />
+          </div>
+          <Select
+            value={selectedCandidateFilter}
+            onValueChange={(v) => { setSelectedCandidateFilter(v === "__all__" ? "" : v); setQueuePage(1) }}
+          >
+            <SelectTrigger className="h-10 text-xs w-[160px] shrink-0 bg-card border-border">
+              <SelectValue placeholder="All candidates" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__" className="text-xs">All candidates</SelectItem>
+              {[...new Map(applications.map(a => [a.user_id, a])).values()]
+                .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
+                .map(a => (
+                  <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
+                    {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id && x.status === 'pending').length} pending)
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Tabs — always horizontally scrollable, never wraps */}
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1) }} className="w-full">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1); setSelectedCandidateFilter("") }} className="w-full">
           <div className="-mx-3 sm:mx-0 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <TabsList className="bg-card border border-border inline-flex w-max px-1 mx-3 sm:mx-0">
-              <TabsTrigger value="all" className="text-xs px-2.5">All ({applications.length})</TabsTrigger>
+              <TabsTrigger value="all" className="text-xs px-2.5" onClick={() => { setActiveTab("all"); setQueuePage(1) }}>All ({applications.length})</TabsTrigger>
               <TabsTrigger value="premium" className="text-xs px-2.5">
                 <Crown className="h-3 w-3 text-yellow-500 mr-1" />Premium ({premiumApps.length})
               </TabsTrigger>
@@ -791,6 +830,7 @@ export function QueueScreen() {
         {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
           const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
+          const atsName = app.portal_name ?? detectAts(app.job_url)
           return (
             <Card key={app.id} className={`bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
               <CardContent className="p-3">
@@ -873,7 +913,14 @@ export function QueueScreen() {
 
                 {/* Footer row */}
                 <div className="flex items-center justify-between gap-1 mt-1">
-                  <span className="text-[10px] text-muted-foreground shrink-0">{createdDate}</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{createdDate}</span>
+                    {atsName && (
+                      <Badge variant="outline" className="text-[9px] border-blue-500/30 text-blue-500 shrink-0">
+                        {atsName}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {runCost(app) !== null && (
                       <span
@@ -891,6 +938,7 @@ export function QueueScreen() {
                     </Button>
                   </div>
                 </div>
+
 
                 {/* OTP input */}
                 {app.status === 'awaiting_otp' && (

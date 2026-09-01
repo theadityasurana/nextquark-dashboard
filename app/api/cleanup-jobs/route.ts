@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchJobsFromAts } from '@/lib/ats-sync'
 import { jobDedupeKey } from '@/lib/job-identity'
 
+export const maxDuration = 60
+
 // This was the root cause of "delete non-existing jobs not working":
 // 1. It called fetch('/api/ats-sync') in a sequential for-loop — N HTTP round-trips
 //    that could time out on Vercel before finishing all companies.
@@ -34,7 +36,35 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createAdminClient()
     const body = await request.json().catch(() => ({}))
-    const { preview } = body
+    const { preview, jobIds } = body
+
+    // Fast path: client already has the stale job IDs from the preview step,
+    // so skip the expensive ATS re-fetch and delete directly.
+    if (!preview && Array.isArray(jobIds) && jobIds.length > 0) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const freshClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      )
+      const CHUNK = 500
+      for (let i = 0; i < jobIds.length; i += CHUNK) {
+        await freshClient.from('live_application_queue').delete().in('job_id', jobIds.slice(i, i + CHUNK))
+      }
+      let deleteError: any = null
+      for (let i = 0; i < jobIds.length; i += CHUNK) {
+        const { error } = await freshClient.from('jobs').delete().in('id', jobIds.slice(i, i + CHUNK))
+        if (error) { deleteError = error; break }
+      }
+      if (deleteError) {
+        console.error('[cleanup-jobs] delete error:', deleteError)
+        return NextResponse.json({ error: `Failed to delete stale jobs: ${deleteError.message}` }, { status: 500 })
+      }
+      return NextResponse.json({
+        deletedCount: jobIds.length,
+        message: `Deleted ${jobIds.length} jobs that no longer exist on company portals`,
+      })
+    }
 
     const { data: companies } = await supabase
       .from('companies')
@@ -48,39 +78,26 @@ export async function POST(request: NextRequest) {
 
     const allStaleJobs: any[] = []
 
-    // Fetch live jobs from all ATS companies in parallel batches (direct calls, no HTTP)
     await runInBatches(companies, PARALLEL_COMPANIES, async (company) => {
       try {
         const timeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Timed out after ${COMPANY_TIMEOUT_MS / 1000}s`)), COMPANY_TIMEOUT_MS)
         )
         const liveJobs = await Promise.race([fetchJobsFromAts(company.ats_type, company.ats_company_id), timeout])
-
-        // Normalize live URLs with the same dedupe key used during sync.
-        // This is why the old version failed: it compared raw URLs, so
-        // "https://jobs.lever.co/acme/123?lever-source=linkedin" would never
-        // match "https://jobs.lever.co/acme/123" in the DB.
         const liveUrlSet = new Set(
           liveJobs.map(j => jobDedupeKey(j.jobUrl)).filter(Boolean)
         )
-
         const { data: dbJobs } = await supabase
           .from('jobs')
           .select('id, title, job_url, company_name, location, type')
           .eq('company_id', company.id)
           .not('job_url', 'is', null)
           .neq('job_url', '')
-
         for (const dbJob of dbJobs || []) {
-          const normalizedDbUrl = jobDedupeKey(dbJob.job_url)
-          if (!liveUrlSet.has(normalizedDbUrl)) {
+          if (!liveUrlSet.has(jobDedupeKey(dbJob.job_url))) {
             allStaleJobs.push({
-              id: dbJob.id,
-              title: dbJob.title,
-              jobUrl: dbJob.job_url,
-              companyName: dbJob.company_name || company.name,
-              location: dbJob.location,
-              type: dbJob.type,
+              id: dbJob.id, title: dbJob.title, jobUrl: dbJob.job_url,
+              companyName: dbJob.company_name || company.name, location: dbJob.location, type: dbJob.type,
             })
           }
         }
@@ -97,34 +114,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ deletedCount: 0, message: 'No stale jobs found' })
     }
 
-    // Create a fresh client for the delete — the singleton connection may have
-    // been reset by Supabase after the long ATS fetch loop (HTTP/2 frameError).
     const { createClient } = await import('@supabase/supabase-js')
     const freshClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
-
-    // Delete in chunks to avoid Supabase URL length limits on large IN() lists
     const idsToDelete = allStaleJobs.map(j => j.id)
     const CHUNK = 500
     for (let i = 0; i < idsToDelete.length; i += CHUNK) {
       await freshClient.from('live_application_queue').delete().in('job_id', idsToDelete.slice(i, i + CHUNK))
     }
-
     let deleteError: any = null
     for (let i = 0; i < idsToDelete.length; i += CHUNK) {
       const { error } = await freshClient.from('jobs').delete().in('id', idsToDelete.slice(i, i + CHUNK))
       if (error) { deleteError = error; break }
     }
-    const error = deleteError
-
-    if (error) {
-      console.error('[cleanup-jobs] delete error:', error)
-      return NextResponse.json({ error: `Failed to delete stale jobs: ${error.message || JSON.stringify(error)}` }, { status: 500 })
+    if (deleteError) {
+      console.error('[cleanup-jobs] delete error:', deleteError)
+      return NextResponse.json({ error: `Failed to delete stale jobs: ${deleteError.message}` }, { status: 500 })
     }
-
     return NextResponse.json({
       deletedCount: idsToDelete.length,
       message: `Deleted ${idsToDelete.length} jobs that no longer exist on company portals`,

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchJobsFromAts, syncCompanyJobs } from '@/lib/ats-sync'
 import { jobDedupeKey } from '@/lib/job-identity'
 
+export const maxDuration = 60
+
 // Max companies to sync in parallel. Higher = faster but more memory/CPU.
 // ATS APIs have their own rate limits so keep this conservative.
 const PARALLEL_COMPANIES = 3

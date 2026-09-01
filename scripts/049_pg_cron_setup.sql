@@ -38,23 +38,9 @@ SELECT cron.schedule(
   $$
 );
 
--- 3. Watchdog: reset stuck jobs every 15 minutes
-SELECT cron.schedule(
-  'watchdog',
-  '*/15 * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://YOUR_DOMAIN/api/cron/watchdog',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer YOUR_CRON_SECRET"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
-
 -- To verify scheduled jobs:
 -- SELECT * FROM cron.job;
 
 -- To unschedule if needed:
 -- SELECT cron.unschedule('schedule-job-sync');
 -- SELECT cron.unschedule('process-job-sync');
--- SELECT cron.unschedule('watchdog');

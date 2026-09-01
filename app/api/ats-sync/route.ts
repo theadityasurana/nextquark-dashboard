@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchJobsFromAts, syncCompanyJobs } from '@/lib/ats-sync'
 import { jobDedupeKey } from '@/lib/job-identity'
 
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createAdminClient()

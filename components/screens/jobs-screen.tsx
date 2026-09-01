@@ -1602,7 +1602,7 @@ export function JobsScreen() {
                     const res = await fetch("/api/cleanup-jobs", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ preview: false }),
+                      body: JSON.stringify({ preview: false, jobIds: staleJobs.map(j => j.id) }),
                     })
                     const data = await res.json()
                     if (data.error) {

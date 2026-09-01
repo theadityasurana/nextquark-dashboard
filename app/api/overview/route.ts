@@ -337,16 +337,19 @@ export async function GET(request: Request) {
     const seenCompanyIds = new Set<string>()
     for (const row of syncResults || []) {
       const r = row.result || {}
-      totalAdded   += r.added   || 0
-      totalUpdated += r.updated || 0
-      totalDeleted += r.deleted || 0
+      const added   = r.addedCount   || r.added   || 0
+      const updated = r.updatedCount || r.updated || 0
+      const deleted = r.deletedCount || r.deleted || 0
+      totalAdded   += added
+      totalUpdated += updated
+      totalDeleted += deleted
       seenCompanyIds.add(row.company_id)
       if (!syncByCompany.has(row.company_id)) {
         const info = companyNameMap.get(row.company_id)
         syncByCompany.set(row.company_id, {
           name: info?.name || row.company_id,
           initial: info?.initial || '?',
-          added: r.added || 0, updated: r.updated || 0, deleted: r.deleted || 0,
+          added, updated, deleted,
           syncedAt: row.synced_at,
         })
       }
