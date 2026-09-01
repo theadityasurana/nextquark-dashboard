@@ -28,7 +28,7 @@ import { clearDispatchGate } from "./dispatch-gate"
 import { clearConcurrencyCache, fetchConcurrencyLimit } from "./kernel-limits"
 import { acquirePooledBrowser, isPoolable, releasePooledBrowser, type PooledBrowser } from "./browser-pool"
 import { buildCodeModePrompt, CODE_MODE_ENABLED, parseCodeReply, screenCode, verifyNoSideEffects } from "./code-mode"
-import { isOptionNotice, VM_DOM_HELPERS } from "./vm-dom"
+import { isOptionNotice, VM_DEEP_QUERY, VM_DOM_HELPERS } from "./vm-dom"
 import { buildLlmChain, classifyLlmStatus, parseRetryDelaySeconds, refreshFreeModels, GEMINI_TEXT_MODELS, type LlmAttempt } from "./llm-models"
 import { routeField, validateAnswerForField, shapeOf, leastCommittalOption } from "./answer-policy"
 import { AnswerLedger, type Blocker } from "./answer-ledger"
@@ -709,18 +709,19 @@ async function confirmSubmission(
       code: `
 const currentUrl = page.url();
 const info = await page.evaluate(() => {
+${VM_DEEP_QUERY}
   const isVisible = (el) => {
     const r = el.getBoundingClientRect();
     const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
   };
   const bodyText = document.body.innerText;
-  const visibleInputs = Array.from(document.querySelectorAll(
+  const visibleInputs = nqDeepAll(
     'input[type="text"],input[type="email"],input[type="tel"],input[type="url"],input:not([type]),textarea,select'
   )).filter(isVisible).length;
-  const visibleSubmit = Array.from(document.querySelectorAll('button,input[type="submit"]'))
+  const visibleSubmit = nqDeepAll('button,input[type="submit"]')
     .some(b => isVisible(b) && /submit|apply|send application/i.test(b.innerText || b.value || ''));
-  const visibleErrors = Array.from(document.querySelectorAll('[aria-invalid="true"],.error,.invalid,[class*="error"]'))
+  const visibleErrors = nqDeepAll('[aria-invalid="true"],.error,.invalid,[class*="error"]')
     .filter(isVisible).length;
   // 2500 chars, not 800: a confirmation reference often sits below the heading
   // and a short window was truncating it away before extractConfirmationId saw it.
@@ -807,7 +808,8 @@ const fileArg = { name: NAME, mimeType: MIME, buffer };
 const verify = async () => {
   try {
     return await page.evaluate((name) => {
-      const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+${VM_DEEP_QUERY}
+      const inputs = nqDeepAll('input[type="file"]');
       if (inputs.some(i => i.files && i.files.length > 0)) return true;
       const stem = (name.split('.')[0] || name).toLowerCase();
       return stem.length > 3 && document.body.innerText.toLowerCase().includes(stem);
@@ -1350,8 +1352,32 @@ const ANTI_BOT_PATTERNS: RegExp[] = [
 ]
 
 function detectAntiBotBlock(text: string | null | undefined): boolean {
-  if (!text) return false
-  return ANTI_BOT_PATTERNS.some((re) => re.test(text))
+  return !!matchAntiBotBlock(text)
+}
+
+/**
+ * Which anti-bot phrase matched, and the sentence it sat in.
+ *
+ * The verdict alone is not enough to act on. A run logged "Portal rejected the
+ * submission as automated/spam | portal said: Internship - Search Machine
+ * Learning Engineer" — the opening line of the page, which contains no such
+ * claim — because the evidence logged was the START of the body text while the
+ * phrase that actually matched was several paragraphs down. That verdict is
+ * terminal (the run refuses to resubmit), so it has to be auditable: report the
+ * pattern and the words around the hit, not the top of the page.
+ */
+function matchAntiBotBlock(text: string | null | undefined): { pattern: string; excerpt: string } | null {
+  if (!text) return null
+  for (const re of ANTI_BOT_PATTERNS) {
+    const m = re.exec(text)
+    if (!m) continue
+    const at = m.index ?? 0
+    return {
+      pattern: String(re),
+      excerpt: text.slice(Math.max(0, at - 120), at + 240).replace(/\s+/g, " ").trim(),
+    }
+  }
+  return null
 }
 
 // Deliberately specific. The old list contained the bare token "otp", which
@@ -4486,6 +4512,7 @@ async function readValidationErrors(
   const res = await kernelClient.browsers.playwright.execute(sessionId, {
     code: `
 const errors = await page.evaluate(() => {
+${VM_DEEP_QUERY}
   const clean = s => s.replace(/\\s+/g,' ').replace(/\\s*[*\\u2731\\uff0a\\u2217\\u066d]\\s*$/,'').replace(/^error[:\\s-]*/i,'').trim().slice(0,80);
   const groupLabel = el => {
     const group = el.closest('[data-automation-id^="formField-"]');
@@ -4494,17 +4521,17 @@ const errors = await page.evaluate(() => {
   };
   const out = new Set();
   // Workday error message nodes
-  document.querySelectorAll('[data-automation-id="errorMessage"],[role="alert"]').forEach(e => {
+  nqDeepAll('[data-automation-id="errorMessage"],[role="alert"]').forEach(e => {
     const label = groupLabel(e) || clean(e.textContent || '');
     if (label && !/^errors?\\b/i.test(label)) out.add(label);
   });
   // aria-invalid controls (React portals: Greenhouse/Lever/Ashby)
-  document.querySelectorAll('[aria-invalid="true"]').forEach(f => {
+  nqDeepAll('[aria-invalid="true"]').forEach(f => {
     const label = groupLabel(f) || clean(f.getAttribute('aria-label') || '');
     if (label) out.add(label);
   });
   // Labels with error class siblings
-  document.querySelectorAll('.error-message,.field-error,[class*="errorText"],[class*="error-text"]').forEach(e => {
+  nqDeepAll('.error-message,.field-error,[class*="errorText"],[class*="error-text"]').forEach(e => {
     const wrapper = e.closest('[class*="field"],[class*="question"],[class*="form-group"]');
     const lab = wrapper?.querySelector('label,legend')?.textContent?.trim();
     if (lab) out.add(clean(lab));
@@ -4644,6 +4671,30 @@ ${OTP_BOX_FINDER_JS}
     )
   }
   return r
+}
+
+/**
+ * The company name to look for in a verification email's subject.
+ *
+ * Every candidate has ONE proxy inbox, so several applications in flight all
+ * receive their codes at the same address, and "the newest mail" is not
+ * necessarily "my code". Greenhouse names the company in the subject —
+ * "Security code for your application to LaunchDarkly" — so a hint is enough to
+ * tell the codes apart. The board token in the URL is the most reliable source:
+ * it is the employer's own slug, it is present before the page has rendered, and
+ * it does not depend on the queue row carrying a companyName.
+ */
+function otpCompanyHint(portalUrl: string, userData: any): string {
+  const explicit = String(userData?.companyName || userData?.company_name || "").trim()
+  if (explicit) return explicit
+  try {
+    const { hostname, pathname } = new URL(portalUrl)
+    const seg = pathname.split("/").filter(Boolean)
+    // greenhouse.io/<board>/jobs/<id>, ashbyhq.com/<org>/<uuid>,
+    // lever.co/<org>/<uuid>, smartrecruiters.com/<Company>/<id>-<slug>
+    if (/greenhouse\.io|ashbyhq\.com|lever\.co|smartrecruiters\.com/i.test(hostname) && seg[0]) return seg[0]
+  } catch {}
+  return ""
 }
 
 // ─── clickSubmitButton: the ONLY thing that clicks Submit — agent never does ───
@@ -7412,19 +7463,54 @@ return await page.evaluate(async () => {
           if (onStep) onStep({ status: "in_progress", log: "Verification code required — checking email...", liveUrl })
 
           const otpAddress = (userData as any).proxyEmail || (userData as any).proxy_email || userData.email || ""
-          // 150s. The mail arrived in 6s on a good run, but this is the one wait
-          // where giving up early is unrecoverable: the portal has ALREADY
-          // accepted the application and issued a code, so abandoning here means
-          // a submission that exists on their side and never completed on ours.
-          // The session timeout above is sized to outlast this.
-          let code = await fetchOtpViaApi(applicationId || "", otpAddress, 150000)
-          if (!code) {
-            if (applicationId) await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
-            code = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId || "", otpAddress, applicationId)
-          }
+          const companyHint = otpCompanyHint(portalUrl, userData)
 
-          if (code) {
-            if (applicationId) await persistLog(applicationId, "info", `Verification code obtained: ${code} — entering it and resubmitting.`)
+          // ─── Each rejected code earns a FRESH one — so loop ───
+          //
+          // This used to be a single attempt: fetch a code, type it, click
+          // Submit once, and whatever happened next was the run's fate. That is
+          // one attempt too few, because a 428 on the resubmit is not a dead
+          // end — it is the portal issuing a new code and asking again. A live
+          // campaign lost four Greenhouse applications here, every one of them
+          // ending on "11 validation error(s) after Submit" with nothing in the
+          // log pointing at the code, because the run had typed a code that
+          // belonged to a DIFFERENT application running at the same time and
+          // then had no way to recover from it.
+          //
+          // The cutoff is what makes retrying safe rather than circular: each
+          // attempt only accepts mail that arrived after the submit that asked
+          // for it, so a retry can never re-read the code it has just spent.
+          let codeAccepted = false
+          for (let attempt = 1; attempt <= 3 && !codeAccepted; attempt++) {
+            // Anchored a little before the click so a fast portal that mails the
+            // code while the request is still in flight is not filtered out.
+            const requestedAt = Date.now() - 20_000
+
+            // 150s. The mail arrived in 6s on a good run, but this is the one wait
+            // where giving up early is unrecoverable: the portal has ALREADY
+            // accepted the application and issued a code, so abandoning here means
+            // a submission that exists on their side and never completed on ours.
+            // The session timeout above is sized to outlast this.
+            let code = await fetchOtpViaApi(applicationId || "", otpAddress, 150000, {
+              sinceMs: requestedAt,
+              company: companyHint,
+            })
+            if (!code) {
+              if (applicationId) await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
+              code = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId || "", otpAddress, applicationId)
+            }
+
+            if (!code) {
+              captchaUnresolved = true
+              if (applicationId) {
+                await persistLog(applicationId, "error",
+                  `Portal asked for an emailed code and none arrived for ${otpAddress}` +
+                  `${companyHint ? ` matching "${companyHint}"` : ""} (attempt ${attempt}). The application is filled but unsubmitted.`)
+              }
+              break
+            }
+
+            if (applicationId) await persistLog(applicationId, "info", `Verification code obtained: ${code} — entering it and resubmitting (attempt ${attempt}).`)
             const typed = await enterVerificationCode(kernelClient, sessionId, code, applicationId)
             if (!typed.entered) {
               // Only now is the model worth the round trip: the deterministic
@@ -7438,14 +7524,12 @@ return await page.evaluate(async () => {
             await new Promise(r => setTimeout(r, 2000))
             const retry = await clickSubmitButton(kernelClient, sessionId, applicationId)
             submitClicked = retry.clicked || submitClicked
+            clickRes.bodyText = retry.bodyText || clickRes.bodyText
+            codeAccepted = retry.submitStatus !== 428
             if (applicationId) {
-              await persistLog(applicationId, "info", `Resubmitted after entering the code (status ${retry.submitStatus ?? "n/a"})`)
-            }
-          } else {
-            captchaUnresolved = true
-            if (applicationId) {
-              await persistLog(applicationId, "error",
-                `Portal asked for an emailed code and none arrived for ${otpAddress}. The application is filled but unsubmitted.`)
+              await persistLog(applicationId, codeAccepted ? "info" : "warn",
+                `Resubmitted after entering the code (status ${retry.submitStatus ?? "n/a"})` +
+                (codeAccepted ? "" : ` — the portal refused it and issued a new one; fetching that instead.`))
             }
           }
         }
@@ -7455,9 +7539,10 @@ return await page.evaluate(async () => {
           // An anti-bot rejection is terminal for this run. Retrying the fill
           // loop can't fix it and re-submitting deepens the block.
           const postSubmitText = [clickRes.bodyText, ...(await readValidationErrors(kernelClient, sessionId))].join(" ")
-          if (detectAntiBotBlock(postSubmitText)) {
+          const antiBot = matchAntiBotBlock(postSubmitText)
+          if (antiBot) {
             const msg = "Portal rejected the submission as automated/spam. Not retrying — a resubmit would reinforce the block."
-            if (applicationId) await persistLog(applicationId, "error", `${msg} | portal said: ${String(clickRes.bodyText || "").slice(0, 200)}`)
+            if (applicationId) await persistLog(applicationId, "error", `${msg} | matched ${antiBot.pattern} | portal said: …${antiBot.excerpt}…`)
             if (onStep) onStep({ status: "error", log: msg, liveUrl })
             run?.fail("submit", msg)
             run?.validationErrors([String(clickRes.bodyText || "").replace(/\s+/g, " ").trim().slice(0, 300)])

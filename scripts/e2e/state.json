@@ -1,0 +1,556 @@
+{
+ "gh-commvault": {
+  "id": "gh-commvault",
+  "ats": "Greenhouse",
+  "company": "Commvault",
+  "url": "https://job-boards.greenhouse.io/commvault/jobs/5288186008",
+  "status": "submitted",
+  "attempts": 1,
+  "seconds": 134,
+  "exitCode": 0,
+  "result": {
+   "success": true,
+   "result": "thank you for applying",
+   "steps": 13,
+   "recordingUrl": "https://prod-yul-hypeman-4.kernel.sh:8443/browser/live/deDecf5lc82p",
+   "taskId": "ttety2h20ghmnmygfssjlb9a"
+  },
+  "log": "scripts/e2e/logs/gh-commvault.log",
+  "at": "2026-09-01T16:15:19.766Z"
+ },
+ "gh-robinhood": {
+  "id": "gh-robinhood",
+  "ats": "Greenhouse",
+  "company": "Robinhood",
+  "url": "https://job-boards.greenhouse.io/robinhood/jobs/8128738",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 181,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: 11 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: 11 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+   "steps": 25,
+   "recordingUrl": "https://proxy.yul-pedantic-hopper.onkernel.com:8443/browser/live/rLHkWADmYwBG",
+   "taskId": "rup3d6f6nqzsusnri633hdm2",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "The run failed without a recognized cause.",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-robinhood.log",
+  "at": "2026-09-01T16:16:06.253Z"
+ },
+ "gh-natera": {
+  "id": "gh-natera",
+  "ats": "Greenhouse",
+  "company": "Natera",
+  "url": "https://job-boards.greenhouse.io/natera/jobs/6134225004",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 196,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+   "steps": 26,
+   "recordingUrl": "https://proxy.jfk-focused-mirzakhani.onkernel.com:8443/browser/live/nVvoAIJD9LSt",
+   "taskId": "wu5f9xihcdzgmtt8hxxvbhqp",
+   "failure": {
+    "failureClass": "form_incomplete",
+    "rootCause": "Required field(s) could not be filled: Who is your most recent/current employer?, Title",
+    "suggestedAction": "Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-natera.log",
+  "at": "2026-09-01T16:16:21.467Z"
+ },
+ "gh-singlestore": {
+  "id": "gh-singlestore",
+  "ats": "Greenhouse",
+  "company": "SingleStore",
+  "url": "https://job-boards.greenhouse.io/singlestore/jobs/7793655",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 282,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: 1 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: 1 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+   "steps": 18,
+   "recordingUrl": "https://prod-jfk-hypeman-5.kernel.sh:8443/browser/live/gI8TudyvsTPe",
+   "taskId": "toxfzwts1ydznm86ri3v14ep",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "act \"Start date year\": ",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-singlestore.log",
+  "at": "2026-09-01T16:17:47.686Z"
+ },
+ "gh-affirm": {
+  "id": "gh-affirm",
+  "ats": "Greenhouse",
+  "company": "Affirm",
+  "url": "https://job-boards.greenhouse.io/affirm/jobs/7727322003",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 135,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Clicked Submit but no confirmation signal (inputs=18, urlMatch=false, textMatch=false) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Clicked Submit but no confirmation signal (inputs=18, urlMatch=false, textMatch=false) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+   "steps": 9,
+   "recordingUrl": "https://proxy.jfk-focused-mirzakhani.onkernel.com:8443/browser/live/nVvoAIJD9LSt",
+   "taskId": "wu5f9xihcdzgmtt8hxxvbhqp",
+   "failure": {
+    "failureClass": "form_incomplete",
+    "rootCause": "Required field(s) could not be filled: PhoneCountryPhone",
+    "suggestedAction": "Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-affirm.log",
+  "at": "2026-09-01T16:18:21.412Z"
+ },
+ "gh-launchdarkly": {
+  "id": "gh-launchdarkly",
+  "ats": "Greenhouse",
+  "company": "LaunchDarkly",
+  "url": "https://job-boards.greenhouse.io/launchdarkly/jobs/7767461003",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 284,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: 1 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: 1 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+   "steps": 26,
+   "recordingUrl": "https://prod-yul-hypeman-4.kernel.sh:8443/browser/live/deDecf5lc82p",
+   "taskId": "ttety2h20ghmnmygfssjlb9a",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "act \"Start date year\": ",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-launchdarkly.log",
+  "at": "2026-09-01T16:20:04.091Z"
+ },
+ "gh-lucid": {
+  "id": "gh-lucid",
+  "ats": "Greenhouse",
+  "company": "Lucid Software",
+  "url": "https://job-boards.greenhouse.io/lucidsoftware/jobs/5633294004",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 282,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: 11 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: 11 validation error(s) after Submit — form rejected | unknown: Inspect the run timeline and replay.",
+   "steps": 21,
+   "recordingUrl": "https://prod-yul-hypeman-4.kernel.sh:8443/browser/live/Sup7qokz9gAP",
+   "taskId": "yk62l03b4cbg5e3q74yfk51h",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "act \"Start date year\": ",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-lucid.log",
+  "at": "2026-09-01T16:21:03.790Z"
+ },
+ "gh-sigmoid": {
+  "id": "gh-sigmoid",
+  "ats": "Greenhouse",
+  "company": "Sigmoid",
+  "url": "https://job-boards.greenhouse.io/sigmoid/jobs/7916306002",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 218,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+   "steps": 21,
+   "recordingUrl": "https://prod-jfk-hypeman-5.kernel.sh:8443/browser/live/gI8TudyvsTPe",
+   "taskId": "toxfzwts1ydznm86ri3v14ep",
+   "failure": {
+    "failureClass": "form_incomplete",
+    "rootCause": "Required field(s) could not be filled: PhoneCountryPhone, Current Company",
+    "suggestedAction": "Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-sigmoid.log",
+  "at": "2026-09-01T16:21:25.569Z"
+ },
+ "gh-airtable": {
+  "id": "gh-airtable",
+  "ats": "Greenhouse",
+  "company": "Airtable",
+  "url": "https://job-boards.greenhouse.io/airtable/jobs/8124953002",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 84,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | form_incomplete: Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+   "steps": 6,
+   "recordingUrl": "https://prod-yul-hypeman-4.kernel.sh:8443/browser/live/deDecf5lc82p",
+   "taskId": "ttety2h20ghmnmygfssjlb9a",
+   "failure": {
+    "failureClass": "form_incomplete",
+    "rootCause": "Required field(s) could not be filled: Please share a few reasons why you’re excited to apply for this role at Airtable., Who is your current employer?",
+    "suggestedAction": "Add answers for these to the candidate's answer bank, or add a handler if the widget is unsupported.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-airtable.log",
+  "at": "2026-09-01T16:21:27.744Z"
+ },
+ "ah-supabase": {
+  "id": "ah-supabase",
+  "ats": "Ashby",
+  "company": "Supabase",
+  "url": "https://jobs.ashbyhq.com/supabase/c16bd707-29f2-46fb-8409-7270ff00978b",
+  "status": "submitted",
+  "attempts": 1,
+  "seconds": 90,
+  "exitCode": 0,
+  "result": {
+   "success": true,
+   "result": "Application submitted",
+   "steps": 6,
+   "recordingUrl": "https://proxy.yul-relaxed-banzai.onkernel.com:8443/browser/live/r1HkqsoLdhuG",
+   "taskId": "jeniifo6tfcvurgpwz91o8cf"
+  },
+  "log": "scripts/e2e/logs/ah-supabase.log",
+  "at": "2026-09-01T16:22:55.420Z"
+ },
+ "ah-cartesia": {
+  "id": "ah-cartesia",
+  "ats": "Ashby",
+  "company": "Cartesia",
+  "url": "https://jobs.ashbyhq.com/cartesia/84231d95-3bf2-480a-ab2b-fd958f97cf0b",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 95,
+  "exitCode": 0,
+  "reason": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+  "result": {
+   "success": false,
+   "error": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+   "steps": 6,
+   "recordingUrl": "https://prod-yul-hypeman-6.kernel.sh:8443/browser/live/LLU9KoFuBNfA",
+   "taskId": "t2nuxvq0cqjlztcu0hhrmepr",
+   "failure": {
+    "failureClass": "anti_bot",
+    "rootCause": "The portal rejected the submission as automated.",
+    "suggestedAction": "Do not retry from this IP. Rotate the proxy pool and consider slowing the fill pace for this portal.",
+    "permanent": true,
+    "portalFault": true
+   }
+  },
+  "log": "scripts/e2e/logs/ah-cartesia.log",
+  "at": "2026-09-01T16:23:03.036Z"
+ },
+ "ah-perplexity": {
+  "id": "ah-perplexity",
+  "ats": "Ashby",
+  "company": "Perplexity",
+  "url": "https://jobs.ashbyhq.com/perplexity/9246cf02-26fd-4ae8-90c5-639c6e85e9e2",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 128,
+  "exitCode": 0,
+  "reason": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+  "result": {
+   "success": false,
+   "error": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+   "steps": 9,
+   "recordingUrl": "https://prod-jfk-hypeman-6.kernel.sh:8443/browser/live/Mtk3AKnySEAj",
+   "taskId": "mf8phr60dgadaerr5h73teyh",
+   "failure": {
+    "failureClass": "anti_bot",
+    "rootCause": "The portal rejected the submission as automated.",
+    "suggestedAction": "Do not retry from this IP. Rotate the proxy pool and consider slowing the fill pace for this portal.",
+    "permanent": true,
+    "portalFault": true
+   }
+  },
+  "log": "scripts/e2e/logs/ah-perplexity.log",
+  "at": "2026-09-01T16:23:12.089Z"
+ },
+ "gh-twitch": {
+  "id": "gh-twitch",
+  "ats": "Greenhouse",
+  "company": "Twitch",
+  "url": "https://job-boards.greenhouse.io/twitch/jobs/8625665002",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 297,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | validation: Check the answer bank entries for those fields; the expected format probably differs.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | validation: Check the answer bank entries for those fields; the expected format probably differs.",
+   "steps": 34,
+   "recordingUrl": "https://proxy.jfk-focused-mirzakhani.onkernel.com:8443/browser/live/nVvoAIJD9LSt",
+   "taskId": "wu5f9xihcdzgmtt8hxxvbhqp",
+   "failure": {
+    "failureClass": "validation",
+    "rootCause": "The form rejected our values: End date year",
+    "suggestedAction": "Check the answer bank entries for those fields; the expected format probably differs.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/gh-twitch.log",
+  "at": "2026-09-01T16:23:18.167Z"
+ },
+ "ah-uipath": {
+  "id": "ah-uipath",
+  "ats": "Ashby",
+  "company": "UiPath",
+  "url": "https://jobs.ashbyhq.com/uipath/aff7bb82-cfa5-4eb3-a91f-2e784dd9dbdc",
+  "status": "submitted",
+  "attempts": 1,
+  "seconds": 95,
+  "exitCode": 0,
+  "result": {
+   "success": true,
+   "result": "Application submitted",
+   "steps": 8,
+   "recordingUrl": "https://prod-jfk-hypeman-9.kernel.sh:8443/browser/live/3BFGzKlwa3Pu",
+   "taskId": "mqumok91e89s8y60j6vvtpmm"
+  },
+  "log": "scripts/e2e/logs/ah-uipath.log",
+  "at": "2026-09-01T16:24:30.762Z"
+ },
+ "ah-plane": {
+  "id": "ah-plane",
+  "ats": "Ashby",
+  "company": "Plane",
+  "url": "https://jobs.ashbyhq.com/plane/0300310f-d5c8-41c5-aea4-732e54eddc8e",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 93,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | validation: Check the answer bank entries for those fields; the expected format probably differs.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | validation: Check the answer bank entries for those fields; the expected format probably differs.",
+   "steps": 7,
+   "recordingUrl": "https://prod-jfk-hypeman-3.kernel.sh:8443/browser/live/2qmccdugVUI3",
+   "taskId": "h7tlxffd74e0nkcoj5rqq58m",
+   "failure": {
+    "failureClass": "validation",
+    "rootCause": "The form rejected our values: Your form needs correctionsMissing entry for required field: How did you come to",
+    "suggestedAction": "Check the answer bank entries for those fields; the expected format probably differs.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/ah-plane.log",
+  "at": "2026-09-01T16:24:36.287Z"
+ },
+ "ah-linear": {
+  "id": "ah-linear",
+  "ats": "Ashby",
+  "company": "Linear",
+  "url": "https://jobs.ashbyhq.com/linear/62a4524c-75da-499e-b150-7f68ce9f2da3",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 90,
+  "exitCode": 0,
+  "reason": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+  "result": {
+   "success": false,
+   "error": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+   "steps": 5,
+   "recordingUrl": "https://prod-jfk-hypeman-10.kernel.sh:8443/browser/live/HWqftO8o8kbq",
+   "taskId": "ed8u125b9ou6mhnzzqz2owuw",
+   "failure": {
+    "failureClass": "anti_bot",
+    "rootCause": "The portal rejected the submission as automated.",
+    "suggestedAction": "Do not retry from this IP. Rotate the proxy pool and consider slowing the fill pace for this portal.",
+    "permanent": true,
+    "portalFault": true
+   }
+  },
+  "log": "scripts/e2e/logs/ah-linear.log",
+  "at": "2026-09-01T16:24:48.595Z"
+ },
+ "ah-sentry": {
+  "id": "ah-sentry",
+  "ats": "Ashby",
+  "company": "Sentry",
+  "url": "https://jobs.ashbyhq.com/sentry/889f98a2-07dd-4e7c-9682-3f137c57dc88",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 97,
+  "exitCode": 0,
+  "reason": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+  "result": {
+   "success": false,
+   "error": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+   "steps": 8,
+   "recordingUrl": "https://prod-yul-hypeman-4.kernel.sh:8443/browser/live/zyZQ3EI1YEXL",
+   "taskId": "iwwf98gl9krz88awslkbejuf",
+   "failure": {
+    "failureClass": "anti_bot",
+    "rootCause": "The portal rejected the submission as automated.",
+    "suggestedAction": "Do not retry from this IP. Rotate the proxy pool and consider slowing the fill pace for this portal.",
+    "permanent": true,
+    "portalFault": true
+   }
+  },
+  "log": "scripts/e2e/logs/ah-sentry.log",
+  "at": "2026-09-01T16:24:49.492Z"
+ },
+ "ah-lovable": {
+  "id": "ah-lovable",
+  "ats": "Ashby",
+  "company": "Lovable",
+  "url": "https://jobs.ashbyhq.com/lovable/581951b9-537e-49d5-89fb-dd74cdf3256c",
+  "status": "submitted",
+  "attempts": 1,
+  "seconds": 88,
+  "exitCode": 0,
+  "result": {
+   "success": true,
+   "result": "Application submitted",
+   "steps": 11,
+   "recordingUrl": "https://proxy.jfk-confident-ardinghelli.onkernel.com:8443/browser/live/rLdKzyzoYVay",
+   "taskId": "e57tjn3bdbwzqhjwd2kd39nr"
+  },
+  "log": "scripts/e2e/logs/ah-lovable.log",
+  "at": "2026-09-01T16:25:59.047Z"
+ },
+ "sr-avery": {
+  "id": "sr-avery",
+  "ats": "SmartRecruiters",
+  "company": "Avery Dennison",
+  "url": "https://api.smartrecruiters.com/v1/companies/AveryDennison/postings/744000146766479",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 99,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | unknown: Inspect the run timeline and replay.",
+   "steps": 0,
+   "recordingUrl": "https://proxy.yul-zealous-edison.onkernel.com:8443/browser/live/bv182Hl2xMtr",
+   "taskId": "qnysjfl00ubjl1usnm1hmy9o",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "The run failed without a recognized cause.",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/sr-avery.log",
+  "at": "2026-09-01T16:26:28.184Z"
+ },
+ "ah-workos": {
+  "id": "ah-workos",
+  "ats": "Ashby",
+  "company": "WorkOS",
+  "url": "https://jobs.ashbyhq.com/workos/cff5a16f-fd1c-4b64-9b66-8a8321122375",
+  "status": "submitted",
+  "attempts": 1,
+  "seconds": 150,
+  "exitCode": 0,
+  "result": {
+   "success": true,
+   "result": "Application submitted",
+   "steps": 6,
+   "recordingUrl": "https://prod-jfk-hypeman-11.kernel.sh:8443/browser/live/HNhrbVFmHfgO",
+   "taskId": "uifyfll40qm4ra9m8l84tkq4"
+  },
+  "log": "scripts/e2e/logs/ah-workos.log",
+  "at": "2026-09-01T16:27:06.473Z"
+ },
+ "ah-radar": {
+  "id": "ah-radar",
+  "ats": "Ashby",
+  "company": "Radar",
+  "url": "https://jobs.ashbyhq.com/radar/981e7a5e-b93e-4cbf-9cc8-befe2ef70545",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 139,
+  "exitCode": 0,
+  "reason": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+  "result": {
+   "success": false,
+   "error": "Portal rejected the submission as automated/spam. The form was filled and submitted, but the ATS blocked it. Retrying from the same IP is likely to be blocked again.",
+   "steps": 7,
+   "recordingUrl": "https://proxy.yul-pensive-mestorf.onkernel.com:8443/browser/live/QUjyYdA4hR1h",
+   "taskId": "d5w8f7hhei4mt4jkcso7n5wx",
+   "failure": {
+    "failureClass": "anti_bot",
+    "rootCause": "The portal rejected the submission as automated.",
+    "suggestedAction": "Do not retry from this IP. Rotate the proxy pool and consider slowing the fill pace for this portal.",
+    "permanent": true,
+    "portalFault": true
+   }
+  },
+  "log": "scripts/e2e/logs/ah-radar.log",
+  "at": "2026-09-01T16:27:07.902Z"
+ },
+ "sr-bosch": {
+  "id": "sr-bosch",
+  "ats": "SmartRecruiters",
+  "company": "Bosch",
+  "url": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings/744000146554084",
+  "status": "failed",
+  "attempts": 1,
+  "seconds": 119,
+  "exitCode": 0,
+  "reason": "Submission not confirmed: Submit button was never clicked (form was incomplete) | unknown: Inspect the run timeline and replay.",
+  "result": {
+   "success": false,
+   "error": "Submission not confirmed: Submit button was never clicked (form was incomplete) | unknown: Inspect the run timeline and replay.",
+   "steps": 0,
+   "recordingUrl": "https://prod-jfk-hypeman-8.kernel.sh:8443/browser/live/QIh2Y3h6l3U5",
+   "taskId": "ijfnh52i6uwcxhtro7g5iazv",
+   "failure": {
+    "failureClass": "unknown",
+    "rootCause": "The run failed without a recognized cause.",
+    "suggestedAction": "Inspect the run timeline and replay.",
+    "permanent": false,
+    "portalFault": false
+   }
+  },
+  "log": "scripts/e2e/logs/sr-bosch.log",
+  "at": "2026-09-01T16:27:57.735Z"
+ }
+}

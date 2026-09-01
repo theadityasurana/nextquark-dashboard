@@ -115,3 +115,155 @@ describe("isOptionNotice", () => {
     expect(isOptionNotice("IIT Delhi", "select__option select__option--is-focused")).toBe(false)
   })
 })
+
+// ─── Shadow DOM ───
+//
+// SmartRecruiters (Avery Dennison), 2026-09-01: a real browser reported ONE
+// control in the light DOM on a fully rendered application form. The other
+// fifteen — every required one among them — sat inside `spl-*` web components,
+// behind 1,814 open shadow roots that document.querySelectorAll cannot cross.
+// Three earlier runs read that inventory as "the form never renders".
+//
+// The suite runs on `environment: "node"`, so there is no DOM to test against
+// and adding one is a dependency this cannot justify. The helpers are pure tree
+// walking, though, so a stub implementing exactly the surface they touch pins
+// the semantics that actually broke: descending THROUGH a host, stepping OUT of
+// a root via `.host`, and scoping an id lookup to the root that owns it.
+type StubEl = {
+  tag: string
+  attrs: Record<string, string>
+  children: StubEl[]
+  parentElement: StubEl | null
+  parentNode: any
+  shadowRoot: any
+  nodeType: number
+  matches(sel: string): boolean
+  querySelector(sel: string): StubEl | null
+  querySelectorAll(sel: string): StubEl[]
+  getRootNode(): any
+}
+
+/** Selectors are limited to what the helpers under test actually pass: "*", a tag, or #id. */
+function makeTree() {
+  const mk = (tag: string, attrs: Record<string, string> = {}): StubEl => {
+    const el: any = {
+      tag, attrs, children: [], parentElement: null, parentNode: null,
+      shadowRoot: null, nodeType: 1,
+      matches: (sel: string) =>
+        sel === "*" || sel === tag || (sel.startsWith("#") && attrs.id === sel.slice(1)),
+      querySelector: (sel: string) => el.querySelectorAll(sel)[0] ?? null,
+      querySelectorAll: (sel: string) => {
+        const out: StubEl[] = []
+        const walk = (n: any) => { for (const c of n.children) { if (c.matches(sel)) out.push(c); walk(c) } }
+        walk(el)
+        return out
+      },
+      getRootNode: () => {
+        let n: any = el
+        while (n.parentElement || (n.parentNode && !n.parentNode.host)) n = n.parentElement ?? n.parentNode
+        return n.parentNode?.host ? n.parentNode : root
+      },
+    }
+    return el
+  }
+  const attach = (parent: any, child: StubEl) => {
+    parent.children.push(child); child.parentElement = parent.nodeType === 1 ? parent : null; child.parentNode = parent
+  }
+  const mkRoot = (host: StubEl) => {
+    const r: any = {
+      host, children: [], nodeType: 11,
+      querySelector: (sel: string) => r.querySelectorAll(sel)[0] ?? null,
+      querySelectorAll: (sel: string) => {
+        const out: StubEl[] = []
+        const walk = (n: any) => { for (const c of n.children) { if (c.matches(sel)) out.push(c); walk(c) } }
+        walk(r)
+        return out
+      },
+    }
+    host.shadowRoot = r
+    return r
+  }
+
+  // document > spl-input(#shadow: div > input#first-name-input) — the exact
+  // shape the live probe found, with the label inside the same shadow root.
+  const root: any = {
+    children: [], nodeType: 9,
+    querySelector: (sel: string) => root.querySelectorAll(sel)[0] ?? null,
+    querySelectorAll: (sel: string) => {
+      const out: StubEl[] = []
+      const walk = (n: any) => { for (const c of n.children) { if (c.matches(sel)) out.push(c); walk(c) } }
+      walk(root)
+      return out
+    },
+  }
+  const form = mk("form")
+  attach(root, form)
+  const lightInput = mk("input", { id: "light" })
+  attach(form, lightInput)
+
+  const host = mk("spl-input")
+  attach(form, host)
+  const shadow = mkRoot(host)
+  const wrap = mk("div")
+  attach(shadow, wrap)
+  const deepInput = mk("input", { id: "first-name-input" })
+  attach(wrap, deepInput)
+  const deepLabel = mk("label", { for: "first-name-input" })
+  attach(wrap, deepLabel)
+
+  return { root, form, host, shadow, lightInput, deepInput, deepLabel }
+}
+
+function helpers(doc: any) {
+  const fn = new Function(
+    "document", "window", "getComputedStyle",
+    VM_DOM_HELPERS + "\nreturn { nqDeepAll, nqDeepOne, nqUp, nqClosest, nqRootOf };"
+  )
+  return fn(doc, { CSS: { escape: (s: string) => s } }, () => ({}))
+}
+
+describe("VM_DOM_HELPERS — shadow piercing", () => {
+  it("finds controls the light DOM cannot see", () => {
+    const t = makeTree()
+    const h = helpers(t.root)
+    // What the old code did — and why three runs reported an empty form.
+    expect(t.root.querySelectorAll("input")).toHaveLength(1)
+    expect(h.nqDeepAll("input")).toHaveLength(2)
+    expect(h.nqDeepAll("input")).toContain(t.deepInput)
+  })
+
+  it("returns each element once even though roots are walked twice over", () => {
+    const t = makeTree()
+    const h = helpers(t.root)
+    const ids = h.nqDeepAll("input").map((e: any) => e.attrs.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it("walks out of a shadow root through its host", () => {
+    const t = makeTree()
+    const h = helpers(t.root)
+    // parentElement alone stops at the root boundary — this is the step that
+    // made every wrapper/label walk terminate inside the component.
+    expect(t.deepInput.parentElement?.parentElement).toBe(null)
+    expect(h.nqUp(h.nqUp(t.deepInput))).toBe(t.host)
+    expect(h.nqClosest(t.deepInput, "form")).toBe(t.form)
+  })
+
+  it("scopes an id lookup to the root that owns it", () => {
+    const t = makeTree()
+    const h = helpers(t.root)
+    // The label names the field, but only from inside the shadow root: the id
+    // is not addressable from the document at all.
+    expect(t.root.querySelector("#first-name-input")).toBe(null)
+    expect(h.nqRootOf(t.deepInput)).toBe(t.shadow)
+    expect(h.nqRootOf(t.deepInput).querySelector("label")).toBe(t.deepLabel)
+    expect(h.nqRootOf(t.lightInput)).toBe(t.root)
+  })
+
+  it("still finds light-DOM controls, and prefers a direct hit", () => {
+    const t = makeTree()
+    const h = helpers(t.root)
+    expect(h.nqDeepOne("input")).toBe(t.lightInput)
+    expect(h.nqDeepOne("input", t.shadow)).toBe(t.deepInput)
+  })
+})

@@ -1,0 +1,29 @@
+[
+ { "id": "gh-natera",       "ats": "Greenhouse",      "company": "Natera",          "url": "https://job-boards.greenhouse.io/natera/jobs/6134225004" },
+ { "id": "gh-robinhood",    "ats": "Greenhouse",      "company": "Robinhood",       "url": "https://job-boards.greenhouse.io/robinhood/jobs/8128738" },
+ { "id": "gh-commvault",    "ats": "Greenhouse",      "company": "Commvault",       "url": "https://job-boards.greenhouse.io/commvault/jobs/5288186008" },
+ { "id": "gh-singlestore",  "ats": "Greenhouse",      "company": "SingleStore",     "url": "https://job-boards.greenhouse.io/singlestore/jobs/7793655" },
+ { "id": "gh-launchdarkly", "ats": "Greenhouse",      "company": "LaunchDarkly",    "url": "https://job-boards.greenhouse.io/launchdarkly/jobs/7767461003" },
+ { "id": "gh-affirm",       "ats": "Greenhouse",      "company": "Affirm",          "url": "https://job-boards.greenhouse.io/affirm/jobs/7727322003" },
+ { "id": "gh-lucid",        "ats": "Greenhouse",      "company": "Lucid Software",  "url": "https://job-boards.greenhouse.io/lucidsoftware/jobs/5633294004" },
+ { "id": "gh-sigmoid",      "ats": "Greenhouse",      "company": "Sigmoid",         "url": "https://job-boards.greenhouse.io/sigmoid/jobs/7916306002" },
+ { "id": "gh-twitch",       "ats": "Greenhouse",      "company": "Twitch",          "url": "https://job-boards.greenhouse.io/twitch/jobs/8625665002" },
+ { "id": "gh-airtable",     "ats": "Greenhouse",      "company": "Airtable",        "url": "https://job-boards.greenhouse.io/airtable/jobs/8124953002" },
+
+ { "id": "ah-perplexity",   "ats": "Ashby",           "company": "Perplexity",      "url": "https://jobs.ashbyhq.com/perplexity/9246cf02-26fd-4ae8-90c5-639c6e85e9e2" },
+ { "id": "ah-supabase",     "ats": "Ashby",           "company": "Supabase",        "url": "https://jobs.ashbyhq.com/supabase/c16bd707-29f2-46fb-8409-7270ff00978b" },
+ { "id": "ah-cartesia",     "ats": "Ashby",           "company": "Cartesia",        "url": "https://jobs.ashbyhq.com/cartesia/84231d95-3bf2-480a-ab2b-fd958f97cf0b" },
+ { "id": "ah-uipath",       "ats": "Ashby",           "company": "UiPath",          "url": "https://jobs.ashbyhq.com/uipath/aff7bb82-cfa5-4eb3-a91f-2e784dd9dbdc" },
+ { "id": "ah-plane",        "ats": "Ashby",           "company": "Plane",           "url": "https://jobs.ashbyhq.com/plane/0300310f-d5c8-41c5-aea4-732e54eddc8e" },
+ { "id": "ah-sentry",       "ats": "Ashby",           "company": "Sentry",          "url": "https://jobs.ashbyhq.com/sentry/889f98a2-07dd-4e7c-9682-3f137c57dc88" },
+ { "id": "ah-linear",       "ats": "Ashby",           "company": "Linear",          "url": "https://jobs.ashbyhq.com/linear/62a4524c-75da-499e-b150-7f68ce9f2da3" },
+ { "id": "ah-lovable",      "ats": "Ashby",           "company": "Lovable",         "url": "https://jobs.ashbyhq.com/lovable/581951b9-537e-49d5-89fb-dd74cdf3256c" },
+ { "id": "ah-workos",       "ats": "Ashby",           "company": "WorkOS",          "url": "https://jobs.ashbyhq.com/workos/cff5a16f-fd1c-4b64-9b66-8a8321122375" },
+ { "id": "ah-radar",        "ats": "Ashby",           "company": "Radar",           "url": "https://jobs.ashbyhq.com/radar/981e7a5e-b93e-4cbf-9cc8-befe2ef70545" },
+
+ { "id": "sr-avery",        "ats": "SmartRecruiters", "company": "Avery Dennison",  "url": "https://api.smartrecruiters.com/v1/companies/AveryDennison/postings/744000146766479" },
+ { "id": "sr-bosch",        "ats": "SmartRecruiters", "company": "Bosch",           "url": "https://api.smartrecruiters.com/v1/companies/BoschGroup/postings/744000146554084" },
+ { "id": "sr-continental",  "ats": "SmartRecruiters", "company": "Continental",     "url": "https://api.smartrecruiters.com/v1/companies/Continental/postings/744000146705470" },
+ { "id": "sr-llnl",         "ats": "SmartRecruiters", "company": "LLNL",            "url": "https://api.smartrecruiters.com/v1/companies/LLNL/postings/3743990014978669" },
+ { "id": "sr-wdc",          "ats": "SmartRecruiters", "company": "Western Digital", "url": "https://api.smartrecruiters.com/v1/companies/WesternDigital/postings/744000146553810" }
+]

@@ -332,6 +332,43 @@ interface IdentityRule {
   shapes: WidgetShape[]
 }
 
+/**
+ * The role a candidate holds now, or held most recently.
+ *
+ * "Who is your most recent/current employer?" and "Title" are stock screener
+ * questions, and both used to read a flat `currentCompany` / `currentTitle` on
+ * userData that nothing populates — the queue builds userData from the profile,
+ * and the profile keeps work history as an `experience` array. So a candidate
+ * with a full CV on file answered "profile has no currentCompany", the submit
+ * gate refused to press the button, and a Natera application was abandoned with
+ * two blank fields whose answers were sitting in `experienceEntries[0]`.
+ *
+ * The flat fields still win when they are set — an explicitly stated current
+ * employer beats one inferred from dates.
+ */
+function currentRole(u: any): { company: string; title: string } {
+  const flat = {
+    company: String(u?.currentCompany || u?.currentEmployer || "").trim(),
+    title: String(u?.currentTitle || u?.jobTitle || "").trim(),
+  }
+  if (flat.company && flat.title) return flat
+
+  const entries: any[] = Array.isArray(u?.experienceEntries) ? u.experienceEntries
+    : Array.isArray(u?.experience) ? u.experience : []
+  // A role flagged as current is authoritative; otherwise the latest end date,
+  // and a still-running role sorts above any that has ended.
+  const year = (e: any) => (e?.isCurrent || e?.is_current || !e?.endDate) ? 9999
+    : Number(String(e?.endDate || "").match(/\d{4}/)?.[0] || 0)
+  const best = entries
+    .filter((e) => e && (e.company || e.title))
+    .sort((a, b) => year(b) - year(a))[0]
+
+  return {
+    company: flat.company || String(best?.company || best?.employer || best?.organization || "").trim(),
+    title: flat.title || String(best?.title || best?.role || best?.position || "").trim(),
+  }
+}
+
 const IDENTITY: IdentityRule[] = [
   {
     id: "firstName",
@@ -384,13 +421,13 @@ const IDENTITY: IdentityRule[] = [
   {
     id: "currentCompany",
     re: /\b(current|present|most recent)\s+(employer|company|organi[sz]ation)\b|^(?:\*\s*)?(company|employer|organi[sz]ation)\s*\*?$/i,
-    get: (u) => u.currentCompany || u.currentEmployer || "",
+    get: (u) => currentRole(u).company,
     shapes: ["text", "unknown"],
   },
   {
     id: "currentTitle",
     re: /\b(current|present|most recent)\s+(job\s*)?title\b|^(?:\*\s*)?(job\s*)?title\s*\*?$/i,
-    get: (u) => u.currentTitle || u.jobTitle || "",
+    get: (u) => currentRole(u).title,
     shapes: ["text", "unknown"],
   },
   {

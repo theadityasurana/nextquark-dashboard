@@ -62,7 +62,104 @@ export function isAnswerButtonLabel(text: string): boolean {
   return !!t && t.length <= 40 && !NQ_ACTION_BUTTON_RE.test(t) && !NQ_CHROME_BUTTON_RE.test(t)
 }
 
-export const VM_DOM_HELPERS = `
+/**
+ * Shadow-piercing query helpers, as a JS source string.
+ *
+ * Split out of VM_DOM_HELPERS because the full prelude is injected into only
+ * four of the scripts this file serves, while the shadow problem reaches all of
+ * them: the submit button, the résumé file input, the validation-error reader
+ * and the post-submit check are each their own small evaluate block, and on a
+ * web-component portal every one of them queries a document that appears empty.
+ * Same source, injected wherever it is needed.
+ */
+export const VM_DEEP_QUERY = `
+/**
+ * ─── Shadow DOM ───
+ *
+ * Every query below used to be a plain document.querySelectorAll, which stops
+ * dead at a shadow boundary. That is fine until a portal builds its form out of
+ * web components, and then it is total: SmartRecruiters renders the whole
+ * application inside \\\`spl-*\\\` custom elements, so a live browser reported
+ * ONE control in the light DOM — 1,814 shadow hosts and 15 real inputs sat
+ * behind them, including every required field. Three runs concluded from that
+ * inventory that "the form never renders" and gave up on a form that was
+ * plainly on screen.
+ *
+ * The three helpers here are the whole fix. They are used everywhere a query
+ * used to be document-scoped:
+ *
+ *   nqDeepAll(sel, root)  — querySelectorAll that descends into shadow roots
+ *   nqDeepOne(sel, root)  — the first such match
+ *   nqUp(el)              — parentElement, stepping out to the HOST at a
+ *                           shadow boundary, so closest()-style walks that used
+ *                           to stop inside a component keep going
+ *   nqClosest(el, sel)    — closest() across those boundaries
+ *
+ * Only OPEN shadow roots are reachable; a closed root is invisible to any
+ * script, ours included, and nothing can be done about that from here.
+ */
+function nqDeepAll(sel, root) {
+  const out = [];
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+    let list = [];
+    try { list = Array.prototype.slice.call(node.querySelectorAll(sel)); } catch { list = []; }
+    for (const el of list) out.push(el);
+    let all = [];
+    try { all = Array.prototype.slice.call(node.querySelectorAll('*')); } catch { all = []; }
+    for (const el of all) if (el.shadowRoot) walk(el.shadowRoot);
+  };
+  walk(root || document);
+  return out;
+}
+
+function nqDeepOne(sel, root) {
+  const direct = (root || document).querySelector ? (root || document).querySelector(sel) : null;
+  if (direct) return direct;
+  const all = nqDeepAll(sel, root);
+  return all.length ? all[0] : null;
+}
+
+/** The next element up, crossing out of a shadow root via its host. */
+function nqUp(el) {
+  if (!el) return null;
+  if (el.parentElement) return el.parentElement;
+  const p = el.parentNode;
+  if (p && p.host) return p.host;
+  if (p && p.nodeType === 1) return p;
+  return null;
+}
+
+function nqClosest(el, sel) {
+  let n = el;
+  for (let i = 0; n && i < 40; i++) {
+    try { if (n.nodeType === 1 && n.matches && n.matches(sel)) return n; } catch {}
+    n = nqUp(n);
+  }
+  return null;
+}
+
+/**
+ * The root a control belongs to — its shadow root, or the document.
+ *
+ * This is what makes label[for=…] work inside a component: ids are scoped to
+ * their own root, so \\\`document.querySelector('label[for=x]')\\\` finds nothing
+ * for a control whose id lives in a shadow root. Every SmartRecruiters field
+ * names itself this way and no other — "First name*", "Email*", "Confirm your
+ * email*" are all reachable, but only from the right root.
+ */
+function nqRootOf(el) {
+  try {
+    const r = el && el.getRootNode ? el.getRootNode() : null;
+    return r && r.querySelector ? r : document;
+  } catch { return document; }
+}
+
+`
+
+export const VM_DOM_HELPERS = VM_DEEP_QUERY + `
 /**
  * Cities that were officially renamed but are still written both ways.
  *
@@ -125,7 +222,7 @@ function nqIsGhost(el) {
   if (el.getAttribute('tabindex') === '-1' && el.tagName === 'INPUT') return true;
   const s = getComputedStyle(el);
   if (s.opacity === '0' || s.pointerEvents === 'none') return true;
-  if (el.closest('[aria-hidden="true"]')) return true;
+  if (nqClosest(el, '[aria-hidden="true"]')) return true;
   return false;
 }
 
@@ -134,10 +231,10 @@ function nqIsGhost(el) {
  * résumé-autofill panes, cookie banners, site search.
  */
 function nqIsDecoy(el) {
-  return !!(el.closest && el.closest(
+  return !!nqClosest(el,
     '[class*="autofill"],[class*="auto-fill"],[class*="resume-parser"],[class*="cookie"],' +
     '[class*="consent-banner"],[role="search"],[class*="search-bar"],[class*="navbar"],[class*="header"]'
-  ));
+  );
 }
 
 /**
@@ -149,10 +246,10 @@ function nqIsDecoy(el) {
  * answered twice.
  */
 function nqInPopup(el) {
-  return !!(el.closest && el.closest(
+  return !!nqClosest(el,
     '[class*="datepicker"],[class*="date-picker"],[class*="calendar"],[role="dialog"],' +
     '[role="listbox"],[class*="menu-portal"],[class*="popover"],[class*="tooltip"]'
-  ));
+  );
 }
 
 /** Container text minus any option/menu content that happens to be rendered. */
@@ -182,7 +279,7 @@ function nqTextWithoutOptions(node) {
 const NQ_WRAPPER_SELECTOR = '[class*="field"],[class*="question"],[class*="form-group"],[class*="form-row"],[class*="entry"],fieldset,li';
 
 function nqWrapperOf(el) {
-  if (!el || !el.closest) return null;
+  if (!el) return null;
   // Walk OUTWARDS until we reach a container that actually holds a label.
   //
   // A single closest() call is not enough, because every ATS nests a
@@ -196,12 +293,12 @@ function nqWrapperOf(el) {
   // Stopping at the inner one returns an empty label, and the scanner then falls
   // through to the placeholder — which is how every Ashby question came back
   // named "Start typing…" or "Pick date…".
-  let node = el.parentElement;
+  let node = nqUp(el);
   let fallback = null;
-  for (let hops = 0; node && hops < 6; hops++, node = node.parentElement) {
+  for (let hops = 0; node && hops < 6; hops++, node = nqUp(node)) {
     if (!node.matches || !node.matches(NQ_WRAPPER_SELECTOR)) continue;
     if (!fallback) fallback = node;
-    const lbl = node.querySelector('label,legend,[class*="label"]');
+    const lbl = nqDeepOne('label,legend,[class*="label"]', node);
     if (lbl && nqTextWithoutOptions(lbl)) return node;
   }
   return fallback;
@@ -222,20 +319,24 @@ function nqLabelOf(el) {
   const by = el.getAttribute && el.getAttribute('aria-labelledby');
   if (by) {
     const t = nqClean(by.split(/\\s+/).map((id) => {
-      try { return (document.getElementById(id) || {}).textContent || ''; } catch { return ''; }
+      try { return (nqRootOf(el).getElementById ? (nqRootOf(el).getElementById(id) || {}) : (nqDeepOne('#' + nqEsc(id)) || {})).textContent || ''; } catch { return ''; }
     }).join(' '));
     if (t) return t.slice(0, 160);
   }
 
   if (el.id) {
     try {
-      const forLabel = document.querySelector('label[for="' + nqEsc(el.id) + '"]');
+      const sel = 'label[for="' + nqEsc(el.id) + '"]';
+      // Scoped to the control's OWN root first: an id inside a shadow root is
+      // invisible from the document, and this is the only route that names a
+      // SmartRecruiters field ("First name*", "Confirm your email*").
+      const forLabel = nqRootOf(el).querySelector(sel) || nqDeepOne(sel);
       const t = nqTextWithoutOptions(forLabel);
       if (t) return t.slice(0, 160);
     } catch {}
   }
 
-  const ancestorLabel = el.closest && el.closest('label');
+  const ancestorLabel = nqClosest(el, 'label');
   if (ancestorLabel) {
     const t = nqTextWithoutOptions(ancestorLabel);
     if (t) return t.slice(0, 160);
@@ -262,7 +363,7 @@ function nqLabelOf(el) {
 
   const wrapper = nqWrapperOf(el);
   if (wrapper) {
-    const t = nqTextWithoutOptions(wrapper.querySelector('label,legend,[class*="label"]'));
+    const t = nqTextWithoutOptions(nqDeepOne('label,legend,[class*="label"]', wrapper));
     if (t) return t.slice(0, 160);
   }
 
@@ -305,7 +406,7 @@ function nqKeyOf(el) {
   // single option got ticked. The shared name is the question's identity.
   const t = (el.getAttribute && el.getAttribute('type') || '').toLowerCase();
   if ((t === 'checkbox' || t === 'radio') && el.name) {
-    if (document.querySelectorAll('[name="' + nqEsc(el.name) + '"]').length > 1) {
+    if (nqDeepAll('[name="' + nqEsc(el.name) + '"]').length > 1) {
       return 'group:' + el.name;
     }
   }
@@ -317,7 +418,7 @@ function nqKeyOf(el) {
   const ktag = (el.tagName || '').toLowerCase();
   const krole = el.getAttribute && el.getAttribute('role');
   if (ktag === 'fieldset' || krole === 'radiogroup' || krole === 'group') {
-    const member = el.querySelector('input[type="radio"][name],input[type="checkbox"][name]');
+    const member = nqDeepOne('input[type="radio"][name],input[type="checkbox"][name]', el);
     if (member && member.name) return 'group:' + member.name;
   }
 
@@ -331,7 +432,7 @@ function nqKeyOf(el) {
   if (auto) return 'auto:' + auto;
   const lbl = nqNormLabel(nqLabelOf(el));
   if (lbl) return 'lbl:' + lbl;
-  const all = Array.from(document.querySelectorAll(NQ_CONTROL_SELECTOR));
+  const all = nqDeepAll(NQ_CONTROL_SELECTOR);
   return 'idx:' + all.indexOf(el);
 }
 
@@ -359,7 +460,7 @@ const NQ_CONTROL_SELECTOR =
  * while the inventory happily listed them. One definition, two callers.
  */
 function nqHasRealControl(c) {
-  return Array.from(c.querySelectorAll('input:not([type="hidden"]),select,textarea'))
+  return nqDeepAll('input:not([type="hidden"]),select,textarea', c)
     .some((el) => nqIsVisible(el) && el.getAttribute('aria-hidden') !== 'true' && el.tabIndex !== -1);
 }
 
@@ -367,23 +468,23 @@ function nqHasRealControl(c) {
 function nqResolveKey(key) {
   if (!key) return null;
   try {
-    if (key.startsWith('id:')) return document.getElementById(key.slice(3));
-    if (key.startsWith('name:')) return document.querySelector('[name="' + nqEsc(key.slice(5)) + '"]');
+    if (key.startsWith('id:')) return document.getElementById(key.slice(3)) || nqDeepOne('#' + nqEsc(key.slice(3)));
+    if (key.startsWith('name:')) return nqDeepOne('[name="' + nqEsc(key.slice(5)) + '"]');
     if (key.startsWith('data:')) {
       const v = key.slice(5);
-      return document.querySelector('[data-qa="' + nqEsc(v) + '"],[data-testid="' + nqEsc(v) + '"]');
+      return nqDeepOne('[data-qa="' + nqEsc(v) + '"],[data-testid="' + nqEsc(v) + '"]');
     }
-    if (key.startsWith('auto:')) return document.querySelector('[data-automation-id="' + nqEsc(key.slice(5)) + '"]');
+    if (key.startsWith('auto:')) return nqDeepOne('[data-automation-id="' + nqEsc(key.slice(5)) + '"]');
     if (key.startsWith('aria:')) {
       const v = key.slice(5);
-      return Array.from(document.querySelectorAll('[aria-label]'))
+      return nqDeepAll('[aria-label]')
         .find((e) => nqClean(e.getAttribute('aria-label')).slice(0, 60) === v) || null;
     }
     if (key.startsWith('lbl:')) {
       const want = key.slice(4);
       // Re-derive the label for each candidate and match on the normalised form,
       // so the lookup is exactly the inverse of how the key was built.
-      const all = Array.from(document.querySelectorAll(NQ_CONTROL_SELECTOR));
+      const all = nqDeepAll(NQ_CONTROL_SELECTOR);
       return all.find((e) => nqIsVisible(e) && !nqIsGhost(e) && nqNormLabel(nqLabelOf(e)) === want) || null;
     }
     if (key.startsWith('btn:')) {
@@ -396,7 +497,7 @@ function nqResolveKey(key) {
       // whose buttons are all invisible. The handler then reported
       // "no-option-buttons" while the visible question went unanswered.
       const want = key.slice(4);
-      const containers = Array.from(document.querySelectorAll('[class*="field"],[class*="question"],[class*="form-group"],fieldset'))
+      const containers = nqDeepAll('[class*="field"],[class*="question"],[class*="form-group"],fieldset')
         .filter((c) => nqIsVisible(c) && !nqIsDecoy(c) && !nqInPopup(c))
         .filter((c) => !c.querySelector('[class*="fieldEntry"],[class*="field-entry"]'))
         .filter((c) => !nqHasRealControl(c));
@@ -416,17 +517,17 @@ function nqResolveKey(key) {
       // with no-handler BEFORE it ever sees the group role: the entire question
       // fails on a decoy element the scan never considered a member.
       const name = key.slice(6);
-      const members = Array.from(document.querySelectorAll('[name="' + nqEsc(name) + '"]'))
+      const members = nqDeepAll('[name="' + nqEsc(name) + '"]')
         .filter((e) => (e.getAttribute('type') || '').toLowerCase() !== 'hidden');
       return members.find(nqIsVisible) || members[0] || null;
     }
     if (key.startsWith('ax:')) {
       // Left on the page by the accessibility scan precisely so its findings
       // remain addressable afterwards.
-      return document.querySelector('[data-nq-mmid="' + nqEsc(key.slice(3)) + '"]');
+      return nqDeepOne('[data-nq-mmid="' + nqEsc(key.slice(3)) + '"]');
     }
     if (key.startsWith('idx:')) {
-      const all = Array.from(document.querySelectorAll(NQ_CONTROL_SELECTOR));
+      const all = nqDeepAll(NQ_CONTROL_SELECTOR);
       return all[parseInt(key.slice(4), 10)] || null;
     }
   } catch {}
@@ -452,7 +553,7 @@ function nqResolveKey(key) {
  */
 function nqFindInputGroups() {
   const byName = new Map();
-  for (const el of document.querySelectorAll('input[type="checkbox"],input[type="radio"]')) {
+  for (const el of nqDeepAll('input[type="checkbox"],input[type="radio"]')) {
     if (!el.name) continue;
     if (nqIsGhost(el)) continue;
     if (!nqIsVisible(el) || nqIsDecoy(el) || nqInPopup(el)) continue;
@@ -474,7 +575,7 @@ function nqFindInputGroups() {
     const optionLabelOf = (m) => {
       if (m.id) {
         try {
-          const l = document.querySelector('label[for="' + nqEsc(m.id) + '"]');
+          const l = nqRootOf(m).querySelector('label[for="' + nqEsc(m.id) + '"]') || nqDeepOne('label[for="' + nqEsc(m.id) + '"]');
           if (l) return nqClean(l.textContent);
         } catch {}
       }
@@ -521,7 +622,7 @@ function nqButtonIsOn(b) {
 
 function nqFindButtonGroups() {
   const out = [];
-  const containers = Array.from(document.querySelectorAll('[class*="field"],[class*="question"],[class*="form-group"],fieldset'));
+  const containers = nqDeepAll('[class*="field"],[class*="question"],[class*="form-group"],fieldset');
   for (const c of containers) {
     if (!nqIsVisible(c) || nqIsDecoy(c) || nqInPopup(c)) continue;
     // Innermost container only — a section also matches [class*="field"].
@@ -531,7 +632,7 @@ function nqFindButtonGroups() {
     // sentinels, and why this test lives in one place.
     if (nqHasRealControl(c)) continue;
 
-    const buttons = Array.from(c.querySelectorAll('button,[role="button"],[role="radio"],[role="checkbox"]'))
+    const buttons = nqDeepAll('button,[role="button"],[role="radio"],[role="checkbox"]', c)
       .filter(nqIsVisible)
       // ─── A control that OPENS the answers is not one of the answers ───
       //

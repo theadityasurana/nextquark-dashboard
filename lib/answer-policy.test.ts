@@ -598,6 +598,48 @@ describe("Zscaler form", () => {
     expect(routeField(f({ label: "Current Company", kind: "text" }), USER)).toMatchObject({ value: USER.currentCompany })
     expect(routeField(f({ label: "Current Title", kind: "text" }), USER)).toMatchObject({ value: USER.currentTitle })
   })
+
+  // A Natera run refused to submit over two blank required fields whose answers
+  // were sitting in the candidate's work history: the queue builds userData from
+  // the profile, and the profile has no flat currentCompany/currentTitle.
+  it("derives current company and title from work history when the flat fields are absent", () => {
+    const u = {
+      ...USER,
+      currentCompany: undefined,
+      currentTitle: undefined,
+      jobTitle: "",
+      experienceEntries: [
+        { title: "Junior Developer", company: "Acme", startDate: "2021", endDate: "2023" },
+        { title: "Software Engineer", company: "Globex", startDate: "2023", isCurrent: true },
+      ],
+    }
+    expect(routeField(f({ label: "Who is your most recent/current employer?", kind: "text" }), u))
+      .toMatchObject({ value: "Globex" })
+    expect(routeField(f({ label: "Title", kind: "text" }), u)).toMatchObject({ value: "Software Engineer" })
+  })
+
+  it("falls back to the latest ended role when no entry is marked current", () => {
+    const u = {
+      ...USER,
+      currentCompany: undefined,
+      currentTitle: undefined,
+      jobTitle: "",
+      experienceEntries: [
+        { title: "Analyst", company: "Initech", endDate: "2024-06" },
+        { title: "Intern", company: "Umbrella", endDate: "2021-08" },
+      ],
+    }
+    expect(routeField(f({ label: "Current Company", kind: "text" }), u)).toMatchObject({ value: "Initech" })
+    expect(routeField(f({ label: "Current Title", kind: "text" }), u)).toMatchObject({ value: "Analyst" })
+  })
+
+  it("prefers an explicitly stated employer over one inferred from dates", () => {
+    const u = {
+      ...USER,
+      experienceEntries: [{ title: "Intern", company: "Umbrella", isCurrent: true }],
+    }
+    expect(routeField(f({ label: "Current Company", kind: "text" }), u)).toMatchObject({ value: USER.currentCompany })
+  })
 })
 
 describe("demographic questions", () => {
