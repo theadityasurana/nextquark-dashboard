@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { CONFIDENT_THRESHOLD, detectPortal, detectPortalScored } from "./portal-detector"
+import { describe, expect, it, vi } from "vitest"
+import { CONFIDENT_THRESHOLD, detectPortal, detectPortalScored, resolveApplyUrl } from "./portal-detector"
 
 describe("detectPortal (unchanged contract)", () => {
   it("still resolves the portals it always did", () => {
@@ -116,5 +116,55 @@ describe("SmartRecruiters apply URL", () => {
   it("leaves a real application URL alone", () => {
     const url = "https://jobs.smartrecruiters.com/LLNL/3743990013734826"
     expect(detectPortal(url)?.getApplyUrl(url)).toBe(url)
+  })
+})
+
+// ─── SmartRecruiters: the ad has the apply button, the "apply" URL does not ───
+//
+// Three live runs (Continental, ServiceNow, LLNL) landed on the API's applyUrl,
+// whose ?oga=true is the one-click UI: its only control is "Apply With Indeed",
+// which the run refuses to hijack, so every one stopped with zero fields.
+describe("resolveApplyUrl — SmartRecruiters", () => {
+  const posting = "https://jobs.smartrecruiters.com/Continental/744000146131888-sap-co-it-consultant"
+  const api = "https://api.smartrecruiters.com/v1/companies/Continental/postings/744000146131888"
+
+  it("resolves an API posting URL to the posting page, never the ?oga=true one-click UI", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        postingUrl: posting,
+        applyUrl: posting + "?oga=true",
+        uuid: "0713d536-a1ca-4bd5-b2cf-416e48d7d638",
+      }),
+    }))
+    vi.stubGlobal("fetch", fetchMock)
+    try {
+      const url = await resolveApplyUrl(api)
+      expect(url).toBe(posting)
+      expect(url).not.toContain("oga=true")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("falls back to the oneclick publication URL when the API omits postingUrl", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ uuid: "0713d536-a1ca-4bd5-b2cf-416e48d7d638" }),
+    })))
+    try {
+      expect(await resolveApplyUrl(api)).toContain("/oneclick-ui/company/Continental/publication/")
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("degrades to the string rewrite when the API cannot be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down") }))
+    try {
+      expect(await resolveApplyUrl(posting)).toBe(posting)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

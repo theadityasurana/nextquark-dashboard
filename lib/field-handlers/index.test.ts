@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { readFileSync } from "node:fs"
+import { VM_PRELUDE } from "./base"
 import {
   buildHandlerProgram,
   HANDLERS,
@@ -178,6 +178,22 @@ describe("buildHandlerProgram", () => {
     expect(program).toContain('"He said \\"hi\\""')
   })
 
+  // ─── The "No options" row that was picked as an answer ───
+  //
+  // Greenhouse scopes its menu with aria-controls, so readScoped queries
+  // `#<listbox> [class*="option"]` — which react-select's
+  // `select__menu-notice--no-options` node matches. On a live Graviton run the
+  // reader returned ["No options"], that single row replaced the real list
+  // (B.Tech / Dual), and the model was asked to choose from it.
+  it("teaches the combobox reader that a menu notice is not an option", () => {
+    const program = buildHandlerProgram(selectHandler(el({ role: "combobox" }))!, ctx)
+    expect(program).toContain("function isOptionNotice")
+    // Both readers — the scoped react-select one and the typing fallback.
+    expect(program.match(/isOptionNotice\(text, n\)/g)?.length).toBe(2)
+    // The rule itself travels with the program rather than being re-typed here.
+    expect(program).toMatch(/no \(options\?/)
+  })
+
   it("passes the portal-specific option selector through", () => {
     const handler = selectHandler(el({ role: "combobox" }))!
     const program = buildHandlerProgram(handler, {
@@ -232,14 +248,13 @@ describe("grouped inputs and pickers", () => {
 // country list. The yes/no guard ("No" must not select "Norway") shows the class
 // was known; it had simply never been generalised.
 describe("option matching", () => {
-  // bestIndex lives in the VM prelude, so it is evaluated the way the browser gets it.
+  // bestIndex lives in the VM prelude, so it is evaluated the way the browser
+  // gets it — the exported constant, not the file's text. Reading base.ts as
+  // source used to work only while the prelude interpolated nothing: the first
+  // `${…}` in it (the option-notice regexes) made this eval throw
+  // "Unexpected token '{'" and took the whole suite down with it.
   const bestIndex = (() => {
-    const src = readFileSync("lib/field-handlers/base.ts", "utf8").split("\n")
-    const s = src.findIndex((l) => l.includes("export const VM_PRELUDE"))
-    let e = s + 1
-    while (e < src.length && src[e].trim() !== "`") e++
-    const body = src.slice(s + 1, e).join("\n")
-    return new Function("return (()=>{" + body + "; return bestIndex })()")() as (w: string, o: string[]) => number
+    return new Function("return (()=>{" + VM_PRELUDE + "; return bestIndex })()")() as (w: string, o: string[]) => number
   })()
 
   const COUNTRIES = [

@@ -214,8 +214,8 @@ export function detectPortal(url: string): PortalPattern | null {
  * Its public API hands over both, so this asks rather than guesses:
  *
  *   GET /v1/companies/<Company>/postings/<id>
- *     → applyUrl:  …/<id>-<slug>?oga=true      ← the form
- *       postingUrl: …/<id>-<slug>              ← the advert
+ *     → postingUrl: …/<id>-<slug>              ← the page with the apply button
+ *       applyUrl:  …/<id>-<slug>?oga=true      ← one-click UI: third-party only
  *       uuid:       <publication uuid>         ← for the oneclick form
  *
  * Best-effort by design: on any failure it falls back to the string rewrite, so a
@@ -238,8 +238,20 @@ export async function resolveApplyUrl(rawUrl: string, timeoutMs = 8000): Promise
     )
     if (!res.ok) return fallback
     const j: any = await res.json()
-    // applyUrl carries ?oga=true, which is what opens the form rather than the ad.
-    if (typeof j?.applyUrl === "string" && j.applyUrl) return j.applyUrl
+    // ─── postingUrl is the page with the apply button; applyUrl is not ───
+    //
+    // This used to return applyUrl, on the stated belief that its ?oga=true
+    // "opens the form rather than the ad". It is the other way round: ?oga=true
+    // is SmartRecruiters' one-click UI, which offers social apply and nothing
+    // else. Three live runs — Continental, ServiceNow and LLNL — each landed
+    // there, found the single control "Apply With Indeed", correctly refused to
+    // hand the application to a third-party OAuth flow, and stopped with a form
+    // inventory of ZERO. The pipeline had navigated itself to the one page on
+    // the portal that has no form.
+    //
+    // The plain posting page carries an "I'm interested" button that opens the
+    // real application, which ensureApplyFormOpen clicks. So land there.
+    if (typeof j?.postingUrl === "string" && j.postingUrl) return j.postingUrl
     if (typeof j?.uuid === "string" && j.uuid) {
       return `https://jobs.smartrecruiters.com/oneclick-ui/company/${encodeURIComponent(m[1])}/publication/${j.uuid}?dcr_ci=${encodeURIComponent(m[1])}`
     }

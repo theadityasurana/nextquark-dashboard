@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { isAnswerButtonLabel, VM_DOM_HELPERS } from "./vm-dom"
+import { isAnswerButtonLabel, isOptionNotice, VM_DOM_HELPERS } from "./vm-dom"
 
 // ─── The button-group scanner, pinned to real forms ───
 //
@@ -77,5 +77,41 @@ describe("VM_DOM_HELPERS", () => {
     expect(VM_DOM_HELPERS).toContain("/^(clear|toggle|locate")
     expect(VM_DOM_HELPERS).toContain("/^(upload|add|remove")
     expect(VM_DOM_HELPERS).not.toContain("[object Object]")
+  })
+})
+
+// ─── The "No options" row that got submitted as an answer ───
+//
+// Graviton (Greenhouse), 2026-09-01: Degree and School/University Name were
+// both driven to the string "No options", the audit read them empty, the submit
+// gate trusted the handler anyway, and the portal rejected the application with
+// eight validation errors.
+describe("isOptionNotice", () => {
+  it("rejects react-select's empty and loading notices", () => {
+    for (const t of [
+      "No options", "no options", "No Options Found", "No results",
+      "No results found", "No matches", "Nothing found", "Loading...",
+      "Loading…", "Searching...", "Type to search", "Start typing…", "",
+    ]) {
+      expect([t, isOptionNotice(t)]).toEqual([t, true])
+    }
+  })
+
+  it("rejects a notice by class even when its text reads like an answer", () => {
+    expect(isOptionNotice("None", "select__menu-notice--no-options")).toBe(true)
+  })
+
+  it("keeps every genuine option", () => {
+    for (const t of [
+      "No", "Yes", "None", "B.Tech", "Dual", "IIT Delhi", "IIT Bombay",
+      "No options for relocation", "No prior experience", "Not applicable",
+      "Bachelor's Degree", "No, I do not require sponsorship",
+    ]) {
+      expect([t, isOptionNotice(t)]).toEqual([t, false])
+    }
+  })
+
+  it("does not treat an ordinary option class as furniture", () => {
+    expect(isOptionNotice("IIT Delhi", "select__option select__option--is-focused")).toBe(false)
   })
 })

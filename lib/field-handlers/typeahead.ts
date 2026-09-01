@@ -59,6 +59,7 @@ const readOptions = () => {
     if (!(r.width > 0 && r.height > 0) || s.display === 'none' || s.visibility === 'hidden') return;
     const text = (n.innerText || n.textContent || '').replace(/\\s+/g, ' ').trim();
     if (!text || text.length > 160 || seen.has(text)) return;
+    if (isOptionNotice(text, n)) return;
     seen.add(text);
     n.setAttribute(OPT_ATTR, String(out.length));
     out.push(text);
@@ -125,6 +126,9 @@ if (looksReactSelect) {
       if (!(r.width > 0 && r.height > 0)) return;
       const text = (n.innerText || n.textContent || '').replace(/\\s+/g, ' ').trim();
       if (!text || text.length > 160 || seen.has(text)) return;
+      // react-select's "No options" / "Loading..." notice carries a class that
+      // matches the [class*="option"] half of the scoped selector above.
+      if (isOptionNotice(text, n)) return;
       seen.add(text); n.setAttribute(OPT_ATTR, String(out.length)); out.push(text);
     });
     return out.slice(0, 60);

@@ -182,7 +182,7 @@ export async function POST(request: Request) {
 
               const processingTime = Date.now() - startTime
 
-              const maxAttempts = app.max_attempts || 2
+              const maxAttempts = app.max_attempts || 3
               // A permanent failure — a closed posting, an SSO wall, a page that
               // was never an application — will produce the identical outcome on
               // every retry. Re-queuing it burns a browser session to learn
@@ -241,7 +241,7 @@ export async function POST(request: Request) {
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : "Unknown error"
               
-              const maxAttempts = app.max_attempts || 2
+              const maxAttempts = app.max_attempts || 3
               const canRetry = currentAttempt < maxAttempts
               const finalStatus = canRetry ? 'pending' : 'failed'
 
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
 
     const processingTime = Date.now() - startTime
 
-    const maxAttempts = app.max_attempts || 2
+    const maxAttempts = app.max_attempts || 3
     const permanent = result.failure?.permanent === true
     const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
     const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')

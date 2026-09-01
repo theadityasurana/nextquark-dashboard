@@ -1,3 +1,5 @@
+import { NQ_OPTION_NOTICE_CLASS_RE, NQ_OPTION_NOTICE_RE } from "../vm-dom"
+
 /**
  * Field handler contract — the Strategy pattern, adapted for remote execution.
  *
@@ -109,6 +111,20 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 function normOpt(s) {
   return (s || '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// ─── A menu's "No options" row is not an option ───
+//
+// The two regexes are interpolated from lib/vm-dom.ts so the browser-side
+// readers and the unit tests in vm-dom.test.ts apply one definition. See the
+// comment on NQ_OPTION_NOTICE_RE for the run this cost.
+function isOptionNotice(text, node) {
+  const t = (text || '').replace(/\\s+/g, ' ').trim();
+  if (!t) return true;
+  if (${NQ_OPTION_NOTICE_RE}.test(t)) return true;
+  const c = node && node.className;
+  const cls = (c && typeof c === 'object' && 'baseVal' in c) ? c.baseVal : (c || '');
+  return ${NQ_OPTION_NOTICE_CLASS_RE}.test(String(cls));
 }
 
 function bestIndex(want, labels) {

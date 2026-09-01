@@ -577,3 +577,37 @@ function nqFindButtonGroups() {
   return out;
 }
 `
+
+/**
+ * A menu's empty/loading state, which is not an option.
+ *
+ * react-select renders "no results" as
+ *   <div class="select__menu-notice select__menu-notice--no-options">No options</div>
+ * and that class matches the `[class*="option"]` half of every option selector
+ * we use. Read as a real row it becomes the only thing the matcher can pick: a
+ * live Greenhouse run (Graviton, Degree + School/University Name) narrowed a
+ * combobox until it rendered "No options", threw away the real list it had
+ * already read, asked the model to choose from `["No options"]`, typed that
+ * string into the box, and submitted a form the portal rejected with eight
+ * validation errors.
+ *
+ * Anchored to the whole label so genuine answers survive: "No" is an answer,
+ * "No options for relocation" is an answer, "No options" is furniture.
+ */
+export const NQ_OPTION_NOTICE_RE =
+  /^(no (options?|results?|matches?|choices?|items?)( found| available)?|nothing found|no data|not found|loading[.\s…]*|searching[.\s…]*|please wait[.\s…]*|type to search|start typing[.\s…]*)$/i
+
+/** Classes a widget puts on that furniture. */
+export const NQ_OPTION_NOTICE_CLASS_RE = /menu-notice|no-options|nooptions|loading-indicator/i
+
+/**
+ * Should this rendered row be skipped when reading a widget's options?
+ *
+ * Exported and interpolated into the VM prelude so the browser-side readers and
+ * these unit tests apply one definition.
+ */
+export function isOptionNotice(text: string, className = ""): boolean {
+  const t = (text || "").replace(/\s+/g, " ").trim()
+  if (!t) return true
+  return NQ_OPTION_NOTICE_RE.test(t) || NQ_OPTION_NOTICE_CLASS_RE.test(className || "")
+}

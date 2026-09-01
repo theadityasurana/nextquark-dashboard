@@ -12,7 +12,7 @@ import { AnswerBankPanel } from "@/components/answer-bank-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   User as UserIcon, Heart, Shield, ExternalLink, FileText,
-  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw, Mail,
+  Globe, Briefcase, GraduationCap, Award, DollarSign, MapPin, Clock, Terminal, RotateCcw,
   Activity, ShieldCheck, MessagesSquare, Loader
 } from "lucide-react"
 
@@ -32,9 +32,7 @@ interface ApplicationDetailsProps {
   application: LiveApplicationQueue
   stats: ApplicationStats
   onStartApplication?: () => void
-  onSendRejection?: () => void
   isStreaming?: boolean
-  isSendingRejection?: boolean
   recordingUrl?: string | null
   /** False when all 3 concurrent slots are taken — disables Start with a clear reason */
   canStart?: boolean
@@ -45,9 +43,7 @@ export function ApplicationDetails({
   application, 
   stats, 
   onStartApplication,
-  onSendRejection,
   isStreaming = false,
-  isSendingRejection = false,
   recordingUrl = null,
   canStart = true,
   onStatusChange,
@@ -135,16 +131,6 @@ export function ApplicationDetails({
             title={!canStart ? 'All 3 browser slots are in use. Wait for one to finish.' : undefined}
           >
             {isStreaming ? 'Running…' : !canStart ? 'Slots full (3/3)' : 'Start Application'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-            onClick={onSendRejection}
-            disabled={isSendingRejection}
-          >
-            <Mail className="h-3 w-3" />
-            {isSendingRejection ? 'Sending...' : 'Send Rejection Email'}
           </Button>
           {application.attempt_count > 0 && (
             <Badge variant="outline" className="text-[10px] gap-1">

@@ -28,7 +28,7 @@ import { clearDispatchGate } from "./dispatch-gate"
 import { clearConcurrencyCache, fetchConcurrencyLimit } from "./kernel-limits"
 import { acquirePooledBrowser, isPoolable, releasePooledBrowser, type PooledBrowser } from "./browser-pool"
 import { buildCodeModePrompt, CODE_MODE_ENABLED, parseCodeReply, screenCode, verifyNoSideEffects } from "./code-mode"
-import { VM_DOM_HELPERS } from "./vm-dom"
+import { isOptionNotice, VM_DOM_HELPERS } from "./vm-dom"
 import { buildLlmChain, classifyLlmStatus, parseRetryDelaySeconds, refreshFreeModels, GEMINI_TEXT_MODELS, type LlmAttempt } from "./llm-models"
 import { routeField, validateAnswerForField, shapeOf, leastCommittalOption } from "./answer-policy"
 import { AnswerLedger, type Blocker } from "./answer-ledger"
@@ -1389,6 +1389,46 @@ function detectOtp(text: string): boolean {
  * alone produces false positives: a 6-character input could be a postcode, and
  * "verification code" appears in privacy policies.
  */
+/**
+ * The split code widget: N boxes, one character each.
+ *
+ * Greenhouse's post-submit verification renders six separate inputs with
+ * maxlength=1, and both halves of the OTP subsystem missed it. Detection asked
+ * for a maxlength between 4 and 8, which a one-character box can never satisfy;
+ * entry typed the whole code into a single ranked input, where a maxlength=1 box
+ * keeps only the first character. A live Graviton run showed the shape plainly —
+ * the page went from 14 inputs to 20 after Submit, with no validation errors and
+ * no confirmation — and the run reported "no confirmation signal" while six
+ * empty boxes waited for a code that had already been emailed.
+ *
+ * Grouped by shared parent (then grandparent, since each box is usually wrapped
+ * in its own div) so four unrelated one-character inputs elsewhere on a page
+ * cannot masquerade as a code widget. Callers still require matching page copy.
+ */
+const OTP_BOX_FINDER_JS = `
+function nqFindCodeBoxes(visibleInputs) {
+  const singles = visibleInputs.filter((el) => parseInt(el.getAttribute('maxlength') || '0', 10) === 1);
+  if (singles.length < 4) return null;
+  for (const depth of [1, 2]) {
+    const byParent = new Map();
+    for (const el of singles) {
+      let p = el;
+      for (let i = 0; i < depth && p && p.parentElement; i++) p = p.parentElement;
+      const key = p || document.body;
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key).push(el);
+    }
+    for (const group of byParent.values()) {
+      if (group.length >= 4 && group.length <= 10) {
+        // Left-to-right, so the code is typed in the order it is read.
+        return group.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      }
+    }
+  }
+  return null;
+}
+`
+
 async function detectOtpOnPage(
   kernelClient: InstanceType<typeof Kernel>,
   sessionId: string
@@ -1397,12 +1437,14 @@ async function detectOtpOnPage(
     const res = await kernelClient.browsers.playwright.execute(sessionId, {
       code: `
 return await page.evaluate(() => {
+${OTP_BOX_FINDER_JS}
   const isVisible = (el) => {
     const r = el.getBoundingClientRect();
     const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
   };
   const inputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+  const boxes = nqFindCodeBoxes(inputs);
   const codeInput = inputs.find(el => {
     const hay = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.placeholder || '') + ' ' + (el.getAttribute('autocomplete') || '')).toLowerCase();
     if (/\b(otp|one-?time|verification-?code|verificationcode|auth-?code|security-?code|passcode|mfa|2fa)\b/.test(hay)) return true;
@@ -1412,8 +1454,10 @@ return await page.evaluate(() => {
     return (el.inputMode === 'numeric' || el.type === 'tel') && max >= 4 && max <= 8;
   });
   return {
-    hasCodeInput: !!codeInput,
-    codeInputName: codeInput ? (codeInput.name || codeInput.id || codeInput.getAttribute('aria-label') || 'unnamed') : '',
+    hasCodeInput: !!codeInput || !!boxes,
+    codeInputName: codeInput
+      ? (codeInput.name || codeInput.id || codeInput.getAttribute('aria-label') || 'unnamed')
+      : (boxes ? boxes.length + ' single-character boxes' : ''),
     bodyText: document.body.innerText.slice(0, 4000),
   };
 });
@@ -3634,6 +3678,12 @@ const selectors = [
   'a:has-text("Apply Now")', 'button:has-text("Apply Now")',
   'a:has-text("Apply")', 'button:has-text("Apply")',
   '[role="button"]:has-text("Apply")',
+  // SmartRecruiters never says "Apply" on its posting page — the control that
+  // opens the form reads "I'm interested". Matched on the word alone so the
+  // straight and typographic apostrophes both hit. Last, so a real "Apply"
+  // button is always preferred where both exist.
+  'a:has-text("interested")', 'button:has-text("interested")',
+  '[role="button"]:has-text("interested")',
 ];
 
 // ─── Never hand the application to a third party ───
@@ -4178,7 +4228,17 @@ ${VM_DOM_HELPERS}
       handler: r.handler || handler.name,
       reason: r.reason || (vmError ? `threw: ${vmError.slice(0, 200)}` : "unknown"),
       picked: r.picked,
-      options: Array.isArray(r.options) ? r.options : undefined,
+      // ─── A widget's empty state is not one of its options ───
+      //
+      // The handlers filter these out of their own readers now, but this list
+      // is what the model is asked to choose from and what leastCommittalOption
+      // guesses from, so it is sanitised once more here — for handlers whose
+      // readers this filter has not reached, and for anything a portal invents
+      // next. A run that offers only furniture must report "no options", not
+      // hand "No options" to the model as a choice.
+      options: Array.isArray(r.options)
+        ? (r.options as string[]).filter(o => !isOptionNotice(o))
+        : undefined,
       needsModelChoice: !!r.needsModelChoice,
       resolvedLabel,
     }
@@ -4254,8 +4314,27 @@ ${VM_DOM_HELPERS}
   if (ariaState !== null) return ariaState === 'true';
   if (tag === 'SELECT') return !!(el.value || '').trim() && el.selectedIndex > 0;
 
+  // ─── In a picker, typed text is a QUERY, not an answer ───
+  //
+  // A combobox stores what you chose in a chip / single-value node or a hidden
+  // companion; what sits in the input is only what you typed to filter with.
+  // Accepting el.value here is the exact failure the typeahead handler clears
+  // its own box to avoid — and the act() fallback walked straight into it on a
+  // live Greenhouse run: the agent typed the whole degree string into Degree
+  // and School/University Name, this function reported both verified, the
+  // ledger settled them, and the settle then out-voted an auditForm that was
+  // reading the page correctly. The submit gate opened and the portal answered
+  // with eight validation errors.
+  //
+  // So for a picker, a committed selection must be found below. Only a plain
+  // input keeps the fast path.
+  const looksPicker = el.getAttribute('role') === 'combobox'
+    || !!el.getAttribute('aria-autocomplete')
+    || (!!el.getAttribute('aria-controls') && tag === 'INPUT')
+    || /combobox|autocomplete|typeahead|select__input/i.test(el.className || '');
+
   const v = (el.value || '').trim();
-  if (v && ['select...', 'select', '--', '-'].indexOf(v.toLowerCase()) === -1) return true;
+  if (!looksPicker && v && ['select...', 'select', '--', '-'].indexOf(v.toLowerCase()) === -1) return true;
 
   const wrap = el.closest('[class*="select"],[class*="combobox"],[class*="autocomplete"],[class*="control"],[class*="field"],[class*="question"]');
   if (wrap) {
@@ -4263,6 +4342,18 @@ ${VM_DOM_HELPERS}
     if (chosen && (chosen.textContent || '').trim()) return true;
     const hidden = wrap.querySelector('input[type="hidden"]');
     if (hidden && (hidden.value || '').trim()) return true;
+  }
+
+  // A picker with no commit machinery at all — no chip, no hidden companion, no
+  // placeholder node — is just a text box wearing role="combobox" (a datalist
+  // input, most autocompletes). There is nowhere else for its answer to live,
+  // so its value is the answer. Narrow on purpose: the moment a widget shows
+  // any of that machinery, the checks above are the authority.
+  if (looksPicker && v) {
+    const box = wrap || el.parentElement;
+    const machinery = box && box.querySelector(
+      '[class*="placeholder"],[class*="singleValue"],[class*="single-value"],[class*="multiValue"],[class*="multi-value"],input[type="hidden"]');
+    if (!machinery) return true;
   }
   return false;
 }, KEY);
@@ -4453,6 +4544,7 @@ async function enterVerificationCode(
     code: `
 const CODE = ${JSON.stringify(code)};
 return await page.evaluate(async (code) => {
+${OTP_BOX_FINDER_JS}
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const vis = (el) => {
     const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
@@ -4460,6 +4552,41 @@ return await page.evaluate(async (code) => {
   };
   const describe = (el) => [el.id, el.name, el.placeholder, el.getAttribute('aria-label')]
     .filter(Boolean).join(' | ').slice(0, 80) || '(unnamed)';
+  const setValue = (el, v) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (setter) setter.call(el, v); else el.value = v;
+  };
+
+  // ─── One box per character ───
+  //
+  // Tried before the ranked single-input path: these boxes carry no name, id or
+  // placeholder, so scoring gives them zero and the old code reported
+  // no-code-input-found on a widget that was plainly on screen. Each box is
+  // focused and typed into individually, which is also what the widget's own
+  // auto-advance handlers listen for.
+  const allVisible = Array.from(document.querySelectorAll('input')).filter(vis);
+  const boxes = nqFindCodeBoxes(allVisible);
+  if (boxes && code.length <= boxes.length) {
+    for (let i = 0; i < code.length; i++) {
+      const b = boxes[i];
+      b.scrollIntoView({ block: 'center' });
+      b.focus();
+      setValue(b, '');
+      b.dispatchEvent(new Event('input', { bubbles: true }));
+      b.dispatchEvent(new KeyboardEvent('keydown', { key: code[i], bubbles: true }));
+      setValue(b, code[i]);
+      b.dispatchEvent(new Event('input', { bubbles: true }));
+      b.dispatchEvent(new KeyboardEvent('keyup', { key: code[i], bubbles: true }));
+      b.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(60 + Math.random() * 80);
+    }
+    await sleep(300);
+    const typed = boxes.map((b) => (b.value || '').trim()).join('');
+    if (typed.toUpperCase() === code.toUpperCase()) {
+      return { entered: true, reason: 'split-code-boxes' };
+    }
+    return { entered: false, reason: 'split-code-boxes-did-not-hold', candidates: [typed] };
+  }
 
   const inputs = Array.from(document.querySelectorAll('input[type="text"],input[type="tel"],input[type="number"],input:not([type])'))
     .filter(vis).filter((el) => !el.value);
@@ -7252,10 +7379,35 @@ return await page.evaluate(async () => {
         // Forcing the OTP path on this status is what connects the two halves that
         // already worked: the mailbox has the mail, and extractOtp parses
         // Greenhouse's 8-character alphanumeric code correctly.
-        if (submitClicked && clickRes.submitStatus === 428) {
+        // ─── 428 is one way a portal asks for a code, not the only way ───
+        //
+        // submitStatus is only set when a POST comes back >= 400. Greenhouse's
+        // job-boards flow answered this submit without an error status and
+        // simply rendered its verification step in place: same URL, no
+        // validation errors, and six one-character code boxes where there had
+        // been none (the run's own numbers, 14 inputs before the click and 20
+        // after). The whole OTP subsystem below sat unreachable behind the 428,
+        // so the run gave up with "no confirmation signal" while the code was
+        // already in the mailbox.
+        //
+        // The page's own evidence is the more general signal, and it is the same
+        // check the pre-gate path already trusts — it just has to be asked AFTER
+        // the click, because before it there is nothing to find.
+        let wantsEmailCode = clickRes.submitStatus === 428
+        if (submitClicked && !wantsEmailCode && sessionId) {
+          const postSubmitOtp = await detectOtpOnPage(kernelClient, sessionId)
+          if (postSubmitOtp.present) {
+            wantsEmailCode = true
+            if (applicationId) {
+              await persistLog(applicationId, "info",
+                `A verification step appeared after Submit (${postSubmitOtp.evidence}) — treating it as an emailed code challenge.`)
+            }
+          }
+        }
+        if (submitClicked && wantsEmailCode) {
           if (applicationId) {
             await persistLog(applicationId, "info",
-              "Submit returned 428 Precondition Required — the portal wants an emailed verification code. Fetching it.")
+              `The portal wants an emailed verification code (${clickRes.submitStatus === 428 ? "submit returned 428 Precondition Required" : "a verification step appeared after Submit"}). Fetching it.`)
           }
           if (onStep) onStep({ status: "in_progress", log: "Verification code required — checking email...", liveUrl })
 
