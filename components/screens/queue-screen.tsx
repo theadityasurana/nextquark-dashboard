@@ -70,7 +70,7 @@ export function QueueScreen() {
   const [streamingApps, setStreamingApps] = useState<Set<string>>(new Set())
   // Active runs tray — minimizable floating cards at the bottom
   const [activeTray, setActiveTray] = useState<Array<{ app: LiveApplicationQueue; minimized: boolean }>>([])
-  const { prefs, setPrefs } = useUIPreferences()
+  const { prefs, setPrefs, loaded: prefsLoaded } = useUIPreferences()
   const autoStart = prefs.autoStart
   const premiumOnly = prefs.premiumOnly
   const maxConcurrent = prefs.maxConcurrent ?? 3
@@ -312,6 +312,7 @@ export function QueueScreen() {
   // current value at fire-time, not the value when the timer was created.
 
   useEffect(() => {
+    if (!prefsLoaded) return
     if (!autoStart) {
       // Turn off: cancel every pending timer immediately
       Object.values(autoStartTimersRef.current).forEach(clearTimeout)
@@ -349,7 +350,7 @@ export function QueueScreen() {
       }
     }
     // No cleanup return here — we manage timers imperatively above
-  }, [autoStart, applications, enqueueOrStart])
+  }, [autoStart, applications, enqueueOrStart, prefsLoaded])
 
   // ─── Client-side processing timeout ─────────────────────────────────────
   // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
