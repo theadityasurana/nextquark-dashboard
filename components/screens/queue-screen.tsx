@@ -142,11 +142,26 @@ export function QueueScreen() {
   // A ref so processNext always calls the latest startApplication without
   // creating a circular useCallback dependency.
   const startApplicationRef = useRef<(app: LiveApplicationQueue) => Promise<void>>(async () => {})
+  // Mirror of applications state readable synchronously inside callbacks
+  const applicationsRef = useRef<LiveApplicationQueue[]>([])
+  useEffect(() => { applicationsRef.current = applications }, [applications])
 
-  // processNext drains the local pending queue into available slots
+  // processNext: when a slot frees, pull the next eligible pending app from
+  // live DB state (applicationsRef) rather than a stale in-memory queue.
+  // Falls back to pendingQueueRef for apps enqueued before the last DB load.
   const processNext = useCallback(() => {
-    while (processingCountRef.current < maxConcurrentRef.current && pendingQueueRef.current.length > 0) {
-      const next = pendingQueueRef.current.shift()!
+    while (processingCountRef.current < maxConcurrentRef.current) {
+      // Prefer pendingQueueRef first (already-scheduled overflow)
+      let next = pendingQueueRef.current.shift()
+      if (!next) {
+        // Fall back to first eligible pending app from live state
+        next = applicationsRef.current.find(
+          a => a.status === 'pending'
+            && (!premiumOnlyRef.current || a.is_premium)
+            && !streamingAppsRef.current.has(a.id)
+        )
+        if (!next) break
+      }
       startApplicationRef.current(next)
     }
     setLocalQueueDepth(pendingQueueRef.current.length)
@@ -312,7 +327,6 @@ export function QueueScreen() {
   // current value at fire-time, not the value when the timer was created.
 
   useEffect(() => {
-    if (!prefsLoaded) return
     if (!autoStart) {
       // Turn off: cancel every pending timer immediately
       Object.values(autoStartTimersRef.current).forEach(clearTimeout)
@@ -350,7 +364,7 @@ export function QueueScreen() {
       }
     }
     // No cleanup return here — we manage timers imperatively above
-  }, [autoStart, applications, enqueueOrStart, prefsLoaded])
+  }, [autoStart, applications, enqueueOrStart])
 
   // ─── Client-side processing timeout ─────────────────────────────────────
   // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
@@ -433,6 +447,8 @@ export function QueueScreen() {
 
   // Pending apps that are eligible given the current premiumOnly toggle
   const eligiblePending = premiumOnly ? pending.filter(a => a.is_premium) : pending
+  // How many eligible pending apps are waiting for a slot (not yet streaming)
+  const waitingForSlot = eligiblePending.filter(a => !streamingApps.has(a.id)).length
 
   const filteredApps = applications.filter(app => {
     if (activeTab === "premium") { if (!app.is_premium) return false }
@@ -571,9 +587,9 @@ export function QueueScreen() {
                 <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs ${maxConcurrent} at a time — the rest wait in line.`} />
               </>
             )}
-            {localQueueDepth > 0 && (
+            {waitingForSlot > streamingApps.size && (
               <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
-                <span className="text-xs text-blue-500 font-medium">{localQueueDepth} waiting</span>
+                <span className="text-xs text-blue-500 font-medium">{waitingForSlot - streamingApps.size} waiting</span>
                 <InfoTip text="Applications queued locally, waiting for a concurrency slot to free up." />
               </div>
             )}
@@ -929,9 +945,8 @@ export function QueueScreen() {
                       ))}
                       <span className="text-[10px] text-muted-foreground ml-1">{streamingApps.size}/{maxConcurrent}</span>
                     </div>
-                    {/* Fix #10: show local queue backlog in tray */}
-                    {localQueueDepth > 0 && (
-                      <span className="text-[10px] text-blue-500">{localQueueDepth} more waiting…</span>
+                    {waitingForSlot > streamingApps.size && (
+                      <span className="text-[10px] text-blue-500">{waitingForSlot - streamingApps.size} more waiting…</span>
                     )}
                     {/* Open detail button */}
                     <button
