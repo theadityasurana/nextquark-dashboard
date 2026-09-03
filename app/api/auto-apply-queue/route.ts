@@ -191,6 +191,7 @@ export async function POST(request: Request) {
               const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
               const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
+              // Never overwrite a 'completed' status that kernel.ts already wrote.
               await supabase
                 .from('live_application_queue')
                 .update({
@@ -211,6 +212,7 @@ export async function POST(request: Request) {
                     : {}),
                 })
                 .eq('id', applicationId)
+                .neq('status', 'completed')
 
               // Feed the portal breaker so a run of failures stops the bleeding.
               await recordRunOutcome(supabase, gate.portalName, {
@@ -296,6 +298,8 @@ export async function POST(request: Request) {
     const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
     const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
+    // Never overwrite a 'completed' status that kernel.ts already wrote
+    // (e.g. confirmed via thank-you page before post-processing finished).
     await supabase
       .from('live_application_queue')
       .update({
@@ -307,6 +311,7 @@ export async function POST(request: Request) {
         recording_url: result.recordingUrl || null,
       })
       .eq('id', applicationId)
+      .neq('status', 'completed')
 
     await recordRunOutcome(supabase, gate.portalName, {
       success: result.success,

@@ -7223,7 +7223,8 @@ return await page.evaluate(async () => {
       // webhook matches on; userData.email is the candidate's own inbox, which
       // Resend never sees.
       const otpAddress = userData.proxyEmail || userData.proxy_email || userData.email || ""
-      let otp = await fetchOtpViaApi(applicationId, otpAddress, 45000)
+      const otpMatch = { sinceMs: Date.now() - 20_000, company: otpCompanyHint(portalUrl, userData) }
+      let otp = await fetchOtpViaApi(applicationId, otpAddress, 45000, otpMatch)
 
       if (!otp) {
         await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
@@ -7694,6 +7695,23 @@ return await page.evaluate(async () => {
       await persistLog(applicationId, confirmation.submitted ? "info" : "error",
         `Final confirmation: submitted=${confirmation.submitted} confidence=${confirmation.confidence} | ${confirmation.reason} | ${Math.round(processingTime / 1000)}s, ${totalSteps} actions`
       )
+      // ─── Early status write: mark completed the moment we confirm it ───
+      //
+      // The status used to be written only in auto-apply-queue/route.ts, after
+      // fillJobApplication() returned. Any crash or timeout in the post-processing
+      // below (skill learning, distillation, etc.) left the row stuck in
+      // "processing" forever — even when the application had already landed.
+      // Writing it here, immediately after confirmation, means the queue shows
+      // the correct status regardless of what happens next.
+      if (confirmation.submitted) {
+        await supabase
+          .from("live_application_queue")
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", applicationId)
+      }
       // The label lives outside the timeline document, so write it here.
       if (confirmation.confirmationLabel) {
         await supabase

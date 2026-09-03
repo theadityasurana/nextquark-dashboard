@@ -78,6 +78,32 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "")
  * extractOtp's last pattern matches any 4–8 digit run, so a receipt could hand
  * back a job id as a security code. Subject has to be part of the decision.
  */
+async function fetchFromInboundEmails(applicationId: string, sinceMs?: number): Promise<string | null> {
+  try {
+    let query = supabase
+      .from("inbound_emails")
+      .select("body_text, body_html, created_at")
+      .eq("live_application_queue_id", applicationId)
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    const { data } = await query
+    if (!data?.length) return null
+
+    for (const row of data) {
+      if (sinceMs) {
+        const at = Date.parse(row.created_at || "")
+        if (!Number.isFinite(at) || at < sinceMs) continue
+      }
+      const otp = extractOtp(row.body_text, row.body_html)
+      if (otp) return otp
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 async function fetchFromResend(proxyEmail: string, match: OtpMatch = {}): Promise<string | null> {
   if (!proxyEmail) return null
   try {
@@ -167,6 +193,15 @@ export async function fetchOtpViaApi(
     // Skip the first tick: the portal has only just sent the mail, and Resend
     // needs a moment to receive it. Every tick after that asks.
     if (i > 0) {
+      // inbound_emails is the most precise source: 1:1 match on queue row ID,
+      // no ambiguity even with concurrent runs for the same company/proxy address.
+      const fromDb = await fetchFromInboundEmails(applicationId, match.sinceMs)
+      if (fromDb) {
+        console.log(`[OTP Fetcher] Got OTP from inbound_emails: ${fromDb} after ${(i + 1) * pollInterval / 1000}s`)
+        return fromDb
+      }
+
+      // Resend API as fallback (e.g. runs outside the queue that have no inbound_emails row)
       const early = await fetchFromResend(proxyEmail, match)
       if (early) {
         console.log(`[OTP Fetcher] Got OTP from Resend API: ${early} after ${(i + 1) * pollInterval / 1000}s`)
@@ -183,8 +218,8 @@ export async function fetchOtpViaApi(
   // fetchFromResend learned to filter by recency, subject and company, the copy
   // did not, so the timeout path could still hand back another run's code. One
   // implementation, one set of rules.
-  console.log(`[OTP Fetcher] Poll window closed. Final Resend check for ${proxyEmail}...`)
-  const otp = await fetchFromResend(proxyEmail, match)
+  console.log(`[OTP Fetcher] Poll window closed. Final check for ${proxyEmail}...`)
+  const otp = (await fetchFromInboundEmails(applicationId, match.sinceMs)) ?? await fetchFromResend(proxyEmail, match)
   if (!otp) {
     console.log(`[OTP Fetcher] No usable code found in Resend for ${proxyEmail}` +
       (match.company ? ` (company "${match.company}")` : ""))
