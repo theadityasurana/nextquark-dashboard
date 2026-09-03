@@ -840,11 +840,7 @@ export function QueueScreen() {
       {/* Application detail modal — does NOT close on outside click when app is running */}
       <Dialog
         open={!!selectedApp}
-        onOpenChange={(open) => {
-          // Don't close by clicking outside if this app is currently running
-          if (!open && selectedApp && streamingApps.has(selectedApp.id)) return
-          if (!open) setSelectedApp(null)
-        }}
+        onOpenChange={(open) => { if (!open) setSelectedApp(null) }}
       >
         <DialogContent
           className="w-[95vw] max-w-4xl bg-card border-border p-0"
