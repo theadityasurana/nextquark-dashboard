@@ -360,7 +360,7 @@ export function QueueScreen() {
     const interval = setInterval(() => {
       const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString()
       const timedOut = applications.filter(
-        a => a.status !== 'completed' && new Date(a.created_at).toISOString() < cutoff
+        a => a.status === 'processing' && a.started_at && new Date(a.started_at).toISOString() < cutoff
       )
       if (timedOut.length === 0) return
       timedOut.forEach(async (app) => {
