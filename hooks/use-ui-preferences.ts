@@ -106,4 +106,3 @@ export function useUIPreferences() {
 
   return { prefs, setPrefs, loaded }
 }
-}
