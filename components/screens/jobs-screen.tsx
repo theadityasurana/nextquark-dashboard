@@ -419,7 +419,7 @@ export function JobsScreen() {
 
       {/* ========== ADD JOB DIALOG ========== */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetJobForm() } }}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Briefcase className="h-5 w-5 text-primary" />
@@ -823,7 +823,7 @@ export function JobsScreen() {
 
       {/* ========== JOB DETAIL / EDIT MODAL ========== */}
       <Dialog open={!!selectedJob} onOpenChange={() => { setSelectedJob(null); setIsEditing(false) }}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           {selectedJob && !isEditing && (
             <>
               <DialogHeader>
@@ -1345,7 +1345,7 @@ export function JobsScreen() {
 
       {/* ========== ATS SYNC ALL PREVIEW DIALOG ========== */}
       <Dialog open={showAtsPreview} onOpenChange={setShowAtsPreview}>
-        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <RefreshCw className="h-5 w-5 text-primary" />
@@ -1546,7 +1546,7 @@ export function JobsScreen() {
 
       {/* ========== CLEANUP STALE JOBS DIALOG ========== */}
       <Dialog open={showCleanupPreview} onOpenChange={setShowCleanupPreview}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-destructive" />

@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { Eye, EyeOff, Save, Zap, Globe } from "lucide-react"
 
 export function SettingsScreen() {
@@ -19,6 +21,9 @@ export function SettingsScreen() {
   const [kernelApiKey, setKernelApiKey] = useState("")
   const [openAiApiKey, setOpenAiApiKey] = useState("")
   const [automationProvider, setAutomationProvider] = useState("browser_use")
+  const [systemDown, setSystemDown] = useState(false)
+  const [systemDownMessage, setSystemDownMessage] = useState("We'll be back soon. Our systems are undergoing maintenance.")
+  const [systemDownSaving, setSystemDownSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [showBuKey, setShowBuKey] = useState(false)
@@ -42,10 +47,30 @@ export function SettingsScreen() {
       if (data.kernelApiKey) setKernelApiKey(data.kernelApiKey)
       if (data.openAiApiKey) setOpenAiApiKey(data.openAiApiKey)
       if (data.automationProvider) setAutomationProvider(data.automationProvider)
+      if (data.system_down !== undefined) setSystemDown(data.system_down)
+      if (data.system_down_message) setSystemDownMessage(data.system_down_message)
     } catch (error) {
       console.error("Failed to fetch settings:", error)
     } finally {
       setFetching(false)
+    }
+  }
+
+  const handleSystemDownSave = async (newValue?: boolean) => {
+    const is_down = newValue !== undefined ? newValue : systemDown
+    setSystemDownSaving(true)
+    try {
+      const res = await fetch('/api/system-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_down, message: systemDownMessage }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      toast({ title: is_down ? 'System marked as DOWN' : 'System marked as UP' })
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update system status', variant: 'destructive' })
+    } finally {
+      setSystemDownSaving(false)
     }
   }
 
@@ -97,6 +122,48 @@ export function SettingsScreen() {
         <h1 className="text-2xl font-semibold tracking-tight text-gradient">Settings</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage automation provider and API credentials</p>
       </div>
+
+      {/* System Status */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-medium ${systemDown ? 'text-destructive' : 'text-green-500'}`}>
+                {systemDown ? 'DOWN' : 'UP'}
+              </span>
+              <Switch
+                checked={systemDown}
+                onCheckedChange={(val) => {
+                  setSystemDown(val)
+                  handleSystemDownSave(val)
+                }}
+                disabled={systemDownSaving}
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Maintenance message shown to users</Label>
+            <Textarea
+              value={systemDownMessage}
+              onChange={(e) => setSystemDownMessage(e.target.value)}
+              rows={2}
+              className="bg-accent/30 border-border text-sm resize-none"
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleSystemDownSave()}
+            disabled={systemDownSaving}
+            className="self-start"
+          >
+            {systemDownSaving ? 'Saving...' : 'Save Message'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Provider Toggle */}
       <Card className="bg-card border-border">

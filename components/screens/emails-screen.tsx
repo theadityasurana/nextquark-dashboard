@@ -165,6 +165,16 @@ interface EmailLog {
   sent_at: string
 }
 
+interface InboundLog {
+  id: string
+  from_email: string
+  proxy_address: string
+  subject: string
+  body_text: string | null
+  live_application_queue_id: string | null
+  created_at: string
+}
+
 interface IncompleteUser {
   id: string
   email: string
@@ -191,6 +201,7 @@ interface MilestoneUser {
 export function EmailsScreen() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [logs, setLogs] = useState<EmailLog[]>([])
+  const [inboundLogs, setInboundLogs] = useState<InboundLog[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
   const [loading, setLoading] = useState(false)
   const [testEmail, setTestEmail] = useState('')
@@ -222,6 +233,7 @@ export function EmailsScreen() {
   useEffect(() => {
     fetchTemplates()
     fetchLogs()
+    fetchInboundLogs()
     fetchAppSubmittedEmailToggle()
   }, [])
 
@@ -262,8 +274,13 @@ export function EmailsScreen() {
   const fetchLogs = async () => {
     const res = await fetch('/api/email/logs')
     const data = await res.json()
-    // Handle both old shape (array) and new shape ({ logs, total })
     setLogs(Array.isArray(data) ? data : (data.logs || []))
+  }
+
+  const fetchInboundLogs = async () => {
+    const res = await fetch('/api/email/inbound-logs')
+    const data = await res.json()
+    setInboundLogs(data.logs || [])
   }
 
   const fetchIncompleteProfiles = async () => {
@@ -405,7 +422,8 @@ export function EmailsScreen() {
             <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
             <TabsTrigger value="campaigns" className="text-xs">Campaigns</TabsTrigger>
             <TabsTrigger value="profile-reminders" className="text-xs">Profile Reminders</TabsTrigger>
-            <TabsTrigger value="logs" className="text-xs">Logs</TabsTrigger>
+            <TabsTrigger value="logs" className="text-xs">Outbound Logs</TabsTrigger>
+            <TabsTrigger value="inbound-logs" className="text-xs">Inbound Logs</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs">SMTP</TabsTrigger>
           </TabsList>
         </div>
@@ -682,8 +700,8 @@ export function EmailsScreen() {
             <CardHeader>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle className="text-sm font-medium">Email Logs <InfoTip text="Shows all sent and failed emails across all trigger types — both automatic (welcome, application submitted) and manual (campaigns, reminders, broadcasts)." /></CardTitle>
-                  <CardDescription>Recent email activity</CardDescription>
+                  <CardTitle className="text-sm font-medium">Outbound Logs <InfoTip text="Shows all sent and failed emails across all trigger types — both automatic (welcome, application submitted) and manual (campaigns, reminders, broadcasts)." /></CardTitle>
+                  <CardDescription>Recent outbound email activity</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={fetchLogs}>
                   <RefreshCw className="mr-2 h-4 w-4" />
@@ -717,6 +735,51 @@ export function EmailsScreen() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(log.sent_at).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table></div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="inbound-logs">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-sm font-medium">Inbound Logs <InfoTip text="Emails received via Resend inbound routing to @nextquark.in proxy addresses. These are typically OTP/verification emails from ATS portals during auto-apply runs." /></CardTitle>
+                  <CardDescription>Emails received at proxy addresses</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchInboundLogs}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto"><Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>From</TableHead>
+                    <TableHead>To (Proxy)</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead>Received At</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {inboundLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground text-sm py-8">No inbound emails yet</TableCell>
+                    </TableRow>
+                  ) : inboundLogs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="font-mono text-xs">{log.from_email}</TableCell>
+                      <TableCell className="font-mono text-xs">{log.proxy_address}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate">{log.subject || '—'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(log.created_at).toLocaleString()}
                       </TableCell>
                     </TableRow>
                   ))}

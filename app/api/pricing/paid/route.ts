@@ -1,23 +1,42 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
-
 export async function GET() {
-  const supabase = getAdminClient()
+  const supabase = createAdminClient()
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, subscription_type, subscription_start_date, subscription_end_date")
-    .in("subscription_type", ["premium", "pro"])
-    .order("subscription_start_date", { ascending: false })
+  const rows: any[] = []
+  const PAGE = 1000
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, subscription_type, subscription_start_date, subscription_end_date, region, billing_period, platform")
+      .not("subscription_type", "is", null)
+      .not("subscription_type", "eq", "free")
+      .order("subscription_start_date", { ascending: false })
+      .range(from, from + PAGE - 1)
 
-  return NextResponse.json(data || [])
+    if (error) {
+      // Fallback without optional columns
+      const { data: basic, error: e2 } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, subscription_type, subscription_start_date, subscription_end_date")
+        .not("subscription_type", "is", null)
+        .not("subscription_type", "eq", "free")
+        .order("subscription_start_date", { ascending: false })
+        .range(from, from + PAGE - 1)
+
+      if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
+      const padded = (basic ?? []).map((u) => ({ ...u, region: null, billing_period: null, platform: null }))
+      rows.push(...padded)
+      if ((basic?.length ?? 0) < PAGE) break
+      continue
+    }
+
+    if (!data?.length) break
+    rows.push(...data)
+    if (data.length < PAGE) break
+  }
+
+  return NextResponse.json(rows)
 }

@@ -132,14 +132,18 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
     }
   }
 
-  // Batch insert new jobs (one round-trip instead of N)
+  // Upsert new jobs — ON CONFLICT (id) DO UPDATE prevents duplicate key errors
+  // when stableJobId produces the same deterministic hash for a re-synced posting
   let addedCount = 0
   if (toInsert.length > 0) {
     const CHUNK = 50
     for (let i = 0; i < toInsert.length; i += CHUNK) {
-      const { error } = await supabase.from('jobs').insert(toInsert.slice(i, i + CHUNK))
-      if (!error) addedCount += Math.min(CHUNK, toInsert.length - i)
-      else console.error(`[ats-sync] batch insert error (chunk ${i}):`, error.message)
+      const { error, data } = await supabase
+        .from('jobs')
+        .upsert(toInsert.slice(i, i + CHUNK), { onConflict: 'id', ignoreDuplicates: true })
+        .select('id')
+      if (!error) addedCount += (data?.length ?? Math.min(CHUNK, toInsert.length - i))
+      else console.error(`[ats-sync] batch upsert error (chunk ${i}):`, error.message)
     }
   }
 

@@ -20,6 +20,7 @@ import {
   Search, Plus, ChevronRight, Globe, ExternalLink, RefreshCw, BarChart3,
   Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2, AlertTriangle, Clock
 } from "lucide-react"
+import { SyncProgressBar } from "@/components/sync-progress-bar"
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -51,6 +52,29 @@ export function CompaniesScreen() {
   const [companyJobsExpanded, setCompanyJobsExpanded] = useState<Record<string, boolean>>({})
   const COMPANY_JOBS_LIMIT = 5
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync all state
+  const [isSyncingAll, setIsSyncingAll] = useState(false)
+  const [syncSessionId, setSyncSessionId] = useState<string | null>(null)
+
+  const handleSyncAllJobs = async () => {
+    if (isSyncingAll) return
+    setIsSyncingAll(true)
+    setSyncSessionId(null)
+    try {
+      const res = await fetch("/api/ats-sync-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setSyncSessionId(data.sessionId)
+    } catch (err) {
+      alert(`Sync failed: ${err}`)
+      setIsSyncingAll(false)
+    }
+  }
 
   // ATS preview state
   const [showPreview, setShowPreview] = useState(false)
@@ -236,6 +260,16 @@ export function CompaniesScreen() {
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{companies.length} total</Badge>
           <Button
             size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs"
+            onClick={handleSyncAllJobs}
+            disabled={isSyncingAll}
+          >
+            <RefreshCw className={`h-3 w-3 ${isSyncingAll ? "animate-spin" : ""}`} />
+            {isSyncingAll ? "Syncing..." : "Sync Latest Jobs"}
+          </Button>
+          <Button
+            size="sm"
             className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={() => setShowAddForm(true)}
           >
@@ -243,6 +277,16 @@ export function CompaniesScreen() {
           </Button>
         </div>
       </div>
+
+      {syncSessionId && (
+        <SyncProgressBar
+          sessionId={syncSessionId}
+          onComplete={() => {
+            setIsSyncingAll(false)
+            Promise.all([refreshJobs(), refreshCompanies()])
+          }}
+        />
+      )}
 
       <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

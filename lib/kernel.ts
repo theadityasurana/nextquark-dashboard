@@ -7224,12 +7224,14 @@ return await page.evaluate(async () => {
       // Resend never sees.
       const otpAddress = userData.proxyEmail || userData.proxy_email || userData.email || ""
       const otpMatch = { sinceMs: Date.now() - 20_000, company: otpCompanyHint(portalUrl, userData) }
-      let otp = await fetchOtpViaApi(applicationId, otpAddress, 45000, otpMatch)
-
-      if (!otp) {
-        await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
-        if (onStep) onStep({ status: "awaiting_otp", log: "Checking the OTP Manager panel...", liveUrl })
-        otp = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId, otpAddress, applicationId)
+      let otp: string | null = null
+      const OTP_RETRY_WINDOWS = [45000, 90000, 150000]
+      for (let attempt = 0; attempt < OTP_RETRY_WINDOWS.length && !otp; attempt++) {
+        if (attempt > 0) {
+          await persistLog(applicationId, "info", `OTP not found yet — retry ${attempt}/${OTP_RETRY_WINDOWS.length - 1} (waiting up to ${OTP_RETRY_WINDOWS[attempt] / 1000}s)...`)
+          if (onStep) onStep({ status: "awaiting_otp", log: `OTP retry ${attempt}/${OTP_RETRY_WINDOWS.length - 1}...`, liveUrl })
+        }
+        otp = await fetchOtpViaApi(applicationId, otpAddress, OTP_RETRY_WINDOWS[attempt], otpMatch)
       }
 
       if (!otp) {
@@ -7496,11 +7498,6 @@ return await page.evaluate(async () => {
               sinceMs: requestedAt,
               company: companyHint,
             })
-            if (!code) {
-              if (applicationId) await persistLog(applicationId, "info", "API OTP fetch found nothing — reading the OTP Manager panel...")
-              code = await fetchOtpFromAdminPanel(kernelClient, sessionId, applicationId || "", otpAddress, applicationId)
-            }
-
             if (!code) {
               captchaUnresolved = true
               if (applicationId) {

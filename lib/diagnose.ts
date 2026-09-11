@@ -86,7 +86,7 @@ const LLM_RE = /rate limit|429|quota|insufficient_quota|402|api key|unauthorized
  * these get misattributed in the first place.
  */
 const BROWSER_QUOTA_RE =
-  /\b(kernel|browserbase)\b[^.]{0,40}\b(rate limit|429|quota|capacity)|concurrent browser capacity|would exceed your concurrent|browser pool|no (browser|session)s? available/i
+  /\b(kernel|browserbase)\b[^.]{0,40}\b(rate limit|429|quota|capacity)|concurrent browser capacity|would exceed your concurrent|browser pool|no (browser|session)s? available|plan needs payment method|write operations are blocked/i
 
 /**
  * Classify a failed run.

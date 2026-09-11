@@ -4,11 +4,19 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const allUsers: ReturnType<typeof supabase.auth.admin.listUsers> extends Promise<{ data: { users: infer U } }> ? U : never[] = []
+  let page = 1
+  const perPage = 1000
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    allUsers.push(...(data.users as typeof allUsers))
+    if (data.users.length < perPage) break
+    page++
+  }
 
-  const users = data.users.map(user => ({
+  const users = allUsers.map(user => ({
     id: user.id,
     email: user.email || 'No email',
     phone: user.phone || null,

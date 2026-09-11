@@ -188,7 +188,8 @@ export async function POST(request: Request) {
               // every retry. Re-queuing it burns a browser session to learn
               // nothing, so the diagnosis ends the attempt sequence outright.
               const permanent = result.failure?.permanent === true
-              const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
+              const isKernelBillingError = /plan needs payment method|write operations are blocked/i.test(result.error || "")
+              const canRetry = !result.success && !permanent && (isKernelBillingError || currentAttempt < maxAttempts)
               const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
               // Never overwrite a 'completed' status that kernel.ts already wrote.
@@ -244,7 +245,9 @@ export async function POST(request: Request) {
               const errorMsg = error instanceof Error ? error.message : "Unknown error"
               
               const maxAttempts = app.max_attempts || 3
-              const canRetry = currentAttempt < maxAttempts
+              const isKernelBillingError = /plan needs payment method|write operations are blocked/i.test(errorMsg)
+              const isInfraError = /rate limit|retry-after|browser provider|concurrent.session|session cap/i.test(errorMsg)
+              const canRetry = isKernelBillingError || isInfraError || currentAttempt < maxAttempts
               const finalStatus = canRetry ? 'pending' : 'failed'
 
               await supabase
@@ -295,7 +298,8 @@ export async function POST(request: Request) {
 
     const maxAttempts = app.max_attempts || 3
     const permanent = result.failure?.permanent === true
-    const canRetry = !result.success && !permanent && currentAttempt < maxAttempts
+    const isKernelBillingError = /plan needs payment method|write operations are blocked/i.test(result.error || "")
+    const canRetry = !result.success && !permanent && (isKernelBillingError || currentAttempt < maxAttempts)
     const finalStatus = result.success ? 'completed' : (canRetry ? 'pending' : 'failed')
 
     // Never overwrite a 'completed' status that kernel.ts already wrote

@@ -40,7 +40,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
         if (data.logs) {
           const formattedLogs = data.logs.map((log: any) => ({
             id: log.id,
-            timestamp: new Date(log.timestamp).toLocaleTimeString(),
+            timestamp: new Date(log.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             level: log.level,
             agentId: log.agent_id,
             message: log.message,

@@ -326,7 +326,12 @@ export function QueueScreen() {
   // premiumOnlyRef is used inside the timer callback so it always reads the
   // current value at fire-time, not the value when the timer was created.
 
+  const autoStartRef = useRef(autoStart)
+  useEffect(() => { autoStartRef.current = autoStart }, [autoStart])
+
   useEffect(() => {
+    if (!prefsLoaded) return
+
     if (!autoStart) {
       // Turn off: cancel every pending timer immediately
       Object.values(autoStartTimersRef.current).forEach(clearTimeout)
@@ -340,8 +345,7 @@ export function QueueScreen() {
     )
     const eligibleIds = new Set(eligible.map(a => a.id))
 
-    // Cancel timers for apps that are no longer eligible (status changed, or
-    // premiumOnly was toggled and this app is not premium)
+    // Cancel timers for apps that are no longer eligible
     for (const id of Object.keys(autoStartTimersRef.current)) {
       if (!eligibleIds.has(id)) {
         clearTimeout(autoStartTimersRef.current[id])
@@ -351,20 +355,19 @@ export function QueueScreen() {
 
     // Set timers for newly eligible apps that don't have one yet
     for (const app of eligible) {
-      // Fix #5: skip apps already streaming — a retry status flip must not re-dispatch
       if (streamingAppsRef.current.has(app.id)) continue
       if (!autoStartTimersRef.current[app.id]) {
         autoStartTimersRef.current[app.id] = setTimeout(() => {
           delete autoStartTimersRef.current[app.id]
-          // Re-check premiumOnly at fire time using the ref
+          // Re-read autoStart from ref at fire time — prefs may have changed
+          if (!autoStartRef.current) return
           if (!premiumOnlyRef.current || app.is_premium) {
             enqueueOrStart(app)
           }
         }, 2000)
       }
     }
-    // No cleanup return here — we manage timers imperatively above
-  }, [autoStart, applications, enqueueOrStart])
+  }, [autoStart, applications, enqueueOrStart, prefsLoaded])
 
   // ─── Client-side processing timeout ─────────────────────────────────────
   // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
@@ -438,6 +441,13 @@ export function QueueScreen() {
   const awaitingCaptcha = applications.filter(a => a.status === "awaiting_captcha")
   const blocked        = applications.filter(a => a.status === "blocked")
   const premiumApps    = applications.filter(a => a.is_premium)
+  // Live = actively streaming SSE right now OR in an active/paused state
+  const liveApps       = applications.filter(a =>
+    streamingApps.has(a.id) ||
+    a.status === "processing" ||
+    a.status === "awaiting_otp" ||
+    a.status === "awaiting_captcha"
+  )
   const stats = {
     totalApps: applications.length,
     successful: completed.length,
@@ -451,7 +461,8 @@ export function QueueScreen() {
   const waitingForSlot = eligiblePending.filter(a => !streamingApps.has(a.id)).length
 
   const filteredApps = applications.filter(app => {
-    if (activeTab === "premium") { if (!app.is_premium) return false }
+    if (activeTab === "live") { if (!liveApps.some(a => a.id === app.id)) return false }
+    else if (activeTab === "premium") { if (!app.is_premium) return false }
     else if (activeTab !== "all" && app.status !== activeTab) return false
     if (selectedCandidateFilter && app.user_id !== selectedCandidateFilter) return false
     if (searchQuery) {
@@ -646,6 +657,17 @@ export function QueueScreen() {
           <div className="-mx-3 sm:mx-0 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <TabsList className="bg-card border border-border inline-flex w-max px-1 mx-3 sm:mx-0">
               <TabsTrigger value="all" className="text-xs px-2.5" onClick={() => { setActiveTab("all"); setQueuePage(1) }}>All ({applications.length})</TabsTrigger>
+              <TabsTrigger value="live" className="text-xs px-2.5">
+                <span className="flex items-center gap-1">
+                  {liveApps.length > 0 && (
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
+                    </span>
+                  )}
+                  Live ({liveApps.length})
+                </span>
+              </TabsTrigger>
               <TabsTrigger value="premium" className="text-xs px-2.5">
                 <Crown className="h-3 w-3 text-yellow-500 mr-1" />Premium ({premiumApps.length})
               </TabsTrigger>
@@ -843,7 +865,7 @@ export function QueueScreen() {
         onOpenChange={(open) => { if (!open) setSelectedApp(null) }}
       >
         <DialogContent
-          className="w-[95vw] max-w-4xl bg-card border-border p-0"
+          className="w-[95vw] max-w-4xl p-0"
           // Prevent accidental dismissal while streaming
           onInteractOutside={(e) => {
             if (selectedApp && streamingApps.has(selectedApp.id)) e.preventDefault()
