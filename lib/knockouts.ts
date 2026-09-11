@@ -190,6 +190,7 @@ const LEVEL_MIN_YEARS: Record<ExperienceLevel, number> = {
 function experience(c: KnockoutCandidate, job: KnockoutJob): Knockout | null {
   if (!job.experience || job.experience === "Not specified") return null
   const required = normalizeExperienceLevel(job.experience)
+  if (!required) return null
   const years = totalYearsOfExperience(c.experience)
   if (years == null) return null
 
