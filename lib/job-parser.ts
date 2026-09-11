@@ -204,8 +204,8 @@ export type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number]
  * Normalize any experience string to one of the 9 allowed levels.
  * Handles ATS values, UI dropdown values ("Entry Level (0-1 years)"), and free-form text.
  */
-export function normalizeExperienceLevel(raw: string | null | undefined): ExperienceLevel {
-  if (!raw) return "Entry Level"
+export function normalizeExperienceLevel(raw: string | null | undefined): ExperienceLevel | '' {
+  if (!raw || raw.trim() === '') return ''
   const lower = raw.toLowerCase().trim()
 
   // Already one of the valid values (case-insensitive)
@@ -239,7 +239,7 @@ export function normalizeExperienceLevel(raw: string | null | undefined): Experi
   if (/\bintern(?:ship)?\b|\bco[\s-]?op\b/.test(lower)) return "Internship"
   if (/\bentry\b|0[\s-]?1/.test(lower)) return "Entry Level"
 
-  return "Entry Level"
+  return ''
 }
 
 /**
@@ -264,7 +264,7 @@ function extractExperienceLevel(lowerTitle: string, reqSection: string, fullText
     return sanitizeYearsLevel(yearsToLevel(yearsFromFull), lowerTitle)
   }
 
-  return "Entry Level"
+  return ""
 }
 
 /** Extract level purely from title keywords — covers all domains and numbered levels */

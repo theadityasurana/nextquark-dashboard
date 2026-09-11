@@ -21,11 +21,13 @@ const ATS_APIS = {
 }
 
 function decodeAndSanitize(content: string): string {
+  // First decode any double-encoded HTML entities (e.g. &amp;lt; → &lt; → <)
   let decoded = content
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const temp = decoded
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+      .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/')
     if (temp === decoded) break
     decoded = temp
   }
@@ -42,6 +44,18 @@ function formatSalary(min: string, max: string): string {
   if (min && max) return `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()}`
   if (min) return `$${Number(min).toLocaleString()}+`
   return 'Competitive salary'
+}
+
+/** Strip all HTML tags and decode entities to produce a clean plain-text description snippet. */
+function htmlToDescription(html: string, maxLen = 500): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, maxLen)
 }
 
 export async function fetchJobsFromAts(atsType: string, atsCompanyId: string): Promise<any[]> {
@@ -65,13 +79,16 @@ export interface SyncResult {
  */
 export async function syncCompanyJobs(companyId: string, atsType: string, atsCompanyId: string): Promise<SyncResult> {
   const supabase = createAdminClient()
+  const tag = `[ats-sync:${atsType}:${atsCompanyId}]`
 
-  // fetchJobsFromAts throws on API error — let it propagate so the caller
-  // knows the sync failed and does NOT delete any existing jobs.
+  console.log(`${tag} fetching jobs from ATS API`)
   const jobs = await fetchJobsFromAts(atsType, atsCompanyId)
+  console.log(`${tag} fetched ${jobs.length} live jobs from ATS`)
+
   const liveJobUrls = jobs.map((j: any) => j.jobUrl).filter(Boolean)
   const liveUrlSet  = new Set(liveJobUrls.map(jobDedupeKey))
 
+  console.log(`${tag} loading company record from DB`)
   const { data: company } = await supabase
     .from('companies')
     .select('name, logo_initial, website, linkedin_url')
@@ -79,11 +96,15 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
     .single()
 
   if (!company) throw new Error(`Company ${companyId} not found`)
+  console.log(`${tag} company="${company.name}"`)
 
+  console.log(`${tag} loading existing jobs from DB`)
   const { data: existingJobs } = await supabase
     .from('jobs')
     .select('id, job_url')
     .eq('company_id', companyId)
+
+  console.log(`${tag} found ${existingJobs?.length ?? 0} existing jobs in DB`)
 
   const existingUrlMap = new Map(
     (existingJobs || []).filter(j => j.job_url).map(j => [jobDedupeKey(j.job_url), j.id])
@@ -103,7 +124,7 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
       location: job.location || 'Remote',
       type: normalizeJobType(job.type),
       salary_range: job.salaryRange || 'Competitive salary',
-      experience: normalizeExperienceLevel(job.experience),
+      experience: normalizeExperienceLevel(job.experience) || null,
       portal_url: job.jobUrl || '',
       job_url: job.jobUrl || '',
       company_website: company.website || null,
@@ -132,49 +153,72 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
     }
   }
 
-  // Upsert new jobs — ON CONFLICT (id) DO UPDATE prevents duplicate key errors
-  // when stableJobId produces the same deterministic hash for a re-synced posting
+  console.log(`${tag} classified: ${toInsert.length} to insert, ${toUpdate.length} to update`)
+
   let addedCount = 0
   if (toInsert.length > 0) {
+    console.log(`${tag} inserting ${toInsert.length} new jobs`)
     const CHUNK = 50
     for (let i = 0; i < toInsert.length; i += CHUNK) {
       const { error, data } = await supabase
         .from('jobs')
         .upsert(toInsert.slice(i, i + CHUNK), { onConflict: 'id', ignoreDuplicates: true })
         .select('id')
-      if (!error) addedCount += (data?.length ?? Math.min(CHUNK, toInsert.length - i))
-      else console.error(`[ats-sync] batch upsert error (chunk ${i}):`, error.message)
+      if (!error) {
+        const n = data?.length ?? Math.min(CHUNK, toInsert.length - i)
+        addedCount += n
+        console.log(`${tag} inserted chunk ${Math.floor(i / CHUNK) + 1}: ${n} rows`)
+      } else {
+        console.error(`${tag} upsert error (chunk ${i}):`, error.message)
+      }
     }
   }
 
-  // Update existing jobs in parallel batches of 10
   let updatedCount = 0
   if (toUpdate.length > 0) {
+    console.log(`${tag} updating ${toUpdate.length} existing jobs`)
     const CHUNK = 10
     for (let i = 0; i < toUpdate.length; i += CHUNK) {
       const chunk = toUpdate.slice(i, i + CHUNK)
       const results = await Promise.allSettled(
         chunk.map(({ id, data }) => supabase.from('jobs').update(data).eq('id', id))
       )
-      updatedCount += results.filter(r => r.status === 'fulfilled' && !r.value.error).length
+      const n = results.filter(r => r.status === 'fulfilled' && !r.value.error).length
+      updatedCount += n
+      console.log(`${tag} updated chunk ${Math.floor(i / CHUNK) + 1}: ${n}/${chunk.length} rows`)
     }
   }
 
-  // Delete stale jobs — postings no longer live on the ATS.
-  // Guard: only delete when the ATS returned at least one job. If the ATS
-  // returned zero (genuine empty board OR silent API failure), we skip deletion
-  // to avoid wiping the entire job list on a transient error.
-  // The cleanup-jobs route handles the explicit "delete non-existing" flow.
   let deletedCount = 0
   if (liveUrlSet.size > 0) {
     const staleIds = (existingJobs || [])
       .filter(j => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url)))
       .map(j => j.id)
     if (staleIds.length > 0) {
+      console.log(`${tag} deleting ${staleIds.length} stale jobs`)
       const { error } = await supabase.from('jobs').delete().in('id', staleIds)
-      if (!error) deletedCount = staleIds.length
-      else console.error(`[ats-sync] stale job delete error:`, error.message)
+      if (!error) {
+        deletedCount = staleIds.length
+        console.log(`${tag} deleted ${deletedCount} stale jobs`)
+      } else {
+        console.error(`${tag} stale job delete error:`, error.message)
+      }
+    } else {
+      console.log(`${tag} no stale jobs to delete`)
     }
+  }
+
+  console.log(`${tag} sync complete — added=${addedCount} updated=${updatedCount} deleted=${deletedCount} live=${liveJobUrls.length}`)
+
+  // Queue jobs with no experience for async LLM enrichment
+  const toEnrich = [
+    ...toInsert.filter(j => !j.experience).map(j => ({ job_id: j.id, job_title: j.title })),
+    ...toUpdate.filter(j => !j.data.experience).map(j => ({ job_id: j.id, job_title: j.data.title })),
+  ]
+  if (toEnrich.length > 0) {
+    console.log(`${tag} queuing ${toEnrich.length} jobs for LLM experience enrichment`)
+    await supabase.from('experience_enrichment_queue')
+      .upsert(toEnrich.map(j => ({ job_id: j.job_id, job_title: j.job_title, status: 'pending' })), { onConflict: 'job_id', ignoreDuplicates: true })
   }
 
   return { addedCount, updatedCount, deletedCount, totalLive: liveJobUrls.length }
@@ -183,9 +227,11 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
 // ── ATS fetchers (unchanged logic, just moved here) ──────────────────────────
 
 async function fetchGreenhouseJobs(companyId: string) {
+  console.log(`[greenhouse:${companyId}] calling API`)
   const response = await fetch(ATS_APIS.greenhouse(companyId))
   if (!response.ok) throw new Error(`Greenhouse API returned ${response.status}`)
   const data = await response.json()
+  console.log(`[greenhouse:${companyId}] API returned ${data.jobs?.length ?? 0} jobs, parsing`)
   return (data.jobs || []).map((job: any) => {
     let location = 'Remote'
     if (job.location?.name) location = job.location.name
@@ -198,7 +244,7 @@ async function fetchGreenhouseJobs(companyId: string) {
       ;({ requirements, skills, benefits, educationLevel, workAuthorization } = parsed)
       jobType = parsed.jobType || ''; experienceLevel = parsed.experienceLevel || ''
       salaryMin = parsed.salaryMin || ''; salaryMax = parsed.salaryMax || ''
-      description = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500)
+      description = htmlToDescription(html)
       detailedRequirements = htmlToMarkdown(html)
     }
     for (const meta of (job.metadata || [])) {
@@ -211,9 +257,11 @@ async function fetchGreenhouseJobs(companyId: string) {
 }
 
 async function fetchLeverJobs(companyId: string) {
+  console.log(`[lever:${companyId}] calling API`)
   const response = await fetch(ATS_APIS.lever(companyId))
   if (!response.ok) throw new Error(`Lever API returned ${response.status}`)
   const data = await response.json()
+  console.log(`[lever:${companyId}] API returned ${data?.length ?? 0} jobs, parsing`)
   return (data || []).map((job: any) => {
     const categories = job.categories || {}
     let fullHtml = (job.description || '') + ' ' + (job.additional || '')
@@ -233,7 +281,7 @@ async function fetchLeverJobs(companyId: string) {
       ;({ requirements, skills, benefits, educationLevel, workAuthorization } = parsed)
       jobType = parsed.jobType || ''; experienceLevel = parsed.experienceLevel || ''
       salaryMin = parsed.salaryMin || ''; salaryMax = parsed.salaryMax || ''
-      description = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500)
+      description = htmlToDescription(html)
       detailedRequirements = htmlToMarkdown(html)
     }
     const leverType = mapLeverCommitment(categories.commitment || '')
@@ -247,10 +295,13 @@ async function fetchLeverJobs(companyId: string) {
 }
 
 async function fetchAshbyJobs(companyId: string) {
+  console.log(`[ashby:${companyId}] calling API`)
   const response = await fetch(ATS_APIS.ashby(companyId))
   if (!response.ok) throw new Error(`Ashby API returned ${response.status}`)
   const data = await response.json()
-  return (data.jobs || data.postings || data.results || []).map((job: any) => {
+  const jobs = data.jobs || data.postings || data.results || []
+  console.log(`[ashby:${companyId}] API returned ${jobs.length} jobs, parsing`)
+  return jobs.map((job: any) => {
     const title = job.title || job.name || job.position || 'Untitled Position'
     const jobUrl = job.jobUrl || job.applyUrl || job.url || job.link || ''
     const descContent = job.descriptionHtml || job.description || job.descriptionPlain || job.info?.description || ''
@@ -262,7 +313,7 @@ async function fetchAshbyJobs(companyId: string) {
       ;({ requirements, skills, benefits, educationLevel, workAuthorization } = parsed)
       jobType = parsed.jobType || ''; experienceLevel = parsed.experienceLevel || ''
       salaryMin = parsed.salaryMin || ''; salaryMax = parsed.salaryMax || ''
-      description = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500)
+      description = htmlToDescription(html)
       detailedRequirements = htmlToMarkdown(html)
     }
     const ashbyType = mapAshbyEmploymentType(job.employmentType || '')
@@ -279,6 +330,7 @@ async function fetchAshbyJobs(companyId: string) {
 }
 
 async function fetchSmartRecruitersJobs(companyId: string) {
+  console.log(`[smartrecruiters:${companyId}] calling API`)
   const baseUrl = ATS_APIS.smartrecruiters(companyId)
   const jobsList: any[] = []
   let offset = 0
@@ -288,9 +340,11 @@ async function fetchSmartRecruitersJobs(companyId: string) {
     const data = await response.json()
     const page = data.content || data.postings || []
     jobsList.push(...page)
+    console.log(`[smartrecruiters:${companyId}] page offset=${offset}: ${page.length} jobs (total so far: ${jobsList.length})`)
     offset += page.length
     if (page.length === 0 || offset >= (data.totalFound ?? 0)) break
   }
+  console.log(`[smartrecruiters:${companyId}] fetched ${jobsList.length} jobs total, fetching details + parsing`)
   const results: any[] = []
   for (let i = 0; i < jobsList.length; i += 10) {
     const batch = await Promise.all(jobsList.slice(i, i + 10).map(async (job: any) => {
@@ -324,7 +378,7 @@ async function fetchSmartRecruitersJobs(companyId: string) {
         ;({ requirements, skills, benefits, educationLevel, workAuthorization } = parsed)
         jobType = parsed.jobType || ''; experienceLevel = parsed.experienceLevel || ''
         salaryMin = parsed.salaryMin || ''; salaryMax = parsed.salaryMax || ''
-        description = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500)
+        description = htmlToDescription(html)
         detailedRequirements = htmlToMarkdown(html)
       }
       const srType = jobDetail.typeOfEmployment?.label || jobDetail.typeOfEmployment

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     location: body.location || 'Remote',
     type: normalizeJobType(body.type),
     salary_range: body.salary_range || 'Competitive salary',
-    experience: normalizeExperienceLevel(body.experience),
+    experience: normalizeExperienceLevel(body.experience) || null,
     portal_url: body.portal_url || '',
     job_url: body.job_url || '',
     company_website: body.company_website || null,
@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
   const dbUpdates: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(updates)) {
     if (key in keyMap) {
-      dbUpdates[keyMap[key]] = key === 'experience' ? normalizeExperienceLevel(value as string) : value
+      dbUpdates[keyMap[key]] = key === 'experience' ? (normalizeExperienceLevel(value as string) || null) : value
     }
   }
 

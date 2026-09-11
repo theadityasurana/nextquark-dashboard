@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,12 +14,13 @@ import { StatusBadge } from "@/components/status-badge"
 import { useData } from "@/lib/data-context"
 import type { Job } from "@/lib/mock-data"
 import { LOCATIONS, EDUCATION_QUALIFICATIONS, WORK_MODES, WORK_AUTHORIZATION } from "@/lib/locations"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SyncProgressBar } from "@/components/sync-progress-bar"
+import { createClient } from "@/lib/supabase/client"
 import {
   Search, Plus, ChevronRight, ExternalLink, Copy, Edit2, Pause, Trash2,
   Link, Globe, Linkedin, Briefcase, MapPin, DollarSign, GraduationCap,
-  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Loader, RefreshCw, Building2
+  X, Check, ListChecks, Sparkles, Gift, FileText, Save, Loader, RefreshCw
 } from "lucide-react"
 
 export function JobsScreen() {
@@ -31,17 +32,37 @@ export function JobsScreen() {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, unknown>>({})
 
-  // ATS preview state
-  const [showAtsPreview, setShowAtsPreview] = useState(false)
-  const [atsPreviewJobs, setAtsPreviewJobs] = useState<any[]>([])
-  const [atsPreviewSelected, setAtsPreviewSelected] = useState<Set<string>>(new Set())
-  const [atsPreviewLoading, setAtsPreviewLoading] = useState(false)
-
-  // Cleanup stale jobs state
-  const [showCleanupPreview, setShowCleanupPreview] = useState(false)
-  const [staleJobs, setStaleJobs] = useState<any[]>([])
+  // Sync session state — fetched from Supabase on mount so any device/tab sees live status
+  const [syncSessionId, setSyncSessionId] = useState<string | null>(null)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [cleanupSessionId, setCleanupSessionId] = useState<string | null>(null)
   const [cleanupLoading, setCleanupLoading] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [enrichSessionId, setEnrichSessionId] = useState<string | null>(null)
+
+  // On mount, resume any in-progress or recently completed sessions from Supabase
+  useEffect(() => {
+    const supabase = createClient()
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    supabase
+      .from('sync_sessions')
+      .select('id, type, status')
+      .or(`status.eq.running,and(status.eq.done,started_at.gte.${tenMinutesAgo})`)
+      .order('started_at', { ascending: false })
+      .limit(3)
+      .then(({ data, error }) => {
+        if (error) console.error('[jobs] mount session fetch error:', error.message)
+        if (!data) return
+        for (const row of data) {
+          if (row.type === 'cleanup') setCleanupSessionId(row.id)
+          else if (row.type === 'enrich') setEnrichSessionId(row.id)
+          else setSyncSessionId(row.id)
+        }
+      })
+  }, [])
+
+  const handleSyncComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
+  const handleCleanupComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
+  const handleEnrichComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
 
   // Temp inputs for array fields during add
   const [newRequirement, setNewRequirement] = useState("")
@@ -291,28 +312,25 @@ export function JobsScreen() {
               size="sm"
               variant="outline"
               className="gap-1.5 text-xs"
-              disabled={atsPreviewLoading}
+              disabled={syncLoading}
               onClick={async () => {
-                setAtsPreviewLoading(true)
+                setSyncLoading(true)
+                setSyncSessionId(null)
                 try {
                   const res = await fetch("/api/ats-sync-all", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ preview: true }),
+                    body: JSON.stringify({}),
                   })
                   const data = await res.json()
-                  if (data.error) { alert(`Error: ${data.error}`) }
-                  else {
-                    setAtsPreviewJobs(data.jobs || [])
-                    setAtsPreviewSelected(new Set((data.jobs || []).map((j: any) => j.jobUrl)))
-                    setShowAtsPreview(true)
-                  }
-                } catch { alert("Failed to fetch ATS jobs") }
-                finally { setAtsPreviewLoading(false) }
+                  if (data.error) alert(`Error: ${data.error}`)
+                  else setSyncSessionId(data.sessionId)
+                } catch { alert("Failed to start sync") }
+                finally { setSyncLoading(false) }
               }}
             >
-              {atsPreviewLoading ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              {atsPreviewLoading ? "Fetching…" : "Sync All ATS"}
+              {syncLoading ? <Loader className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {syncLoading ? "Starting…" : "Sync All ATS"}
             </Button>
 
             <Button
@@ -322,21 +340,22 @@ export function JobsScreen() {
               disabled={cleanupLoading}
               onClick={async () => {
                 setCleanupLoading(true)
+                setCleanupSessionId(null)
                 try {
                   const res = await fetch("/api/cleanup-jobs", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ preview: true }),
+                    body: JSON.stringify({}),
                   })
                   const data = await res.json()
-                  if (data.error) { alert(`Error: ${data.error}`) }
-                  else { setStaleJobs(data.staleJobs || []); setShowCleanupPreview(true) }
-                } catch { alert("Failed to check for stale jobs") }
+                  if (data.error) alert(`Error: ${data.error}`)
+                  else setCleanupSessionId(data.sessionId)
+                } catch { alert("Failed to start cleanup") }
                 finally { setCleanupLoading(false) }
               }}
             >
               {cleanupLoading ? <Loader className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-              {cleanupLoading ? "Checking…" : "Delete Non-Existing"}
+              {cleanupLoading ? "Starting…" : "Delete Non-Existing"}
             </Button>
           </div>
 
@@ -352,6 +371,33 @@ export function JobsScreen() {
           </div>
         </div>
       </div>
+
+      {syncSessionId && (
+        <SyncProgressBar
+          sessionId={syncSessionId}
+          mode="sync"
+          onComplete={handleSyncComplete}
+          onDismiss={() => setSyncSessionId(null)}
+        />
+      )}
+
+      {cleanupSessionId && (
+        <SyncProgressBar
+          sessionId={cleanupSessionId}
+          mode="cleanup"
+          onComplete={handleCleanupComplete}
+          onDismiss={() => setCleanupSessionId(null)}
+        />
+      )}
+
+      {enrichSessionId && (
+        <SyncProgressBar
+          sessionId={enrichSessionId}
+          mode="enrich"
+          onComplete={handleEnrichComplete}
+          onDismiss={() => setEnrichSessionId(null)}
+        />
+      )}
 
       <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1343,289 +1389,6 @@ export function JobsScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ========== ATS SYNC ALL PREVIEW DIALOG ========== */}
-      <Dialog open={showAtsPreview} onOpenChange={setShowAtsPreview}>
-        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <RefreshCw className="h-5 w-5 text-primary" />
-              ATS Sync Preview
-            </DialogTitle>
-          </DialogHeader>
-
-          {(() => {
-            const newJobs = atsPreviewJobs.filter((j) => !j.isExisting)
-            const existingJobs = atsPreviewJobs.filter((j) => j.isExisting)
-            const selectedNewCount = newJobs.filter((j) => atsPreviewSelected.has(j.jobUrl)).length
-            const selectedExistingCount = existingJobs.filter((j) => atsPreviewSelected.has(j.jobUrl)).length
-            const allSelected = atsPreviewSelected.size === atsPreviewJobs.length
-
-            return (
-              <>
-                {/* Unified top bar */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-accent/20 p-3">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{atsPreviewJobs.length} jobs found across all companies</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {newJobs.length} new · {existingJobs.length} existing · {atsPreviewSelected.size} selected
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
-                      disabled={atsPreviewSelected.size === 0 || isSaving}
-                      onClick={async () => {
-                        setIsSaving(true)
-                        try {
-                          const selected = atsPreviewJobs
-                            .filter((j) => atsPreviewSelected.has(j.jobUrl))
-                            .map((j) => ({ companyId: j.companyId, jobUrl: j.jobUrl }))
-                          const res = await fetch("/api/ats-sync-all", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ selectedJobUrls: selected }),
-                          })
-                          const data = await res.json()
-                          if (data.error) {
-                            alert(`Error: ${data.error}`)
-                          } else {
-                            alert(data.message)
-                            setShowAtsPreview(false)
-                          }
-                        } catch (err) {
-                          alert(`Sync failed: ${err}`)
-                        } finally {
-                          setIsSaving(false)
-                        }
-                      }}
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      {isSaving ? "Syncing..." : `Sync All ${atsPreviewSelected.size} Jobs`}
-                    </Button>
-                  </div>
-                </div>
-
-                <Tabs defaultValue="new" className="mt-2">
-                  <TabsList className="w-full">
-                    <TabsTrigger value="new" className="flex-1 gap-1.5">
-                      <Plus className="h-3 w-3" /> New Jobs
-                      <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] ml-1">{newJobs.length}</Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="existing" className="flex-1 gap-1.5">
-                      <RefreshCw className="h-3 w-3" /> Existing Jobs
-                      <Badge variant="secondary" className="text-[10px] ml-1">{existingJobs.length}</Badge>
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="new" className="mt-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-muted-foreground">These jobs will be added to your database</p>
-                      <div className="flex items-center gap-3 text-xs">
-                        <button className="text-primary hover:underline" onClick={() => {
-                          const next = new Set(atsPreviewSelected)
-                          newJobs.forEach((j) => next.add(j.jobUrl))
-                          setAtsPreviewSelected(next)
-                        }}>Select all new</button>
-                        <button className="text-primary hover:underline" onClick={() => {
-                          const next = new Set(atsPreviewSelected)
-                          newJobs.forEach((j) => next.delete(j.jobUrl))
-                          setAtsPreviewSelected(next)
-                        }}>Deselect all new</button>
-                      </div>
-                    </div>
-                    {newJobs.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <Check className="h-8 w-8 text-green-500 mb-2" />
-                        <p className="text-sm text-muted-foreground">All jobs are already synced!</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto">
-                        {newJobs.map((job) => (
-                          <label
-                            key={job.jobUrl}
-                            className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                              atsPreviewSelected.has(job.jobUrl) ? "border-green-500/40 bg-green-500/5" : "border-border hover:bg-accent/30"
-                            }`}
-                          >
-                            <Checkbox
-                              checked={atsPreviewSelected.has(job.jobUrl)}
-                              onCheckedChange={(checked) => {
-                                const next = new Set(atsPreviewSelected)
-                                checked ? next.add(job.jobUrl) : next.delete(job.jobUrl)
-                                setAtsPreviewSelected(next)
-                              }}
-                              className="mt-0.5"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium truncate">{job.title}</span>
-                                <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[10px] shrink-0">New</Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
-                                <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
-                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
-                                <span>{job.type}</span>
-                                {job.salaryRange !== "Not specified" && job.salaryRange !== "Competitive salary" && <span>{job.salaryRange}</span>}
-                              </div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="existing" className="mt-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-muted-foreground">These jobs already exist and will be updated with fresh data if selected</p>
-                      <div className="flex items-center gap-3 text-xs">
-                        <button className="text-primary hover:underline" onClick={() => {
-                          const next = new Set(atsPreviewSelected)
-                          existingJobs.forEach((j) => next.add(j.jobUrl))
-                          setAtsPreviewSelected(next)
-                        }}>Select all</button>
-                        <button className="text-primary hover:underline" onClick={() => {
-                          const next = new Set(atsPreviewSelected)
-                          existingJobs.forEach((j) => next.delete(j.jobUrl))
-                          setAtsPreviewSelected(next)
-                        }}>Deselect all</button>
-                      </div>
-                    </div>
-                    {existingJobs.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <Briefcase className="h-8 w-8 text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">All jobs are new!</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto">
-                        {existingJobs.map((job) => (
-                          <label
-                            key={job.jobUrl}
-                            className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                              atsPreviewSelected.has(job.jobUrl) ? "border-primary/40 bg-primary/5" : "border-border hover:bg-accent/30"
-                            }`}
-                          >
-                            <Checkbox
-                              checked={atsPreviewSelected.has(job.jobUrl)}
-                              onCheckedChange={(checked) => {
-                                const next = new Set(atsPreviewSelected)
-                                checked ? next.add(job.jobUrl) : next.delete(job.jobUrl)
-                                setAtsPreviewSelected(next)
-                              }}
-                              className="mt-0.5"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium truncate">{job.title}</span>
-                                <Badge variant="secondary" className="text-[10px] shrink-0">Existing</Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
-                                <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
-                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
-                                <span>{job.type}</span>
-                                {job.salaryRange !== "Not specified" && job.salaryRange !== "Competitive salary" && <span>{job.salaryRange}</span>}
-                              </div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-
-                <DialogFooter className="mt-3">
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowAtsPreview(false)}>
-                    Cancel
-                  </Button>
-                </DialogFooter>
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      {/* ========== CLEANUP STALE JOBS DIALOG ========== */}
-      <Dialog open={showCleanupPreview} onOpenChange={setShowCleanupPreview}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Trash2 className="h-5 w-5 text-destructive" />
-              Delete Non-Existing Jobs
-            </DialogTitle>
-          </DialogHeader>
-
-          {staleJobs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Check className="h-8 w-8 text-green-500 mb-2" />
-              <p className="text-sm font-medium">All jobs are up to date!</p>
-              <p className="text-xs text-muted-foreground mt-1">No stale jobs found across ATS-integrated companies.</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">{staleJobs.length} jobs no longer exist on company portals</span>
-                  <span className="text-[11px] text-muted-foreground">These jobs will be permanently deleted from your database.</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5 max-h-[45vh] overflow-y-auto mt-2">
-                {staleJobs.map((job) => (
-                  <div key={job.id} className="flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-                    <Trash2 className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{job.title}</span>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
-                        <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{job.companyName}</span>
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
-                        <span>{job.type}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          <DialogFooter className="mt-3 gap-2">
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => setShowCleanupPreview(false)}>
-              Cancel
-            </Button>
-            {staleJobs.length > 0 && (
-              <Button
-                size="sm"
-                className="text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-1.5"
-                disabled={isDeleting}
-                onClick={async () => {
-                  setIsDeleting(true)
-                  try {
-                    const res = await fetch("/api/cleanup-jobs", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ preview: false, jobIds: staleJobs.map(j => j.id) }),
-                    })
-                    const data = await res.json()
-                    if (data.error) {
-                      alert(`Error: ${data.error}`)
-                    } else {
-                      alert(data.message)
-                      setShowCleanupPreview(false)
-                      refreshJobs()
-                    }
-                  } catch (err) {
-                    alert("Failed to delete stale jobs")
-                  } finally {
-                    setIsDeleting(false)
-                  }
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
-                {isDeleting ? "Deleting..." : `Delete ${staleJobs.length} Jobs`}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   )
