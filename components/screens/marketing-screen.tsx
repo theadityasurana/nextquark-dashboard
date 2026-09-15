@@ -269,7 +269,7 @@ export function MarketingScreen() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Marketing</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, Bangalore QR field ops, signup trends & onboarding funnel</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, Bangalore download QR, signup trends & onboarding funnel</p>
         </div>
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh

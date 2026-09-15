@@ -6,10 +6,11 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
-import { Check, Copy, QrCode } from "lucide-react"
+import { Check, Copy, MapPin, QrCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { DownloadAnalyticsPayload } from "@/lib/download-analytics-types"
+import type { QrMapMode } from "@/components/bangalore-qr-map"
 import { formatIst } from "@/lib/ist"
 
 const BangaloreQrMap = dynamic(
@@ -39,16 +40,7 @@ const COLORS = [
   "oklch(0.72 0.18 320)",
 ]
 
-const EXAMPLE_SLUGS = [
-  "mg-road-metro-exit-2",
-  "hsr-sector-7-cafe",
-  "bellandur-ecoworld-gate",
-  "koramangala-5th-block-metro",
-  "indiranagar-100ft-road",
-  "iisc-main-gate",
-]
-
-const QR_BASE = "https://download.nextquark.in/"
+const QR_URL = "https://download.nextquark.in/"
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
@@ -92,7 +84,7 @@ function CopyBtn({ value }: { value: string }) {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground shrink-0"
       onClick={async () => {
         await navigator.clipboard.writeText(value)
         setCopied(true)
@@ -105,46 +97,42 @@ function CopyBtn({ value }: { value: string }) {
   )
 }
 
+const EMPTY: DownloadAnalyticsPayload = {
+  kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
+  pins: [],
+  clusters: [],
+  posters: [],
+  posterMarkers: [],
+  spots: [],
+  byHour: [],
+  daily: [],
+  devices: [],
+  error: "Failed to load download analytics",
+  spotsError: null,
+}
+
 export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
   const [data, setData] = useState<DownloadAnalyticsPayload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [mapMode, setMapMode] = useState<"pins" | "clusters">("pins")
-  const [slug, setSlug] = useState("mg-road-metro-exit-2")
+  const [mapMode, setMapMode] = useState<QrMapMode>("clusters")
+  const [picking, setPicking] = useState(false)
+  const [spotForm, setSpotForm] = useState({ campaign: "", label: "", latitude: "", longitude: "", notes: "" })
+  const [spotSaving, setSpotSaving] = useState(false)
+  const [spotMsg, setSpotMsg] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const reload = () => {
     setLoading(true)
     fetch("/api/download-analytics")
       .then((r) => r.json())
-      .then((json: DownloadAnalyticsPayload) => {
-        if (!cancelled) setData(json)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setData({
-            kpis: { today: 0, d7: 0, d30: 0 },
-            pins: [],
-            clusters: [],
-            posters: [],
-            byHour: [],
-            daily: [],
-            devices: [],
-            error: "Failed to load download analytics",
-          })
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [refreshKey])
+      .then((json: DownloadAnalyticsPayload) => setData(json))
+      .catch(() => setData(EMPTY))
+      .finally(() => setLoading(false))
+  }
 
-  const builtUrl = useMemo(() => {
-    const c = slugify(slug)
-    return c ? `${QR_BASE}?c=${c}` : QR_BASE
-  }, [slug])
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
 
   const hourData = useMemo(
     () => (data?.byHour ?? []).map((d) => ({ ...d, label: hourLabel(d.hour) })),
@@ -163,6 +151,64 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
     [data],
   )
 
+  const startPlace = (campaign: string) => {
+    const existing = data?.spots.find((s) => s.campaign === campaign)
+    setSpotForm({
+      campaign,
+      label: existing?.label || campaign,
+      latitude: existing ? String(existing.latitude) : "",
+      longitude: existing ? String(existing.longitude) : "",
+      notes: existing?.notes || "",
+    })
+    setMapMode("posters")
+    setPicking(true)
+    setSpotMsg("Click the map at the physical poster.")
+  }
+
+  const saveSpot = async () => {
+    const campaign = slugify(spotForm.campaign)
+    const latitude = Number(spotForm.latitude)
+    const longitude = Number(spotForm.longitude)
+    if (!campaign || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setSpotMsg("Need a campaign slug and lat/lng.")
+      return
+    }
+    setSpotSaving(true)
+    setSpotMsg(null)
+    const res = await fetch("/api/campaign-spots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        campaign,
+        label: spotForm.label || campaign,
+        latitude,
+        longitude,
+        notes: spotForm.notes || null,
+        active: true,
+      }),
+    })
+    const json = await res.json()
+    setSpotSaving(false)
+    if (!res.ok) {
+      setSpotMsg(json.error || "Save failed")
+      return
+    }
+    setPicking(false)
+    setSpotMsg("Saved poster location.")
+    reload()
+  }
+
+  const deleteSpot = async (campaign: string) => {
+    if (!confirm(`Remove configured location for ${campaign}? Scans stay; the map marker is removed.`)) return
+    const res = await fetch(`/api/campaign-spots?campaign=${encodeURIComponent(campaign)}`, { method: "DELETE" })
+    if (!res.ok) {
+      const json = await res.json()
+      setSpotMsg(json.error || "Delete failed")
+      return
+    }
+    reload()
+  }
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -171,39 +217,31 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
     )
   }
 
-  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0 }
+  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 }
+  const mapPins = data?.pins.length ?? 0
+  const gpsPct = mapPins > 0 ? Math.round((kpis.gps_pins / mapPins) * 100) : 0
   const devices = data?.devices ?? []
   const deviceTotal = devices.reduce((s, d) => s + d.value, 0)
+  const tagged = (data?.posters ?? []).filter((p) => p.spot !== "(untagged QR)")
+  const showAdvanced = tagged.length > 0 || (data?.spots.length ?? 0) > 0
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <QrCode className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-semibold tracking-tight">Bangalore QR</h2>
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Field ops for download.nextquark.in — campaign slug is ground truth for which poster was scanned; map pins are Cloudflare IP estimates (~100m–1km).
-          </p>
+      <div>
+        <div className="flex items-center gap-2">
+          <QrCode className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight">Bangalore QR</h2>
         </div>
-        <div className="flex rounded-md border border-border/60 overflow-hidden shrink-0">
-          <Button
-            size="sm"
-            variant={mapMode === "pins" ? "secondary" : "ghost"}
-            className="h-7 text-xs rounded-none"
-            onClick={() => setMapMode("pins")}
-          >
-            Pins
-          </Button>
-          <Button
-            size="sm"
-            variant={mapMode === "clusters" ? "secondary" : "ghost"}
-            className="h-7 text-xs rounded-none"
-            onClick={() => setMapMode("clusters")}
-          >
-            Heat (~150m)
-          </Button>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+          One QR for all Bangalore posters. Print this URL everywhere. The map shows where the phone was when they opened the page — not which physical poster.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-2">QR URL</p>
+        <div className="flex items-center gap-3 min-w-0">
+          <code className="text-sm sm:text-base font-mono truncate flex-1">{QR_URL}</code>
+          <CopyBtn value={QR_URL} />
         </div>
       </div>
 
@@ -217,22 +255,55 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         <StatCard label="Scans today" value={kpis.today.toLocaleString()} sub="IST calendar day" />
         <StatCard label="Last 7 days" value={kpis.d7.toLocaleString()} sub="rolling" />
         <StatCard label="Last 30 days" value={kpis.d30.toLocaleString()} sub="rolling" />
-        <StatCard
-          label="Map pins"
-          value={(data?.pins.length ?? 0).toLocaleString()}
-          sub="Bangalore bbox only"
-        />
+        <StatCard label="GPS on map pins" value={mapPins ? `${gpsPct}%` : "—"} sub={`${kpis.gps_pins.toLocaleString()} GPS · ${kpis.ip_pins.toLocaleString()} IP`} />
       </div>
 
       <ChartCard
-        title="Scan map"
-        sub="Centered on Bangalore (12.97, 77.59). Pins = phone location estimate; campaign in tooltip = which QR."
+        title="Where people scanned"
+        sub="City-wide pattern. Heat is the default. Pins: green = GPS (user tapped Allow), purple = IP only."
       >
-        <BangaloreQrMap pins={data?.pins ?? []} clusters={data?.clusters ?? []} mode={mapMode} />
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs mb-3">
+          With one QR, the map shows where the phone was when they scanned — not which physical poster.
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div className="flex rounded-md border border-border/60 overflow-hidden">
+            <Button size="sm" variant={mapMode === "clusters" ? "secondary" : "ghost"} className="h-7 text-xs rounded-none" onClick={() => setMapMode("clusters")}>
+              Heat
+            </Button>
+            <Button size="sm" variant={mapMode === "pins" ? "secondary" : "ghost"} className="h-7 text-xs rounded-none" onClick={() => setMapMode("pins")}>
+              Pins
+            </Button>
+            {showAdvanced && (
+              <Button size="sm" variant={mapMode === "posters" ? "secondary" : "ghost"} className="h-7 text-xs rounded-none" onClick={() => setMapMode("posters")}>
+                By poster
+              </Button>
+            )}
+          </div>
+          {picking && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPicking(false)}>
+              Cancel pick
+            </Button>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          Better pins: scanners tap <strong className="text-foreground/80">Allow</strong> on location (download page, ~2.5s). CARTO is the basemap only — it does not improve GPS/IP accuracy.
+        </p>
+        <BangaloreQrMap
+          pins={data?.pins ?? []}
+          clusters={data?.clusters ?? []}
+          posterMarkers={data?.posterMarkers ?? []}
+          mode={mapMode}
+          picking={picking}
+          onPick={(lat, lng) => {
+            if (!picking) return
+            setSpotForm((f) => ({ ...f, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))
+            setSpotMsg("Coordinates filled — save to store this poster’s location.")
+          }}
+        />
       </ChartCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Scans by hour (IST)" sub="when to restock posters">
+        <ChartCard title="Scans by hour (IST)" sub="when people open the download page">
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
@@ -290,131 +361,98 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         </ChartCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <ChartCard
-            title="Best-performing posters"
-            sub="Rank by campaign slug, not city — city is almost always Bangalore"
-          >
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+      <ChartCard title="Device type" sub="mobile vs desktop">
+        <div className="h-48 flex items-center gap-2">
+          {devices.length === 0 ? (
+            <p className="text-xs text-muted-foreground w-full text-center">No device data yet</p>
+          ) : (
+            <>
+              <ResponsiveContainer width="40%" height="100%">
+                <PieChart>
+                  <Pie data={devices} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={3}>
+                    {devices.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                {devices.map((d, i) => {
+                  const pct = deviceTotal > 0 ? ((d.value / deviceTotal) * 100).toFixed(1) : "0"
+                  return (
+                    <div key={d.name} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        <span className="text-xs text-muted-foreground truncate">{d.name}</span>
+                      </div>
+                      <span className="text-xs tabular-nums">{pct}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </ChartCard>
+
+      {showAdvanced && (
+        <details className="rounded-xl border border-border/60 bg-card">
+          <summary className="px-5 py-3 text-sm font-medium cursor-pointer">
+            Advanced: tagged campaigns (?c=)
+          </summary>
+          <div className="px-5 pb-4 flex flex-col gap-4 border-t border-border/40 pt-3">
+            <p className="text-[11px] text-muted-foreground">
+              Only if you print different <code className="font-mono">?c=</code> slugs per poster. Single-QR Bangalore ops can ignore this.
+            </p>
+            <div className="overflow-x-auto max-h-64 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card">
+                <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
                     <th className="py-2 pr-3 font-medium">Poster / spot</th>
                     <th className="py-2 pr-3 font-medium text-right">Scans</th>
-                    <th className="py-2 pr-3 font-medium">First seen</th>
-                    <th className="py-2 font-medium">Last seen</th>
+                    <th className="py-2 pr-3 font-medium">Last seen</th>
+                    <th className="py-2 font-medium" />
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.posters ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
-                        No scans in the last 30 days. Print unique <span className="font-mono">?c=</span> slugs on each QR.
+                  {tagged.map((row) => (
+                    <tr key={row.spot} className="border-b border-border/30 last:border-0">
+                      <td className="py-2 pr-3 font-mono text-xs">{row.spot}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{row.scans.toLocaleString()}</td>
+                      <td className="py-2 pr-3 text-[11px] text-muted-foreground">{formatIst(row.last_seen)}</td>
+                      <td className="py-2 text-right">
+                        <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => startPlace(row.spot)}>
+                          {row.configured ? "Edit pin" : "Set pin"}
+                        </button>
                       </td>
                     </tr>
-                  ) : (
-                    data!.posters.map((row) => (
-                      <tr key={row.spot} className="border-b border-border/30 last:border-0">
-                        <td className="py-2 pr-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono text-xs truncate">{row.spot}</span>
-                            {row.spot !== "(untagged QR)" && (
-                              <CopyBtn value={`${QR_BASE}?c=${row.spot}`} />
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums font-semibold">{row.scans.toLocaleString()}</td>
-                        <td className="py-2 pr-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatIst(row.first_seen)}</td>
-                        <td className="py-2 text-[11px] text-muted-foreground whitespace-nowrap">{formatIst(row.last_seen)}</td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
-          </ChartCard>
-        </div>
-
-        <ChartCard title="Device type" sub="mobile vs desktop">
-          <div className="h-56 flex items-center gap-2">
-            {devices.length === 0 ? (
-              <p className="text-xs text-muted-foreground w-full text-center">No device data yet</p>
-            ) : (
-              <>
-                <ResponsiveContainer width="50%" height="100%">
-                  <PieChart>
-                    <Pie data={devices} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={3}>
-                      {devices.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null
-                        const d = payload[0]
-                        const val = d.value as number
-                        const pct = deviceTotal > 0 ? ((val / deviceTotal) * 100).toFixed(1) : "0.0"
-                        return (
-                          <div style={TT_STYLE}>
-                            <p className="font-semibold mb-1">{d.name}</p>
-                            <p className="text-sm">{val.toLocaleString()} scans</p>
-                            <p className="text-xs text-muted-foreground">{pct}%</p>
-                          </div>
-                        )
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-col gap-2 flex-1 min-w-0">
-                  {devices.map((d, i) => {
-                    const pct = deviceTotal > 0 ? ((d.value / deviceTotal) * 100).toFixed(1) : "0"
-                    return (
-                      <div key={d.name} className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                          <span className="text-xs text-muted-foreground truncate">{d.name}</span>
-                        </div>
-                        <span className="text-xs tabular-nums">{pct}%</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        </ChartCard>
-      </div>
-
-      <ChartCard title="QR URL builder" sub="Every poster needs a unique ?c= slug. Map shows where the phone was; campaign shows which poster.">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="koramangala-5th-block-metro"
-              className="font-mono text-xs"
-            />
-            <div className="flex items-center gap-2 min-w-0">
-              <code className="text-[11px] truncate text-muted-foreground">{builtUrl}</code>
-              <CopyBtn value={builtUrl} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              <Input className="font-mono text-xs" placeholder="campaign slug" value={spotForm.campaign} onChange={(e) => setSpotForm({ ...spotForm, campaign: e.target.value })} />
+              <Input className="text-xs" placeholder="label" value={spotForm.label} onChange={(e) => setSpotForm({ ...spotForm, label: e.target.value })} />
+              <Input className="font-mono text-xs" placeholder="latitude" value={spotForm.latitude} onChange={(e) => setSpotForm({ ...spotForm, latitude: e.target.value })} />
+              <Input className="font-mono text-xs" placeholder="longitude" value={spotForm.longitude} onChange={(e) => setSpotForm({ ...spotForm, longitude: e.target.value })} />
+              <Input className="text-xs" placeholder="notes" value={spotForm.notes} onChange={(e) => setSpotForm({ ...spotForm, notes: e.target.value })} />
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLE_SLUGS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSlug(s)}
-                className="text-[11px] font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-accent/40"
-              >
-                ?c={s}
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setPicking(true); setMapMode("posters") }}>
+                <MapPin className="h-3 w-3" /> Click map
+              </Button>
+              <Button size="sm" className="h-7 text-xs" onClick={saveSpot} disabled={spotSaving}>
+                {spotSaving ? "Saving…" : "Save location"}
+              </Button>
+              {spotMsg && <span className="text-[11px] text-muted-foreground">{spotMsg}</span>}
+            </div>
+            {(data?.spots ?? []).map((s) => (
+              <div key={s.campaign} className="flex justify-between text-[11px] font-mono">
+                <span>{s.campaign}</span>
+                <button type="button" className="text-destructive/80" onClick={() => deleteSpot(s.campaign)}>Delete</button>
+              </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Ingest is automatic via POST /api/track on page load. This admin view is read-only. Location is IP-based and approximate — disclose in the privacy policy.
-          </p>
-        </div>
-      </ChartCard>
+        </details>
+      )}
     </div>
   )
 }

@@ -1,26 +1,50 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import type { DownloadCluster, DownloadVisitPin } from "@/lib/download-analytics-types"
+import type { DownloadCluster, DownloadVisitPin, PosterMarker } from "@/lib/download-analytics-types"
 import { formatIst } from "@/lib/ist"
 import "leaflet/dist/leaflet.css"
+
+export type QrMapMode = "posters" | "pins" | "clusters"
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
+type TileCfg = {
+  url: string
+  attribution: string
+  subdomains: string
+  maxZoom: number
+}
+
+const OSM: TileCfg = {
+  url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  attribution: "&copy; OpenStreetMap contributors",
+  subdomains: "abc",
+  maxZoom: 19,
+}
+
 export function BangaloreQrMap({
   pins,
   clusters,
+  posterMarkers,
   mode,
+  picking,
+  onPick,
 }: {
   pins: DownloadVisitPin[]
   clusters: DownloadCluster[]
-  mode: "pins" | "clusters"
+  posterMarkers: PosterMarker[]
+  mode: QrMapMode
+  picking?: boolean
+  onPick?: (lat: number, lng: number) => void
 }) {
   const elRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import("leaflet").Map | null>(null)
   const layersRef = useRef<import("leaflet").LayerGroup | null>(null)
+  const onPickRef = useRef(onPick)
+  onPickRef.current = onPick
 
   useEffect(() => {
     let cancelled = false
@@ -36,26 +60,25 @@ export function BangaloreQrMap({
           minZoom: 11,
           maxZoom: 16,
         })
-        const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY?.trim()
-        const tiles = cartoKey
-          ? {
-              url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoKey)}`,
-              attribution: "&copy; OpenStreetMap &copy; CARTO",
-              subdomains: "abcd",
-              maxZoom: 19,
-            }
-          : {
-              url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              attribution: "&copy; OpenStreetMap contributors",
-              subdomains: "abc",
-              maxZoom: 19,
-            }
+        let tiles = OSM
+        try {
+          const res = await fetch("/api/map-basemap")
+          if (res.ok) {
+            const cfg = (await res.json()) as TileCfg
+            if (cfg.url) tiles = cfg
+          }
+        } catch {
+          /* OSM fallback */
+        }
         L.tileLayer(tiles.url, {
           attribution: tiles.attribution,
           subdomains: tiles.subdomains,
           maxZoom: tiles.maxZoom,
         }).addTo(mapRef.current)
         layersRef.current = L.layerGroup().addTo(mapRef.current)
+        mapRef.current.on("click", (e: { latlng: { lat: number; lng: number } }) => {
+          onPickRef.current?.(e.latlng.lat, e.latlng.lng)
+        })
       }
 
       const layers = layersRef.current
@@ -73,23 +96,49 @@ export function BangaloreQrMap({
             fillOpacity: 0.45,
           })
             .bindTooltip(
-              `<div style="font-size:12px"><strong>${c.scans} scans</strong><br/>~150m cell<br/>${escapeHtml(c.sample_campaign || "(untagged QR)")}</div>`,
+              `<div style="font-size:12px"><strong>${c.scans} scans</strong><br/>~150m cell · where phones were</div>`,
+              { sticky: true },
+            )
+            .addTo(layers)
+        }
+      } else if (mode === "posters") {
+        for (const m of posterMarkers) {
+          const radius = Math.min(22, 8 + Math.sqrt(Math.max(m.scans, 1)) * 3)
+          const last = m.last_seen ? `${formatIst(m.last_seen)} IST` : "no scans yet"
+          const ip = m.ip_centroid
+            ? `<br/><span style="opacity:.75">IP centroid (approx): ${m.ip_centroid.lat.toFixed(4)}, ${m.ip_centroid.lng.toFixed(4)}</span>`
+            : ""
+          L.circleMarker([m.lat, m.lng], {
+            radius,
+            color: "#34d399",
+            weight: 2,
+            fillColor: "#10b981",
+            fillOpacity: 0.85,
+          })
+            .bindTooltip(
+              `<div style="font-size:12px"><strong>${escapeHtml(m.label)}</strong><br/><code>${escapeHtml(m.campaign)}</code><br/>${m.scans} scans<br/>Last: ${escapeHtml(last)}${ip}</div>`,
               { sticky: true },
             )
             .addTo(layers)
         }
       } else {
         for (const pin of pins) {
-          const label = escapeHtml(pin.campaign || "(untagged QR)")
+          const loc =
+            pin.location_source === "gps"
+              ? "Phone location (GPS)"
+              : "Network estimate (IP)"
+          const campaignLine = pin.campaign
+            ? `<br/><code>${escapeHtml(pin.campaign)}</code>`
+            : ""
           L.circleMarker([pin.lat, pin.lng], {
-            radius: 5,
-            color: "#c4b5fd",
+            radius: pin.location_source === "gps" ? 6 : 5,
+            color: pin.location_source === "gps" ? "#34d399" : "#c4b5fd",
             weight: 1,
-            fillColor: "#8b5cf6",
+            fillColor: pin.location_source === "gps" ? "#10b981" : "#8b5cf6",
             fillOpacity: 0.85,
           })
             .bindTooltip(
-              `<div style="font-size:12px"><strong>${label}</strong><br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
+              `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
               { sticky: true },
             )
             .addTo(layers)
@@ -102,7 +151,7 @@ export function BangaloreQrMap({
     return () => {
       cancelled = true
     }
-  }, [pins, clusters, mode])
+  }, [pins, clusters, posterMarkers, mode])
 
   useEffect(() => {
     return () => {
@@ -112,5 +161,10 @@ export function BangaloreQrMap({
     }
   }, [])
 
-  return <div ref={elRef} className="h-[420px] w-full rounded-lg bg-muted/20" />
+  return (
+    <div
+      ref={elRef}
+      className={`h-[420px] w-full rounded-lg bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
+    />
+  )
 }

@@ -16,19 +16,31 @@ type VisitRow = {
   campaign: string | null
   latitude: number | null
   longitude: number | null
+  gps_latitude?: number | null
+  gps_longitude?: number | null
   device_type: string | null
+  location_source: string | null
 }
 
-function emptyPayload(error?: string): DownloadAnalyticsPayload {
+const VISIT_SELECTS = [
+  "id, created_at, campaign, latitude, longitude, device_type, location_source, gps_latitude, gps_longitude",
+  "id, created_at, campaign, latitude, longitude, device_type, location_source",
+  "id, created_at, campaign, latitude, longitude, device_type",
+]
+
+function emptyPayload(error?: string, spotsError: string | null = null): DownloadAnalyticsPayload {
   return {
-    kpis: { today: 0, d7: 0, d30: 0 },
+    kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
     pins: [],
     clusters: [],
     posters: [],
+    posterMarkers: [],
+    spots: [],
     byHour: Array.from({ length: 24 }, (_, hour) => ({ hour, scans: 0 })),
     daily: [],
     devices: [],
     error: error ?? null,
+    spotsError,
   }
 }
 
@@ -40,30 +52,51 @@ export async function GET() {
     const since7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const todayStart = startOfTodayIst(now)
 
+    const spotsRes = await supabase
+      .from("campaign_spots")
+      .select("campaign, label, latitude, longitude, notes, active")
+
+    const spotsError = spotsRes.error?.message ?? null
+    const spots = (spotsRes.data ?? []).map((s) => ({
+      campaign: String(s.campaign),
+      label: s.label as string | null,
+      latitude: Number(s.latitude),
+      longitude: Number(s.longitude),
+      notes: (s.notes as string | null) ?? null,
+      active: s.active !== false,
+    }))
+    const spotByCampaign = new Map(spots.filter((s) => s.active).map((s) => [s.campaign, s]))
+
     const rows: VisitRow[] = []
     let from = 0
+    let selectIdx = 0
     while (from < MAX_ROWS) {
       const to = Math.min(from + PAGE - 1, MAX_ROWS - 1)
       const { data, error } = await supabase
         .from("download_link_visits")
-        .select("id, created_at, campaign, latitude, longitude, device_type")
+        .select(VISIT_SELECTS[selectIdx])
         .gt("created_at", since30)
         .order("created_at", { ascending: false })
         .range(from, to)
 
-      if (error) {
-        return NextResponse.json(emptyPayload(error.message))
+      if (error && selectIdx < VISIT_SELECTS.length - 1) {
+        selectIdx++
+        continue
       }
-      const batch = (data ?? []) as VisitRow[]
+      if (error) {
+        return NextResponse.json(emptyPayload(error.message, spotsError))
+      }
+      const batch = (data ?? []) as unknown as VisitRow[]
       rows.push(...batch)
       if (batch.length < PAGE) break
       from += PAGE
     }
 
-    const kpis = { today: 0, d7: 0, d30: rows.length }
+    const kpis = { today: 0, d7: 0, d30: rows.length, gps_pins: 0, ip_pins: 0 }
     const pins: DownloadVisitPin[] = []
     const clusterMap = new Map<string, { lat: number; lng: number; scans: number; sample_campaign: string | null }>()
     const posterMap = new Map<string, { scans: number; first_seen: string; last_seen: string }>()
+    const ipSum = new Map<string, { lat: number; lng: number; n: number }>()
     const hourCounts = Array.from({ length: 24 }, () => 0)
     const dailyMap = new Map<string, number>()
     const deviceMap = new Map<string, number>()
@@ -96,10 +129,16 @@ export async function GET() {
       const device = (row.device_type || "unknown").toLowerCase()
       deviceMap.set(device, (deviceMap.get(device) || 0) + 1)
 
-      const lat = row.latitude
-      const lng = row.longitude
+      const src = row.location_source === "gps" ? "gps" : "ip"
+      const lat =
+        src === "gps" && row.gps_latitude != null ? Number(row.gps_latitude) : row.latitude
+      const lng =
+        src === "gps" && row.gps_longitude != null ? Number(row.gps_longitude) : row.longitude
       if (lat == null || lng == null) continue
       if (lat < BLR_LAT_MIN || lat > BLR_LAT_MAX || lng < BLR_LNG_MIN || lng > BLR_LNG_MAX) continue
+
+      if (src === "gps") kpis.gps_pins++
+      else kpis.ip_pins++
 
       pins.push({
         id: row.id,
@@ -108,7 +147,16 @@ export async function GET() {
         lat,
         lng,
         device_type: row.device_type,
+        location_source: src,
       })
+
+      if (spot !== "(untagged QR)") {
+        const sum = ipSum.get(spot) || { lat: 0, lng: 0, n: 0 }
+        sum.lat += lat
+        sum.lng += lng
+        sum.n++
+        ipSum.set(spot, sum)
+      }
 
       const latBucket = Math.round(lat * 1000) / 1000
       const lngBucket = Math.round(lng * 1000) / 1000
@@ -126,7 +174,32 @@ export async function GET() {
       .sort((a, b) => b.scans - a.scans)
 
     const posters = [...posterMap.entries()]
-      .map(([spot, v]) => ({ spot, ...v }))
+      .map(([spot, v]) => {
+        const cfg = spotByCampaign.get(spot)
+        return {
+          spot,
+          ...v,
+          configured: !!cfg,
+          label: cfg?.label ?? null,
+        }
+      })
+      .sort((a, b) => b.scans - a.scans)
+
+    const posterMarkers = spots
+      .filter((s) => s.active)
+      .map((s) => {
+        const agg = posterMap.get(s.campaign)
+        const ip = ipSum.get(s.campaign)
+        return {
+          campaign: s.campaign,
+          label: s.label || s.campaign,
+          lat: s.latitude,
+          lng: s.longitude,
+          scans: agg?.scans ?? 0,
+          last_seen: agg?.last_seen ?? null,
+          ip_centroid: ip && ip.n > 0 ? { lat: ip.lat / ip.n, lng: ip.lng / ip.n } : null,
+        }
+      })
       .sort((a, b) => b.scans - a.scans)
 
     const devices = [...deviceMap.entries()]
@@ -138,10 +211,13 @@ export async function GET() {
       pins,
       clusters,
       posters,
+      posterMarkers,
+      spots,
       byHour: hourCounts.map((scans, hour) => ({ hour, scans })),
       daily: [...dailyMap.entries()].map(([day, scans]) => ({ day, scans })),
       devices,
       error: null,
+      spotsError,
     })
   } catch (err) {
     console.error("Download analytics fetch error:", err)

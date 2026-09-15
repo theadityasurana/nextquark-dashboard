@@ -1,27 +1,23 @@
 # Marketing analytics (Bangalore QR)
 
-Scan ingest lives on `download.nextquark.in` (`POST /api/track`). This dashboard is **read-only** against `download_link_visits`.
+Ingest: `download.nextquark.in` `POST /api/track` (Cloudflare Pages, nextquark-links). Storage: `public.download_link_visits`. Admin: Marketing → Bangalore QR (read-only except optional `campaign_spots`).
 
-- **Campaign (`?c=`)** is ground truth for which physical poster was scanned.
-- **Map pins** are Cloudflare IP estimates (~100 m–1 km). Do not expect them to sit on the exact poster. Do not swap basemaps to “fix” placement.
+## Product: one QR for Bangalore
 
-## CARTO basemap (admin app only)
+Print **`https://download.nextquark.in/`** on every poster. No `?c=` required.
 
-The Bangalore QR map in Marketing uses CARTO raster `dark_all` tiles via Leaflet:
+- The map shows **where the phone was** when they opened the page, not which physical poster.
+- Default map: **heat clusters** (city-wide pattern).
+- **Green pins** = `location_source = gps` (user tapped Allow on geolocation). **Purple** = IP only.
+- KPI **GPS on map pins** is `%` of Bangalore-bbox pins that are GPS.
+- Do not treat pins as exact poster placement. CARTO (`CARTO_API_KEY` on Vercel → `GET /api/map-basemap`) is the basemap only.
 
-`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=<NEXT_PUBLIC_CARTO_API_KEY>`
+Download page (nextquark-links) should call `navigator.geolocation.getCurrentPosition` (timeout ~2.5s) before one `POST /api/track`. Track prefers GPS in the body, else Cloudflare IP.
 
-### Operators
+## Advanced (hidden unless used)
 
-1. Set **`NEXT_PUBLIC_CARTO_API_KEY`** in **Vercel → Production** for the `nextquark-dashboard` project (not Preview-only).
-2. Redeploy production after adding or rotating the key. `NEXT_PUBLIC_*` is inlined at build time.
-3. Keep CARTO and OpenStreetMap attribution on the map.
+If visits have a non-null `campaign` or `campaign_spots` rows exist, admin shows a collapsed **tagged campaigns (?c=)** section. That is optional multi-poster mode only.
 
-If the key is missing, the map falls back to OpenStreetMap tiles (no CARTO watermark) so local/dev still works.
+## CARTO
 
-### Do not
-
-- Commit the real key (use `.env.local` locally; it is gitignored).
-- Put the key in Supabase, Cloudflare Pages, `nextquark-links`, or `index.html`.
-- Hardcode the key in `components/bangalore-qr-map.tsx`.
-- Change `download_link_visits` or `/api/download-analytics` for CARTO — analytics data is unrelated.
+Set **`CARTO_API_KEY`** on the nextquark-dashboard Vercel project (server). Do not put it in Supabase or require `NEXT_PUBLIC_CARTO_API_KEY`.
