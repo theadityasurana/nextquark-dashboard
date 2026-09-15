@@ -48,14 +48,21 @@ function formatSalary(min: string, max: string): string {
 
 /** Strip all HTML tags and decode entities to produce a clean plain-text description snippet. */
 function htmlToDescription(html: string, maxLen = 500): string {
-  return html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
-    .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .substring(0, maxLen)
+  let text = html
+  // Iteratively decode and strip — handles content where encoded HTML is nested
+  // inside real HTML (e.g. Lark documents served via Greenhouse)
+  for (let i = 0; i < 8; i++) {
+    const prev = text
+    // Decode entities first
+    text = text
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+      .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/')
+    // Then strip any tags that became visible after decoding
+    text = text.replace(/<[^>]*>/g, ' ')
+    if (text === prev) break
+  }
+  return text.replace(/\s+/g, ' ').trim().substring(0, maxLen)
 }
 
 export async function fetchJobsFromAts(atsType: string, atsCompanyId: string): Promise<any[]> {
@@ -196,6 +203,8 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
       .map(j => j.id)
     if (staleIds.length > 0) {
       console.log(`${tag} deleting ${staleIds.length} stale jobs`)
+      // Must delete queue entries first to avoid FK violation
+      await supabase.from('live_application_queue').delete().in('job_id', staleIds)
       const { error } = await supabase.from('jobs').delete().in('id', staleIds)
       if (!error) {
         deletedCount = staleIds.length
@@ -212,13 +221,13 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
 
   // Queue jobs with no experience for async LLM enrichment
   const toEnrich = [
-    ...toInsert.filter(j => !j.experience).map(j => ({ job_id: j.id, job_title: j.title })),
-    ...toUpdate.filter(j => !j.data.experience).map(j => ({ job_id: j.id, job_title: j.data.title })),
+    ...toInsert.filter(j => !j.experience).map(j => ({ job_id: j.id, job_title: j.title, company_name: j.company_name })),
+    ...toUpdate.filter(j => !j.data.experience).map(j => ({ job_id: j.id, job_title: j.data.title, company_name: j.data.company_name })),
   ]
   if (toEnrich.length > 0) {
     console.log(`${tag} queuing ${toEnrich.length} jobs for LLM experience enrichment`)
     await supabase.from('experience_enrichment_queue')
-      .upsert(toEnrich.map(j => ({ job_id: j.job_id, job_title: j.job_title, status: 'pending' })), { onConflict: 'job_id', ignoreDuplicates: true })
+      .upsert(toEnrich.map(j => ({ job_id: j.job_id, job_title: j.job_title, company_name: j.company_name, status: 'pending' })), { onConflict: 'job_id', ignoreDuplicates: true })
   }
 
   return { addedCount, updatedCount, deletedCount, totalLive: liveJobUrls.length }

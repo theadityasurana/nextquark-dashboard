@@ -4,12 +4,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // and avoid hammering OpenRouter rate limits
 const BATCH_SIZE = 10
 
-// Hard timeout per LLM call in ms — if OpenRouter doesn't respond in time,
-// we fall back gracefully rather than hanging the invocation
-const LLM_TIMEOUT_MS = 4000
+// Hard timeout per LLM call in ms
+const LLM_TIMEOUT_MS = 5000
 
-// Max retry attempts per job before marking as failed
-const MAX_ATTEMPTS = 3
+// Max retry attempts — higher gives more chances when rate limited
+const MAX_ATTEMPTS = 5
 
 const EXPERIENCE_LEVELS = [
   'Internship', 'Entry Level', 'Middle Level', 'Senior Level',
@@ -51,7 +50,7 @@ async function classifyWithLLM(title: string, apiKey: string): Promise<string | 
         'X-Title': 'NextQuark Job Classifier',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-3b-instruct:free',
+        model: 'google/gemma-3-4b-it:free',
         max_tokens: 8,
         temperature: 0,
         messages: [{
@@ -76,7 +75,37 @@ async function classifyWithLLM(title: string, apiKey: string): Promise<string | 
   }
 }
 
+/**
+ * Last-resort inference for completely generic titles.
+ * "Software Engineer" → Middle Level, "Engineering Manager" → Lead, etc.
+ * Returns null only for truly unclassifiable titles.
+ */
+function inferGenericLevel(title: string): string | null {
+  const t = title.toLowerCase()
+  // Manager/Lead roles without explicit level
+  if (/\bmanager\b|\bmanagement\b/.test(t)) return 'Lead'
+  if (/\bengineering\s+manager\b|\beng\s+manager\b/.test(t)) return 'Lead'
+  // Generic IC roles — default to Middle Level
+  if (/\bengineer\b|\bdeveloper\b|\bprogrammer\b|\barchitect\b/.test(t)) return 'Middle Level'
+  if (/\bscientist\b|\bresearcher\b|\banalyst\b/.test(t)) return 'Middle Level'
+  if (/\bdesigner\b|\bproduct\s+manager\b|\bpm\b/.test(t)) return 'Middle Level'
+  if (/\bmarketer\b|\bspecialist\b|\bconsultant\b/.test(t)) return 'Middle Level'
+  if (/\brecruiter\b|\bcoordinator\b|\boperations\b/.test(t)) return 'Middle Level'
+  if (/\baccountant\b|\bfinance\b|\bsales\b/.test(t)) return 'Middle Level'
+  return null
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    })
+  }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
@@ -90,6 +119,15 @@ Deno.serve(async (req) => {
   // sessionId is created on first invocation and passed through on self-invokes
   let { sessionId } = body
 
+  // If a sessionId was passed, check it hasn't been cancelled
+  if (sessionId) {
+    const { data: existingSession } = await supabase
+      .from('sync_sessions').select('status').eq('id', sessionId).single()
+    if (existingSession?.status === 'cancelled') {
+      return new Response(JSON.stringify({ message: 'Session cancelled' }))
+    }
+  }
+
   // Fetch OpenRouter key
   const { data: settings } = await supabase
     .from('settings').select('"openRouterApiKey"').limit(1).single()
@@ -99,18 +137,33 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'No OpenRouter API key configured' }), { status: 400 })
   }
 
-  // Also backfill any existing jobs with null experience not yet in the queue
+  // Clean up dirty experience values before backfilling
+  await supabase.from('jobs')
+    .update({ experience: null })
+    .or('experience.eq.,experience.eq.Not specified')
+
+  // Backfill any existing jobs with null experience not yet in the queue
+  // Fetch already-queued job IDs first, then exclude them
+  const { data: alreadyQueued } = await supabase
+    .from('experience_enrichment_queue')
+    .select('job_id')
+    .in('status', ['pending', 'processing', 'done'])
+    .limit(10000)
+
+  const queuedIds = new Set((alreadyQueued ?? []).map((r: any) => r.job_id))
+
   const { data: unqueued } = await supabase
     .from('jobs')
-    .select('id, title')
+    .select('id, title, company_name')
     .is('experience', null)
-    .not('id', 'in', `(select job_id from experience_enrichment_queue)`)
     .limit(500)
 
-  if (unqueued?.length) {
+  const toQueue = (unqueued ?? []).filter((j: any) => !queuedIds.has(j.id))
+
+  if (toQueue.length > 0) {
     await supabase.from('experience_enrichment_queue')
       .upsert(
-        unqueued.map(j => ({ job_id: j.id, job_title: j.title, status: 'pending' })),
+        toQueue.map((j: any) => ({ job_id: j.id, job_title: j.title, company_name: j.company_name, status: 'pending' })),
         { onConflict: 'job_id', ignoreDuplicates: true }
       )
   }
@@ -133,7 +186,7 @@ Deno.serve(async (req) => {
   // Claim a batch of pending jobs
   const { data: batch } = await supabase
     .from('experience_enrichment_queue')
-    .select('id, job_id, job_title, attempts')
+    .select('id, job_id, job_title, company_name, attempts')
     .eq('status', 'pending')
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
@@ -154,14 +207,17 @@ Deno.serve(async (req) => {
     .in('id', batchIds)
 
   let processed = 0, succeeded = 0, failed = 0
+  const batchLog: Array<{ title: string; company: string; level: string; via: string }> = []
 
   for (const row of batch) {
     await supabase.from('experience_enrichment_queue')
       .update({ status: 'processing', attempts: row.attempts + 1, updated_at: new Date().toISOString() })
       .eq('id', row.id)
 
-    let level = await classifyWithLLM(row.job_title, apiKey)
-    if (!level) level = extractFromTitle(row.job_title)
+    const llmLevel = await classifyWithLLM(row.job_title, apiKey)
+    const heuristicLevel = !llmLevel ? extractFromTitle(row.job_title) : null
+    const level = llmLevel ?? heuristicLevel
+    const via = llmLevel ? 'LLM' : heuristicLevel ? 'title match' : 'none'
 
     if (level) {
       const { error: jobErr } = await supabase
@@ -171,25 +227,49 @@ Deno.serve(async (req) => {
         await supabase.from('experience_enrichment_queue')
           .update({ status: 'done', result: level, updated_at: new Date().toISOString() })
           .eq('id', row.id)
+        batchLog.push({ title: row.job_title, company: row.company_name ?? '', level, via })
         succeeded++
       } else {
+        console.error(`[enrich] failed to update job ${row.job_id}: ${jobErr.message}`)
         await supabase.from('experience_enrichment_queue')
           .update({ status: 'pending', updated_at: new Date().toISOString() })
           .eq('id', row.id)
         failed++
       }
     } else {
-      const newStatus = row.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending'
-      await supabase.from('experience_enrichment_queue')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', row.id)
-      failed++
+      // Both LLM and heuristic returned null.
+      // For generic titles (engineer, manager, analyst etc.) default to Middle Level
+      // rather than leaving experience permanently blank.
+      const genericLevel = inferGenericLevel(row.job_title)
+      if (genericLevel) {
+        const { error: jobErr } = await supabase
+          .from('jobs').update({ experience: genericLevel }).eq('id', row.job_id)
+        if (!jobErr) {
+          await supabase.from('experience_enrichment_queue')
+            .update({ status: 'done', result: genericLevel, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+          batchLog.push({ title: row.job_title, company: row.company_name ?? '', level: genericLevel, via: 'default' })
+          succeeded++
+        } else {
+          const newStatus = row.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending'
+          await supabase.from('experience_enrichment_queue')
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+          failed++
+        }
+      } else {
+        const newStatus = row.attempts + 1 >= MAX_ATTEMPTS ? 'failed' : 'pending'
+        await supabase.from('experience_enrichment_queue')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+        failed++
+      }
     }
 
     processed++
   }
 
-  // Update session progress
+  // Update session progress — append this batch's log to results
   if (sessionId) {
     const { count: doneCount } = await supabase
       .from('experience_enrichment_queue')
@@ -205,12 +285,19 @@ Deno.serve(async (req) => {
       .eq('status', 'pending')
       .lt('attempts', MAX_ATTEMPTS)
 
+    // Fetch existing results and append new batch entries
+    const { data: currentSession } = await supabase
+      .from('sync_sessions').select('results').eq('id', sessionId).single()
+    const existingResults: any[] = currentSession?.results ?? []
+    // Keep last 200 log entries to avoid unbounded growth
+    const newResults = [...existingResults, ...batchLog].slice(-200)
+
     await supabase.from('sync_sessions').update({
       done: doneCount ?? 0,
       failed: failedCount ?? 0,
       updated: doneCount ?? 0,
-      // Keep total accurate as queue grows
       total: (doneCount ?? 0) + (failedCount ?? 0) + (remainingCount ?? 0),
+      results: newResults,
     }).eq('id', sessionId)
   }
 

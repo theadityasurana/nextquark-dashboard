@@ -38,23 +38,29 @@ export function JobsScreen() {
   const [cleanupSessionId, setCleanupSessionId] = useState<string | null>(null)
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [enrichSessionId, setEnrichSessionId] = useState<string | null>(null)
+  const [descBackfillSessionId, setDescBackfillSessionId] = useState<string | null>(null)
+  const [descBackfillLoading, setDescBackfillLoading] = useState(false)
+  const [expEnrichLoading, setExpEnrichLoading] = useState(false)
 
   // On mount, resume any in-progress or recently completed sessions from Supabase
   useEffect(() => {
     const supabase = createClient()
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
     supabase
       .from('sync_sessions')
       .select('id, type, status')
-      .or(`status.eq.running,and(status.eq.done,started_at.gte.${tenMinutesAgo})`)
+      .or(`status.eq.running,and(status.eq.done,finished_at.gte.${twoMinutesAgo})`)
+      .not('status', 'eq', 'cancelled')
       .order('started_at', { ascending: false })
-      .limit(3)
+      .limit(4)
       .then(({ data, error }) => {
         if (error) console.error('[jobs] mount session fetch error:', error.message)
         if (!data) return
         for (const row of data) {
+          if (row.status === 'cancelled') continue
           if (row.type === 'cleanup') setCleanupSessionId(row.id)
           else if (row.type === 'enrich') setEnrichSessionId(row.id)
+          else if (row.type === 'backfill_desc') setDescBackfillSessionId(row.id)
           else setSyncSessionId(row.id)
         }
       })
@@ -63,6 +69,7 @@ export function JobsScreen() {
   const handleSyncComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
   const handleCleanupComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
   const handleEnrichComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
+  const handleDescBackfillComplete = useCallback(() => { refreshJobs() }, [refreshJobs])
 
   // Temp inputs for array fields during add
   const [newRequirement, setNewRequirement] = useState("")
@@ -357,6 +364,55 @@ export function JobsScreen() {
               {cleanupLoading ? <Loader className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
               {cleanupLoading ? "Starting…" : "Delete Non-Existing"}
             </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs"
+              disabled={descBackfillLoading}
+              onClick={async () => {
+                setDescBackfillLoading(true)
+                setDescBackfillSessionId(null)
+                try {
+                  const res = await fetch("/api/jobs/backfill-descriptions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ offset: 0 }),
+                  })
+                  const data = await res.json()
+                  if (data.error) alert(`Error: ${data.error}`)
+                  else if (data.sessionId) setDescBackfillSessionId(data.sessionId)
+                } catch { alert("Failed to start description backfill") }
+                finally { setDescBackfillLoading(false) }
+              }}
+            >
+              {descBackfillLoading ? <Loader className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+              {descBackfillLoading ? "Starting…" : "Clean Descriptions"}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs"
+              disabled={expEnrichLoading}
+              onClick={async () => {
+                setExpEnrichLoading(true)
+                setEnrichSessionId(null)
+                try {
+                  const res = await fetch("/api/enrich-experience", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                  })
+                  const data = await res.json()
+                  if (data.error) alert(`Error: ${data.error}`)
+                  else if (data.sessionId) setEnrichSessionId(data.sessionId)
+                } catch { alert("Failed to start experience enrichment") }
+                finally { setExpEnrichLoading(false) }
+              }}
+            >
+              {expEnrichLoading ? <Loader className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {expEnrichLoading ? "Starting…" : "Enrich Experience"}
+            </Button>
           </div>
 
           {/* Add group */}
@@ -372,32 +428,43 @@ export function JobsScreen() {
         </div>
       </div>
 
-      {syncSessionId && (
-        <SyncProgressBar
-          sessionId={syncSessionId}
-          mode="sync"
-          onComplete={handleSyncComplete}
-          onDismiss={() => setSyncSessionId(null)}
-        />
-      )}
+      <div className="flex flex-col gap-3">
+        {syncSessionId && (
+          <SyncProgressBar
+            sessionId={syncSessionId}
+            mode="sync"
+            onComplete={handleSyncComplete}
+            onDismiss={() => setSyncSessionId(null)}
+          />
+        )}
 
-      {cleanupSessionId && (
-        <SyncProgressBar
-          sessionId={cleanupSessionId}
-          mode="cleanup"
-          onComplete={handleCleanupComplete}
-          onDismiss={() => setCleanupSessionId(null)}
-        />
-      )}
+        {cleanupSessionId && (
+          <SyncProgressBar
+            sessionId={cleanupSessionId}
+            mode="cleanup"
+            onComplete={handleCleanupComplete}
+            onDismiss={() => setCleanupSessionId(null)}
+          />
+        )}
 
-      {enrichSessionId && (
-        <SyncProgressBar
-          sessionId={enrichSessionId}
-          mode="enrich"
-          onComplete={handleEnrichComplete}
-          onDismiss={() => setEnrichSessionId(null)}
-        />
-      )}
+        {enrichSessionId && (
+          <SyncProgressBar
+            sessionId={enrichSessionId}
+            mode="enrich"
+            onComplete={handleEnrichComplete}
+            onDismiss={() => setEnrichSessionId(null)}
+          />
+        )}
+
+        {descBackfillSessionId && (
+          <SyncProgressBar
+            sessionId={descBackfillSessionId}
+            mode="backfill_desc"
+            onComplete={handleDescBackfillComplete}
+            onDismiss={() => setDescBackfillSessionId(null)}
+          />
+        )}
+      </div>
 
       <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -1,7 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Jobs processed per invocation — small enough to stay under 2s CPU limit
-// even for companies with thousands of jobs
 const JOBS_PER_INVOCATION = 200
 
 const ATS_APIS: Record<string, (id: string) => string> = {
@@ -12,16 +10,17 @@ const ATS_APIS: Record<string, (id: string) => string> = {
 }
 
 function stripHtml(html: string): string {
-  let decoded = html
-  for (let i = 0; i < 5; i++) {
-    const next = decoded
+  let text = html
+  for (let i = 0; i < 8; i++) {
+    const prev = text
+    text = text
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
       .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/')
-    if (next === decoded) break
-    decoded = next
+    text = text.replace(/<[^>]*>/g, ' ')
+    if (text === prev) break
   }
-  return decoded.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 function normalizeJobType(t: string): string {
@@ -118,7 +117,27 @@ async function fetchJobs(atsType: string, atsCompanyId: string): Promise<any[]> 
   throw new Error(`Unknown ATS type: ${atsType}`)
 }
 
+// ── Log helper ────────────────────────────────────────────────────────────────
+// Appends a log entry to sync_sessions.logs, keeping last 500 entries.
+// Each entry: { ts, company, step, detail }
+async function log(
+  supabase: ReturnType<typeof createClient>,
+  sessionId: string,
+  existingLogs: any[],
+  company: string,
+  step: string,
+  detail: string
+): Promise<any[]> {
+  const entry = { ts: new Date().toISOString(), company, step, detail }
+  const newLogs = [...existingLogs, entry].slice(-500)
+  await supabase.from('sync_sessions').update({ logs: newLogs }).eq('id', sessionId)
+  return newLogs
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
+  }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
@@ -132,11 +151,10 @@ Deno.serve(async (req) => {
   const {
     sessionId,
     companyIndex = 0,
-    // When set, we're mid-way through a large company — skip the ATS fetch
-    pendingJobs,      // serialised slice of jobs still to process
-    allJobUrls,       // all live URLs for stale detection (only needed on last page)
-    existingUrlMap,   // { dedupeKey: id } map from DB (fetched once, passed through)
-    companyMeta,      // { id, name, logo_initial, website, linkedin_url }
+    pendingJobs,
+    allJobUrls,
+    existingUrlMap,
+    companyMeta,
     pageAdded = 0,
     pageUpdated = 0,
   } = body
@@ -148,9 +166,11 @@ Deno.serve(async (req) => {
   const { data: session } = await supabase
     .from('sync_sessions').select('*').eq('id', sessionId).single()
 
-  if (!session || session.status === 'done') {
-    return new Response(JSON.stringify({ message: 'Session already done' }))
+  if (!session || session.status === 'done' || session.status === 'cancelled') {
+    return new Response(JSON.stringify({ message: 'Session already done or cancelled' }))
   }
+
+  let currentLogs: any[] = session.logs ?? []
 
   const { data: companies } = await supabase
     .from('companies')
@@ -160,12 +180,14 @@ Deno.serve(async (req) => {
     .order('name', { ascending: true })
 
   if (!companies?.length) {
-    await supabase.from('sync_sessions').update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', sessionId)
+    await supabase.from('sync_sessions').update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', sessionId).eq('status', 'running')
     return new Response(JSON.stringify({ message: 'No companies' }))
   }
 
   if (companyIndex >= companies.length) {
-    await supabase.from('sync_sessions').update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', sessionId)
+    await supabase.from('sync_sessions')
+      .update({ status: 'done', finished_at: new Date().toISOString() })
+      .eq('id', sessionId).eq('status', 'running')
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/enrich-experience`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
@@ -190,80 +212,65 @@ Deno.serve(async (req) => {
     for (const job of page) {
       if (!job.jobUrl) continue
       const jobData = {
-        company_id: company.id,
-        company_name: company.name,
+        company_id: company.id, company_name: company.name,
         company_initial: company.logo_initial || '?',
-        title: job.title,
-        location: job.location,
-        type: job.type,
-        experience: job.experience ?? null,
-        salary_range: 'Competitive salary',
-        portal_url: job.jobUrl,
-        job_url: job.jobUrl,
-        company_website: company.website || null,
-        company_linkedin: company.linkedin_url || null,
-        description: job.description || '',
-        requirements: [], skills: [], benefits: [],
+        title: job.title, location: job.location, type: job.type,
+        experience: job.experience ?? null, salary_range: 'Competitive salary',
+        portal_url: job.jobUrl, job_url: job.jobUrl,
+        company_website: company.website || null, company_linkedin: company.linkedin_url || null,
+        description: job.description || '', requirements: [], skills: [], benefits: [],
       }
-      const key = jobDedupeKey(job.jobUrl)
-      const existingId = existingMap.get(key)
-      if (existingId) {
-        toUpdate.push({ id: existingId as string, ...jobData })
-      } else {
-        toInsert.push({
-          id: stableJobId(company.logo_initial || '?', job.jobUrl, job.title),
-          ...jobData,
-          status: 'queued', total_apps: 0, right_swipes: 0, success_rate: 0, avg_time: '-', posted_at: today,
-        })
-      }
+      const existingId = existingMap.get(jobDedupeKey(job.jobUrl))
+      if (existingId) toUpdate.push({ id: existingId as string, ...jobData })
+      else toInsert.push({ id: stableJobId(company.logo_initial || '?', job.jobUrl, job.title), ...jobData, status: 'queued', total_apps: 0, right_swipes: 0, success_rate: 0, avg_time: '-', posted_at: today })
     }
 
     const allRows = [...toInsert, ...toUpdate]
-    let addedThisPage = 0, updatedThisPage = 0
     if (allRows.length > 0) {
       await supabase.from('jobs').upsert(allRows, { onConflict: 'id', ignoreDuplicates: false })
-      addedThisPage = toInsert.length
-      updatedThisPage = toUpdate.length
     }
 
-    // Queue unclassified for enrichment
-    const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, status: 'pending' }))
+    const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, company_name: company.name, status: 'pending' }))
     if (toEnrich.length > 0) {
       await supabase.from('experience_enrichment_queue').upsert(toEnrich, { onConflict: 'job_id', ignoreDuplicates: true })
     }
 
-    const totalAdded = pageAdded + addedThisPage
-    const totalUpdated = pageUpdated + updatedThisPage
+    const totalAdded = pageAdded + toInsert.length
+    const totalUpdated = pageUpdated + toUpdate.length
+    const processed = pendingJobs.length - remaining.length
+    const totalJobs = (allJobUrls as string[]).length
+
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name,
+      'processing',
+      `Page ${Math.ceil(processed / JOBS_PER_INVOCATION)} — +${toInsert.length} added, ↻${toUpdate.length} updated (${processed}/${totalJobs} jobs processed)`
+    )
 
     if (remaining.length > 0) {
-      // More pages for this company — self-invoke with next slice
       fetch(selfUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
-        body: JSON.stringify({
-          sessionId, companyIndex, pendingJobs: remaining,
-          allJobUrls, existingUrlMap, companyMeta: company,
-          pageAdded: totalAdded, pageUpdated: totalUpdated,
-        }),
+        body: JSON.stringify({ sessionId, companyIndex, pendingJobs: remaining, allJobUrls, existingUrlMap, companyMeta: company, pageAdded: totalAdded, pageUpdated: totalUpdated }),
       })
-      return new Response(JSON.stringify({ company: company.name, page: 'continuing', remaining: remaining.length }))
+      return new Response(JSON.stringify({ company: company.name, remaining: remaining.length }))
     }
 
-    // Last page — handle stale deletion and finish company
+    // Last page — stale deletion
     const liveUrlSet = new Set((allJobUrls as string[]).map(jobDedupeKey))
-    const { data: existingJobsForDelete } = await supabase
-      .from('jobs').select('id, job_url').eq('company_id', company.id)
-    const staleIds = (existingJobsForDelete || [])
-      .filter((j: any) => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url)))
-      .map((j: any) => j.id)
+    const { data: existingJobsForDelete } = await supabase.from('jobs').select('id, job_url').eq('company_id', company.id)
+    const staleIds = (existingJobsForDelete || []).filter((j: any) => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url))).map((j: any) => j.id)
     let deletedCount = 0
     if (staleIds.length > 0) {
+      currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'deleting', `Removing ${staleIds.length} stale jobs`)
       await supabase.from('live_application_queue').delete().in('job_id', staleIds)
       const { error } = await supabase.from('jobs').delete().in('id', staleIds)
       if (!error) deletedCount = staleIds.length
     }
 
-    results.push({ company: company.name, added: totalAdded, updated: totalUpdated, deleted: deletedCount, total: (allJobUrls as string[]).length })
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'done',
+      `✓ ${totalJobs} live jobs — +${totalAdded} added, ↻${totalUpdated} updated, ${deletedCount} deleted`
+    )
+
+    results.push({ company: company.name, added: totalAdded, updated: totalUpdated, deleted: deletedCount, total: totalJobs })
     const done = companyIndex + 1
     const failed = results.filter(r => r.error).length
     await supabase.from('sync_sessions').update({
@@ -271,7 +278,7 @@ Deno.serve(async (req) => {
       added: results.reduce((s, r) => s + (r.added ?? 0), 0),
       updated: results.reduce((s, r) => s + (r.updated ?? 0), 0),
       deleted: results.reduce((s, r) => s + (r.deleted ?? 0), 0),
-      results,
+      results, logs: currentLogs,
     }).eq('id', sessionId)
 
     fetch(selfUrl, {
@@ -285,19 +292,22 @@ Deno.serve(async (req) => {
   // ── NORMAL FLOW: first invocation for this company ────────────────────────
   let resultEntry: any
   try {
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'fetching', `Calling ${company.ats_type} API (${company.ats_company_id})`)
+
     const jobs = await fetchJobs(company.ats_type, company.ats_company_id)
     const allUrls = jobs.map((j: any) => j.jobUrl).filter(Boolean)
 
-    // Fetch existing jobs from DB once
-    const { data: existing } = await supabase
-      .from('jobs').select('id, job_url').eq('company_id', company.id)
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'fetched', `${jobs.length} live jobs from ${company.ats_type}`)
+
+    const { data: existing } = await supabase.from('jobs').select('id, job_url').eq('company_id', company.id)
     const existingMapObj: Record<string, string> = {}
     for (const j of existing || []) {
       if (j.job_url) existingMapObj[jobDedupeKey(j.job_url)] = j.id
     }
 
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'comparing', `${existing?.length ?? 0} jobs in DB — classifying changes`)
+
     if (jobs.length <= JOBS_PER_INVOCATION) {
-      // Small company — process everything in this invocation
       const existingMap = new Map(Object.entries(existingMapObj))
       const liveUrlSet = new Set(allUrls.map(jobDedupeKey))
       const today = new Date().toISOString().split('T')[0]
@@ -320,12 +330,19 @@ Deno.serve(async (req) => {
         else toInsert.push({ id: stableJobId(company.logo_initial || '?', job.jobUrl, job.title), ...jobData, status: 'queued', total_apps: 0, right_swipes: 0, success_rate: 0, avg_time: '-', posted_at: today })
       }
 
+      if (toInsert.length > 0) {
+        currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'inserting', `Adding ${toInsert.length} new jobs`)
+      }
+      if (toUpdate.length > 0) {
+        currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'updating', `Updating ${toUpdate.length} existing jobs`)
+      }
+
       const allRows = [...toInsert, ...toUpdate]
       if (allRows.length > 0) {
         await supabase.from('jobs').upsert(allRows, { onConflict: 'id', ignoreDuplicates: false })
       }
 
-      const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, status: 'pending' }))
+      const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, company_name: company.name, status: 'pending' }))
       if (toEnrich.length > 0) {
         await supabase.from('experience_enrichment_queue').upsert(toEnrich, { onConflict: 'job_id', ignoreDuplicates: true })
       }
@@ -333,33 +350,38 @@ Deno.serve(async (req) => {
       const staleIds = (existing || []).filter((j: any) => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url))).map((j: any) => j.id)
       let deletedCount = 0
       if (staleIds.length > 0) {
+        currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'deleting', `Removing ${staleIds.length} stale jobs`)
         await supabase.from('live_application_queue').delete().in('job_id', staleIds)
         const { error } = await supabase.from('jobs').delete().in('id', staleIds)
         if (!error) deletedCount = staleIds.length
       }
 
+      currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'done',
+        `✓ ${jobs.length} live — +${toInsert.length} added, ↻${toUpdate.length} updated, ${deletedCount} deleted`
+      )
+
       resultEntry = { company: company.name, added: toInsert.length, updated: toUpdate.length, deleted: deletedCount, total: jobs.length }
     } else {
-      // Large company — process first page now, chain remaining through self-invocations
-      const firstPage = jobs.slice(0, JOBS_PER_INVOCATION)
-      const remaining = jobs.slice(JOBS_PER_INVOCATION)
+      currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'large',
+        `${jobs.length} jobs — processing in ${Math.ceil(jobs.length / JOBS_PER_INVOCATION)} pages of ${JOBS_PER_INVOCATION}`
+      )
 
       fetch(selfUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
         body: JSON.stringify({
           sessionId, companyIndex,
-          pendingJobs: [...firstPage, ...remaining],
+          pendingJobs: jobs,
           allJobUrls: allUrls,
           existingUrlMap: existingMapObj,
           companyMeta: company,
           pageAdded: 0, pageUpdated: 0,
         }),
       })
-
-      return new Response(JSON.stringify({ company: company.name, total: jobs.length, pages: Math.ceil(jobs.length / JOBS_PER_INVOCATION) }))
+      return new Response(JSON.stringify({ company: company.name, total: jobs.length }))
     }
   } catch (err: any) {
+    currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'error', `✗ ${err.message}`)
     resultEntry = { company: company.name, error: err.message }
   }
 
@@ -371,7 +393,7 @@ Deno.serve(async (req) => {
     added: results.reduce((s, r) => s + (r.added ?? 0), 0),
     updated: results.reduce((s, r) => s + (r.updated ?? 0), 0),
     deleted: results.reduce((s, r) => s + (r.deleted ?? 0), 0),
-    results,
+    results, logs: currentLogs,
   }).eq('id', sessionId)
 
   fetch(selfUrl, {

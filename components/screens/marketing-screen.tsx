@@ -8,6 +8,7 @@ import {
 } from "recharts"
 import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { BangaloreQrAnalytics } from "@/components/bangalore-qr-analytics"
 
 const TT_STYLE = {
   backgroundColor: "oklch(0.13 0.006 265)",
@@ -130,6 +131,7 @@ export function MarketingScreen() {
   const [users, setUsers] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [qrRefreshKey, setQrRefreshKey] = useState(0)
 
   const load = async () => {
     const res = await fetch("/api/users")
@@ -144,6 +146,7 @@ export function MarketingScreen() {
   const handleRefresh = async () => {
     setRefreshing(true)
     await load()
+    setQrRefreshKey((k) => k + 1)
     setRefreshing(false)
   }
 
@@ -260,25 +263,31 @@ export function MarketingScreen() {
     ? Math.round((users.filter(u => u.confirmed).length / users.length) * 100)
     : 72
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-    </div>
-  )
-
   return (
     <div className="flex flex-col gap-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Marketing</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, signup trends & onboarding funnel</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, Bangalore QR field ops, signup trends & onboarding funnel</p>
         </div>
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>
 
+      {/* Bangalore QR / download.nextquark.in — loads independently of user stats */}
+      <div>
+        <SectionLabel>Download / QR analytics</SectionLabel>
+        <BangaloreQrAnalytics refreshKey={qrRefreshKey} />
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        </div>
+      ) : (
+        <>
       {/* KPI strip */}
       <div>
         <SectionLabel>Overview</SectionLabel>
@@ -485,6 +494,8 @@ export function MarketingScreen() {
           </ChartCard>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }

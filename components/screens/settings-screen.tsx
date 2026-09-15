@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Eye, EyeOff, Save, Zap, Globe } from "lucide-react"
+import { AppConfigToggle } from "@/components/unified-feed-toggle"
 
 export function SettingsScreen() {
   const [browserUseApiKey, setBrowserUseApiKey] = useState("")
@@ -24,6 +25,7 @@ export function SettingsScreen() {
   const [systemDown, setSystemDown] = useState(false)
   const [systemDownMessage, setSystemDownMessage] = useState("We'll be back soon. Our systems are undergoing maintenance.")
   const [systemDownSaving, setSystemDownSaving] = useState(false)
+  const [appConfig, setAppConfig] = useState<Record<string, { value: string; updated_at: string }> | null>(null)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [showBuKey, setShowBuKey] = useState(false)
@@ -33,28 +35,38 @@ export function SettingsScreen() {
   const [showOpenAiKey, setShowOpenAiKey] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => { fetchSettings() }, [])
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [settingsRes, configRes] = await Promise.all([
+          fetch('/api/settings'),
+          fetch('/api/app-config'),
+        ])
+        const data = await settingsRes.json()
+        if (data.browserUseApiKey) setBrowserUseApiKey(data.browserUseApiKey)
+        if (data.browserbaseApiKey) setBrowserbaseApiKey(data.browserbaseApiKey)
+        if (data.browserbaseProjectId) setBrowserbaseProjectId(data.browserbaseProjectId)
+        if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey)
+        if (data.captchaSolverApiKey) setCaptchaSolverApiKey(data.captchaSolverApiKey)
+        if (data.kernelApiKey) setKernelApiKey(data.kernelApiKey)
+        if (data.openAiApiKey) setOpenAiApiKey(data.openAiApiKey)
+        if (data.automationProvider) setAutomationProvider(data.automationProvider)
+        if (data.system_down !== undefined) setSystemDown(data.system_down)
+        if (data.system_down_message) setSystemDownMessage(data.system_down_message)
 
-  const fetchSettings = async () => {
-    try {
-      const response = await fetch("/api/settings")
-      const data = await response.json()
-      if (data.browserUseApiKey) setBrowserUseApiKey(data.browserUseApiKey)
-      if (data.browserbaseApiKey) setBrowserbaseApiKey(data.browserbaseApiKey)
-      if (data.browserbaseProjectId) setBrowserbaseProjectId(data.browserbaseProjectId)
-      if (data.geminiApiKey) setGeminiApiKey(data.geminiApiKey)
-      if (data.captchaSolverApiKey) setCaptchaSolverApiKey(data.captchaSolverApiKey)
-      if (data.kernelApiKey) setKernelApiKey(data.kernelApiKey)
-      if (data.openAiApiKey) setOpenAiApiKey(data.openAiApiKey)
-      if (data.automationProvider) setAutomationProvider(data.automationProvider)
-      if (data.system_down !== undefined) setSystemDown(data.system_down)
-      if (data.system_down_message) setSystemDownMessage(data.system_down_message)
-    } catch (error) {
-      console.error("Failed to fetch settings:", error)
-    } finally {
-      setFetching(false)
+        const rows: { key: string; value: string; updated_at: string }[] = await configRes.json()
+        const map: Record<string, { value: string; updated_at: string }> = {}
+        rows.forEach(r => { map[r.key] = { value: r.value, updated_at: r.updated_at } })
+        setAppConfig(map)
+
+      } catch (error) {
+        console.error('Failed to load settings:', error)
+      } finally {
+        setFetching(false)
+      }
     }
-  }
+    load()
+  }, [])
 
   const handleSystemDownSave = async (newValue?: boolean) => {
     const is_down = newValue !== undefined ? newValue : systemDown
@@ -164,6 +176,17 @@ export function SettingsScreen() {
           </Button>
         </CardContent>
       </Card>
+
+      {appConfig && (
+        <AppConfigToggle
+          configKey="show_location_on_card"
+          title="Show Location on Job Cards"
+          descOn="ON — Location line visible below job title on every card."
+          descOff="OFF — Location line hidden on all job cards."
+          initialValue={appConfig['show_location_on_card']?.value === 'true'}
+          initialUpdatedAt={appConfig['show_location_on_card']?.updated_at ?? null}
+        />
+      )}
 
       {/* Provider Toggle */}
       <Card className="bg-card border-border">

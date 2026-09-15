@@ -39,6 +39,9 @@ async function fetchLiveUrls(atsType: string, atsCompanyId: string): Promise<Set
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
+  }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
@@ -61,8 +64,8 @@ Deno.serve(async (req) => {
     .eq('id', sessionId)
     .single()
 
-  if (!session || session.status === 'done') {
-    return new Response(JSON.stringify({ message: 'Session already done' }))
+  if (!session || session.status === 'done' || session.status === 'cancelled') {
+    return new Response(JSON.stringify({ message: 'Session already done or cancelled' }))
   }
 
   const { data: companies } = await supabase
@@ -73,7 +76,7 @@ Deno.serve(async (req) => {
     .order('name', { ascending: true })
 
   if (!companies?.length) {
-    await supabase.from('sync_sessions').update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', sessionId)
+    await supabase.from('sync_sessions').update({ status: 'done', finished_at: new Date().toISOString() }).eq('id', sessionId).eq('status', 'running')
     return new Response(JSON.stringify({ message: 'No companies' }))
   }
 

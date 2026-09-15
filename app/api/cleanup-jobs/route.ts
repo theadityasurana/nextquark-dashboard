@@ -9,7 +9,7 @@ export async function POST(_request: NextRequest) {
 
     const { count } = await supabase
       .from('companies')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: false })
       .not('ats_type', 'is', null)
       .not('ats_company_id', 'is', null)
 
