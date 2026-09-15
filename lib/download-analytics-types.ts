@@ -6,6 +6,32 @@ export type DownloadVisitPin = {
   lng: number
   device_type: string | null
   location_source: string | null
+  country: string | null
+  city: string | null
+  locality: string | null
+  region: string | null
+  postal_code: string | null
+  continent: string | null
+}
+
+export type DownloadRecentVisit = {
+  id: string
+  created_at: string
+  country: string | null
+  city: string | null
+  locality: string | null
+  region: string | null
+  postal_code: string | null
+  continent: string | null
+  location_source: string | null
+  device_type: string | null
+  lat: number | null
+  lng: number | null
+}
+
+export type DownloadCountryStat = {
+  country: string
+  scans: number
 }
 
 export type DownloadCluster = {
@@ -46,6 +72,8 @@ export type CampaignSpotRow = {
 export type DownloadAnalyticsPayload = {
   kpis: { today: number; d7: number; d30: number; gps_pins: number; ip_pins: number }
   pins: DownloadVisitPin[]
+  recentVisits: DownloadRecentVisit[]
+  byCountry: DownloadCountryStat[]
   clusters: DownloadCluster[]
   posters: DownloadPosterRow[]
   posterMarkers: PosterMarker[]

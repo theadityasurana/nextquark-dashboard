@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import type { DownloadCluster, DownloadVisitPin, PosterMarker } from "@/lib/download-analytics-types"
 import { formatIst } from "@/lib/ist"
+import { placeLine } from "@/lib/geo-display"
 import "leaflet/dist/leaflet.css"
 
 export type QrMapMode = "posters" | "pins" | "clusters"
@@ -55,10 +56,11 @@ export function BangaloreQrMap({
 
       if (!mapRef.current) {
         mapRef.current = L.map(elRef.current, {
-          center: [12.97, 77.59],
-          zoom: 12,
-          minZoom: 11,
-          maxZoom: 16,
+          center: [20, 0],
+          zoom: 2,
+          minZoom: 2,
+          maxZoom: 18,
+          worldCopyJump: true,
         })
         let tiles = OSM
         try {
@@ -125,11 +127,13 @@ export function BangaloreQrMap({
         for (const pin of pins) {
           const loc =
             pin.location_source === "gps"
-              ? "Phone location (GPS)"
-              : "Network estimate (IP)"
+              ? "GPS"
+              : "IP"
           const campaignLine = pin.campaign
             ? `<br/><code>${escapeHtml(pin.campaign)}</code>`
             : ""
+          const place = placeLine(pin)
+          const placeLineHtml = place ? `<br/>${escapeHtml(place)}` : ""
           L.circleMarker([pin.lat, pin.lng], {
             radius: pin.location_source === "gps" ? 6 : 5,
             color: pin.location_source === "gps" ? "#34d399" : "#c4b5fd",
@@ -138,10 +142,24 @@ export function BangaloreQrMap({
             fillOpacity: 0.85,
           })
             .bindTooltip(
-              `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
+              `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${placeLineHtml}${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
               { sticky: true },
             )
             .addTo(layers)
+        }
+      }
+
+      if (mapRef.current && (mode === "pins" || mode === "clusters")) {
+        const pts: [number, number][] = []
+        if (mode === "clusters") {
+          for (const c of clusters) pts.push([c.lat, c.lng])
+        } else {
+          for (const p of pins) pts.push([p.lat, p.lng])
+        }
+        if (pts.length === 1) {
+          mapRef.current.setView(pts[0], 10)
+        } else if (pts.length > 1) {
+          mapRef.current.fitBounds(L.latLngBounds(pts), { padding: [32, 32], maxZoom: 12 })
         }
       }
 

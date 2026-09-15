@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import type { DownloadAnalyticsPayload } from "@/lib/download-analytics-types"
 import type { QrMapMode } from "@/components/bangalore-qr-map"
 import { formatIst } from "@/lib/ist"
+import { countryLabel, placeLine } from "@/lib/geo-display"
 
 const BangaloreQrMap = dynamic(
   () => import("@/components/bangalore-qr-map").then((m) => m.BangaloreQrMap),
@@ -100,6 +101,8 @@ function CopyBtn({ value }: { value: string }) {
 const EMPTY: DownloadAnalyticsPayload = {
   kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
   pins: [],
+  recentVisits: [],
+  byCountry: [],
   clusters: [],
   posters: [],
   posterMarkers: [],
@@ -230,10 +233,10 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
       <div>
         <div className="flex items-center gap-2">
           <QrCode className="h-4 w-4 text-primary" />
-          <h2 className="text-base font-semibold tracking-tight">Bangalore QR</h2>
+          <h2 className="text-base font-semibold tracking-tight">Download QR (global)</h2>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          One QR for all Bangalore posters. Print this URL everywhere. The map shows where the phone was when they opened the page — not which physical poster.
+          Worldwide scans on <code className="font-mono text-[11px]">{QR_URL}</code>. Country, city, locality, and postal code come from Cloudflare when available; map pins use GPS (if allowed) or IP.
         </p>
       </div>
 
@@ -258,12 +261,77 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         <StatCard label="GPS on map pins" value={mapPins ? `${gpsPct}%` : "—"} sub={`${kpis.gps_pins.toLocaleString()} GPS · ${kpis.ip_pins.toLocaleString()} IP`} />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ChartCard title="Scans by country" sub="ISO country from network geo (last 30 days)">
+          <div className="overflow-x-auto max-h-56 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                  <th className="py-2 pr-3 font-medium">Country</th>
+                  <th className="py-2 font-medium text-right">Scans</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.byCountry ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="py-6 text-center text-xs text-muted-foreground">No scans yet</td>
+                  </tr>
+                ) : (
+                  data!.byCountry.map((row) => (
+                    <tr key={row.country} className="border-b border-border/30 last:border-0">
+                      <td className="py-2 pr-3">
+                        <span className="font-medium">{countryLabel(row.country === "—" ? null : row.country)}</span>
+                        {row.country !== "—" && <span className="text-muted-foreground font-mono text-[10px] ml-1">{row.country}</span>}
+                      </td>
+                      <td className="py-2 text-right tabular-nums font-semibold">{row.scans.toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ChartCard>
+
+        <div className="lg:col-span-2">
+          <ChartCard title="Recent scans" sub="City, locality, region, country name, postal/PIN when Cloudflare provides them">
+            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                    <th className="py-2 pr-3 font-medium">When (IST)</th>
+                    <th className="py-2 pr-3 font-medium">Place</th>
+                    <th className="py-2 pr-3 font-medium">Loc</th>
+                    <th className="py-2 font-medium">Device</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.recentVisits ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-xs text-muted-foreground">No scans yet</td>
+                    </tr>
+                  ) : (
+                    data!.recentVisits.map((row) => (
+                      <tr key={row.id} className="border-b border-border/30 last:border-0">
+                        <td className="py-2 pr-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatIst(row.created_at)}</td>
+                        <td className="py-2 pr-3 text-xs min-w-[12rem]">{placeLine(row) || "—"}</td>
+                        <td className="py-2 pr-3 text-[11px] font-mono">{row.location_source === "gps" ? "GPS" : "IP"}</td>
+                        <td className="py-2 text-[11px] text-muted-foreground">{row.device_type || "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+        </div>
+      </div>
+
       <ChartCard
-        title="Where people scanned"
-        sub="City-wide pattern. Heat is the default. Pins: green = GPS (user tapped Allow), purple = IP only."
+        title="Global scan map"
+        sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, purple = IP."
       >
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs mb-3">
-          With one QR, the map shows where the phone was when they scanned — not which physical poster.
+          Place fields (city, locality, region, country, postal/PIN) are approximate network geo from Cloudflare. Postal code is not always available. Green pins = GPS; purple = IP.
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex rounded-md border border-border/60 overflow-hidden">
@@ -400,7 +468,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
           </summary>
           <div className="px-5 pb-4 flex flex-col gap-4 border-t border-border/40 pt-3">
             <p className="text-[11px] text-muted-foreground">
-              Only if you print different <code className="font-mono">?c=</code> slugs per poster. Single-QR Bangalore ops can ignore this.
+              Only if you print different <code className="font-mono">?c=</code> slugs per poster. Single-QR ops can ignore this.
             </p>
             <div className="overflow-x-auto max-h-64 overflow-y-auto">
               <table className="w-full text-sm">

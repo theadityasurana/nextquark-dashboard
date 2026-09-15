@@ -1,23 +1,12 @@
-# Marketing analytics (Bangalore QR)
+# Marketing analytics (Download QR, global)
 
-Ingest: `download.nextquark.in` `POST /api/track` (Cloudflare Pages, nextquark-links). Storage: `public.download_link_visits`. Admin: Marketing → Bangalore QR (read-only except optional `campaign_spots`).
+Ingest: `download.nextquark.in` `POST /api/track` (Cloudflare Pages, nextquark-links). Storage: `public.download_link_visits`. Admin: Marketing → **Download QR (global)**.
 
-## Product: one QR for Bangalore
+Print **`https://download.nextquark.in/`**. Map and tables are worldwide (no Bangalore bbox).
 
-Print **`https://download.nextquark.in/`** on every poster. No `?c=` required.
+- Heat map (default) + pins: green = GPS, purple = IP. Map `fitBounds` to data.
+- **Scans by country** and **Recent scans** use Cloudflare place fields (`country`, `city`, `locality`, `region`, `postal_code`). Country names via `Intl.DisplayNames`. These are approximate network geo; postal/PIN is not always present.
+- KPI **GPS on map pins**.
+- CARTO: `CARTO_API_KEY` on Vercel → `GET /api/map-basemap` (basemap only).
 
-- The map shows **where the phone was** when they opened the page, not which physical poster.
-- Default map: **heat clusters** (city-wide pattern).
-- **Green pins** = `location_source = gps` (user tapped Allow on geolocation). **Purple** = IP only.
-- KPI **GPS on map pins** is `%` of Bangalore-bbox pins that are GPS.
-- Do not treat pins as exact poster placement. CARTO (`CARTO_API_KEY` on Vercel → `GET /api/map-basemap`) is the basemap only.
-
-Download page (nextquark-links) should call `navigator.geolocation.getCurrentPosition` (timeout ~2.5s) before one `POST /api/track`. Track prefers GPS in the body, else Cloudflare IP.
-
-## Advanced (hidden unless used)
-
-If visits have a non-null `campaign` or `campaign_spots` rows exist, admin shows a collapsed **tagged campaigns (?c=)** section. That is optional multi-poster mode only.
-
-## CARTO
-
-Set **`CARTO_API_KEY`** on the nextquark-dashboard Vercel project (server). Do not put it in Supabase or require `NEXT_PUBLIC_CARTO_API_KEY`.
+Tagged `?c=` / `campaign_spots` stay in collapsed Advanced if present.

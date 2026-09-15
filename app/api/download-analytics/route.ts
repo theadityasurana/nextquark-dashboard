@@ -3,10 +3,6 @@ import type { DownloadAnalyticsPayload, DownloadVisitPin } from "@/lib/download-
 import { dateInIst, hourInIst, startOfTodayIst } from "@/lib/ist"
 import { NextResponse } from "next/server"
 
-const BLR_LAT_MIN = 12.75
-const BLR_LAT_MAX = 13.15
-const BLR_LNG_MIN = 77.35
-const BLR_LNG_MAX = 77.85
 const PAGE = 1000
 const MAX_ROWS = 5000
 
@@ -20,9 +16,16 @@ type VisitRow = {
   gps_longitude?: number | null
   device_type: string | null
   location_source: string | null
+  country: string | null
+  city: string | null
+  locality: string | null
+  region: string | null
+  postal_code: string | null
+  continent: string | null
 }
 
 const VISIT_SELECTS = [
+  "id, created_at, campaign, latitude, longitude, device_type, location_source, gps_latitude, gps_longitude, country, city, locality, region, postal_code, continent",
   "id, created_at, campaign, latitude, longitude, device_type, location_source, gps_latitude, gps_longitude",
   "id, created_at, campaign, latitude, longitude, device_type, location_source",
   "id, created_at, campaign, latitude, longitude, device_type",
@@ -32,6 +35,8 @@ function emptyPayload(error?: string, spotsError: string | null = null): Downloa
   return {
     kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
     pins: [],
+    recentVisits: [],
+    byCountry: [],
     clusters: [],
     posters: [],
     posterMarkers: [],
@@ -100,6 +105,8 @@ export async function GET() {
     const hourCounts = Array.from({ length: 24 }, () => 0)
     const dailyMap = new Map<string, number>()
     const deviceMap = new Map<string, number>()
+    const countryMap = new Map<string, number>()
+    const recentVisits: DownloadAnalyticsPayload["recentVisits"] = []
 
     for (let i = 13; i >= 0; i--) {
       const d = dateInIst(new Date(todayStart.getTime() - i * 24 * 60 * 60 * 1000))
@@ -129,13 +136,38 @@ export async function GET() {
       const device = (row.device_type || "unknown").toLowerCase()
       deviceMap.set(device, (deviceMap.get(device) || 0) + 1)
 
+      const countryKey = row.country?.trim() || "—"
+      countryMap.set(countryKey, (countryMap.get(countryKey) || 0) + 1)
+
+      if (recentVisits.length < 100) {
+        const src = row.location_source === "gps" ? "gps" : "ip"
+        const rLat =
+          src === "gps" && row.gps_latitude != null ? Number(row.gps_latitude) : row.latitude
+        const rLng =
+          src === "gps" && row.gps_longitude != null ? Number(row.gps_longitude) : row.longitude
+        recentVisits.push({
+          id: row.id,
+          created_at: row.created_at,
+          country: row.country,
+          city: row.city,
+          locality: row.locality,
+          region: row.region,
+          postal_code: row.postal_code,
+          continent: row.continent,
+          location_source: row.location_source,
+          device_type: row.device_type,
+          lat: rLat,
+          lng: rLng,
+        })
+      }
+
       const src = row.location_source === "gps" ? "gps" : "ip"
       const lat =
         src === "gps" && row.gps_latitude != null ? Number(row.gps_latitude) : row.latitude
       const lng =
         src === "gps" && row.gps_longitude != null ? Number(row.gps_longitude) : row.longitude
       if (lat == null || lng == null) continue
-      if (lat < BLR_LAT_MIN || lat > BLR_LAT_MAX || lng < BLR_LNG_MIN || lng > BLR_LNG_MAX) continue
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue
 
       if (src === "gps") kpis.gps_pins++
       else kpis.ip_pins++
@@ -148,6 +180,12 @@ export async function GET() {
         lng,
         device_type: row.device_type,
         location_source: src,
+        country: row.country,
+        city: row.city,
+        locality: row.locality,
+        region: row.region,
+        postal_code: row.postal_code,
+        continent: row.continent,
       })
 
       if (spot !== "(untagged QR)") {
@@ -206,9 +244,15 @@ export async function GET() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
 
+    const byCountry = [...countryMap.entries()]
+      .map(([country, scans]) => ({ country, scans }))
+      .sort((a, b) => b.scans - a.scans)
+
     return NextResponse.json({
       kpis,
       pins,
+      recentVisits,
+      byCountry,
       clusters,
       posters,
       posterMarkers,
