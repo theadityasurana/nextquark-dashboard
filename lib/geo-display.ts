@@ -23,3 +23,21 @@ export function placeLine(v: {
   ].filter(Boolean)
   return parts.length ? parts.join(", ") : ""
 }
+
+export type PlaceSource = "gps_geocode" | "gps_only" | "ip"
+
+export function resolvePlaceSource(place_source?: string | null, location_source?: string | null): PlaceSource {
+  if (place_source === "gps_geocode" || place_source === "gps_only" || place_source === "ip") {
+    return place_source
+  }
+  if (location_source === "gps") return "gps_only"
+  return "ip"
+}
+
+export function locColumnLabel(place_source?: string | null, location_source?: string | null) {
+  const src = resolvePlaceSource(place_source, location_source)
+  if (src === "gps_geocode") return "GPS+address"
+  if (src === "gps_only") return "GPS"
+  return "IP"
+}
+

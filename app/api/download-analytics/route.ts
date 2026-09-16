@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { DownloadAnalyticsPayload, DownloadVisitPin } from "@/lib/download-analytics-types"
 import { dateInIst, hourInIst, startOfTodayIst } from "@/lib/ist"
+import { resolvePlaceSource } from "@/lib/geo-display"
 import { NextResponse } from "next/server"
 
 const PAGE = 1000
@@ -22,9 +23,11 @@ type VisitRow = {
   region: string | null
   postal_code: string | null
   continent: string | null
+  place_source: string | null
 }
 
 const VISIT_SELECTS = [
+  "id, created_at, campaign, latitude, longitude, device_type, location_source, place_source, gps_latitude, gps_longitude, country, city, locality, region, postal_code, continent",
   "id, created_at, campaign, latitude, longitude, device_type, location_source, gps_latitude, gps_longitude, country, city, locality, region, postal_code, continent",
   "id, created_at, campaign, latitude, longitude, device_type, location_source, gps_latitude, gps_longitude",
   "id, created_at, campaign, latitude, longitude, device_type, location_source",
@@ -33,7 +36,7 @@ const VISIT_SELECTS = [
 
 function emptyPayload(error?: string, spotsError: string | null = null): DownloadAnalyticsPayload {
   return {
-    kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
+    kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 },
     pins: [],
     recentVisits: [],
     byCountry: [],
@@ -97,7 +100,7 @@ export async function GET() {
       from += PAGE
     }
 
-    const kpis = { today: 0, d7: 0, d30: rows.length, gps_pins: 0, ip_pins: 0 }
+    const kpis = { today: 0, d7: 0, d30: rows.length, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
     const pins: DownloadVisitPin[] = []
     const clusterMap = new Map<string, { lat: number; lng: number; scans: number; sample_campaign: string | null }>()
     const posterMap = new Map<string, { scans: number; first_seen: string; last_seen: string }>()
@@ -136,6 +139,11 @@ export async function GET() {
       const device = (row.device_type || "unknown").toLowerCase()
       deviceMap.set(device, (deviceMap.get(device) || 0) + 1)
 
+      const placeSrc = resolvePlaceSource(row.place_source, row.location_source)
+      if (placeSrc === "gps_geocode") kpis.gps_geocode++
+      else if (placeSrc === "gps_only") kpis.gps_only++
+      else kpis.ip_place++
+
       const countryKey = row.country?.trim() || "—"
       countryMap.set(countryKey, (countryMap.get(countryKey) || 0) + 1)
 
@@ -158,6 +166,7 @@ export async function GET() {
           device_type: row.device_type,
           lat: rLat,
           lng: rLng,
+          place_source: placeSrc,
         })
       }
 
@@ -186,6 +195,7 @@ export async function GET() {
         region: row.region,
         postal_code: row.postal_code,
         continent: row.continent,
+        place_source: placeSrc,
       })
 
       if (spot !== "(untagged QR)") {

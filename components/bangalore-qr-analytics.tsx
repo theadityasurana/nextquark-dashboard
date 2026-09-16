@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import type { DownloadAnalyticsPayload } from "@/lib/download-analytics-types"
 import type { QrMapMode } from "@/components/bangalore-qr-map"
 import { formatIst } from "@/lib/ist"
-import { countryLabel, placeLine } from "@/lib/geo-display"
+import { countryLabel, locColumnLabel, placeLine } from "@/lib/geo-display"
 
 const BangaloreQrMap = dynamic(
   () => import("@/components/bangalore-qr-map").then((m) => m.BangaloreQrMap),
@@ -99,7 +99,7 @@ function CopyBtn({ value }: { value: string }) {
 }
 
 const EMPTY: DownloadAnalyticsPayload = {
-  kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 },
+  kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 },
   pins: [],
   recentVisits: [],
   byCountry: [],
@@ -220,9 +220,9 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
     )
   }
 
-  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0 }
-  const mapPins = data?.pins.length ?? 0
-  const gpsPct = mapPins > 0 ? Math.round((kpis.gps_pins / mapPins) * 100) : 0
+  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
+  const geocodePct = kpis.d30 > 0 ? Math.round((kpis.gps_geocode / kpis.d30) * 100) : 0
+  const ipPlacePct = kpis.d30 > 0 ? Math.round((kpis.ip_place / kpis.d30) * 100) : 0
   const devices = data?.devices ?? []
   const deviceTotal = devices.reduce((s, d) => s + d.value, 0)
   const tagged = (data?.posters ?? []).filter((p) => p.spot !== "(untagged QR)")
@@ -236,7 +236,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
           <h2 className="text-base font-semibold tracking-tight">Download QR (global)</h2>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          Worldwide scans on <code className="font-mono text-[11px]">{QR_URL}</code>. Country, city, locality, and postal code come from Cloudflare when available; map pins use GPS (if allowed) or IP.
+          Worldwide scans on <code className="font-mono text-[11px]">{QR_URL}</code>. Place names may come from GPS reverse geocode (BigDataCloud) or Cloudflare IP geo. Disclose location and reverse geocoding in the privacy policy.
         </p>
       </div>
 
@@ -258,7 +258,11 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         <StatCard label="Scans today" value={kpis.today.toLocaleString()} sub="IST calendar day" />
         <StatCard label="Last 7 days" value={kpis.d7.toLocaleString()} sub="rolling" />
         <StatCard label="Last 30 days" value={kpis.d30.toLocaleString()} sub="rolling" />
-        <StatCard label="GPS on map pins" value={mapPins ? `${gpsPct}%` : "—"} sub={`${kpis.gps_pins.toLocaleString()} GPS · ${kpis.ip_pins.toLocaleString()} IP`} />
+        <StatCard
+          label="GPS+address"
+          value={kpis.d30 ? `${geocodePct}%` : "—"}
+          sub={`${ipPlacePct}% IP · last 30d`}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -293,7 +297,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         </ChartCard>
 
         <div className="lg:col-span-2">
-          <ChartCard title="Recent scans" sub="City, locality, region, country name, postal/PIN when Cloudflare provides them">
+          <ChartCard title="Recent scans" sub="Loc: GPS+address (accurate) · GPS · IP (network, often inaccurate)">
             <div className="overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card">
@@ -314,7 +318,9 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
                       <tr key={row.id} className="border-b border-border/30 last:border-0">
                         <td className="py-2 pr-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatIst(row.created_at)}</td>
                         <td className="py-2 pr-3 text-xs min-w-[12rem]">{placeLine(row) || "—"}</td>
-                        <td className="py-2 pr-3 text-[11px] font-mono">{row.location_source === "gps" ? "GPS" : "IP"}</td>
+                        <td className="py-2 pr-3 text-[11px] font-mono whitespace-nowrap">
+                          {locColumnLabel(row.place_source, row.location_source)}
+                        </td>
                         <td className="py-2 text-[11px] text-muted-foreground">{row.device_type || "—"}</td>
                       </tr>
                     ))
@@ -331,7 +337,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, purple = IP."
       >
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs mb-3">
-          Place fields (city, locality, region, country, postal/PIN) are approximate network geo from Cloudflare. Postal code is not always available. Green pins = GPS; purple = IP.
+          Accurate place data requires users to tap Allow on location when opening the QR link.
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex rounded-md border border-border/60 overflow-hidden">
@@ -354,7 +360,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
           )}
         </div>
         <p className="text-[11px] text-muted-foreground mb-2">
-          Better pins: scanners tap <strong className="text-foreground/80">Allow</strong> on location (download page, ~2.5s). CARTO is the basemap only — it does not improve GPS/IP accuracy.
+          Green = GPS pin, purple = IP. IP place names are approximate (network). Reverse geocode uses BigDataCloud when GPS is allowed. CARTO is the basemap only.
         </p>
         <BangaloreQrMap
           pins={data?.pins ?? []}

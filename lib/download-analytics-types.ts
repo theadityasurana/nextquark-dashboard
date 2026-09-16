@@ -12,6 +12,7 @@ export type DownloadVisitPin = {
   region: string | null
   postal_code: string | null
   continent: string | null
+  place_source: string | null
 }
 
 export type DownloadRecentVisit = {
@@ -27,6 +28,7 @@ export type DownloadRecentVisit = {
   device_type: string | null
   lat: number | null
   lng: number | null
+  place_source: string | null
 }
 
 export type DownloadCountryStat = {
@@ -70,7 +72,7 @@ export type CampaignSpotRow = {
 }
 
 export type DownloadAnalyticsPayload = {
-  kpis: { today: number; d7: number; d30: number; gps_pins: number; ip_pins: number }
+  kpis: { today: number; d7: number; d30: number; gps_pins: number; ip_pins: number; gps_geocode: number; gps_only: number; ip_place: number }
   pins: DownloadVisitPin[]
   recentVisits: DownloadRecentVisit[]
   byCountry: DownloadCountryStat[]

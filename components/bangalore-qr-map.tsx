@@ -126,14 +126,20 @@ export function BangaloreQrMap({
       } else {
         for (const pin of pins) {
           const loc =
-            pin.location_source === "gps"
-              ? "GPS"
-              : "IP"
+            pin.place_source === "gps_geocode"
+              ? "GPS+address"
+              : pin.location_source === "gps" || pin.place_source === "gps_only"
+                ? "GPS"
+                : "IP"
           const campaignLine = pin.campaign
             ? `<br/><code>${escapeHtml(pin.campaign)}</code>`
             : ""
           const place = placeLine(pin)
           const placeLineHtml = place ? `<br/>${escapeHtml(place)}` : ""
+          const approx =
+            pin.place_source === "ip" || (!pin.place_source && pin.location_source !== "gps")
+              ? `<br/><span style="opacity:.85">Approximate (network)</span>`
+              : ""
           L.circleMarker([pin.lat, pin.lng], {
             radius: pin.location_source === "gps" ? 6 : 5,
             color: pin.location_source === "gps" ? "#34d399" : "#c4b5fd",
@@ -142,7 +148,7 @@ export function BangaloreQrMap({
             fillOpacity: 0.85,
           })
             .bindTooltip(
-              `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${placeLineHtml}${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
+              `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${placeLineHtml}${approx}${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
               { sticky: true },
             )
             .addTo(layers)
