@@ -1,6 +1,6 @@
 {
   "name": "Iris Admin",
-  "short_name": "Iris",
+  "short_name": "Iris Admin",
   "description": "Internal admin dashboard for monitoring AI-powered job applications",
   "start_url": "/",
   "display": "standalone",
