@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nextquark-v2'
+const CACHE_NAME = 'iris-v2'
 
 const STATIC_ASSETS = [
   '/',
@@ -46,7 +46,7 @@ self.addEventListener('push', (event) => {
       body: data.body,
       icon: '/applogo.png',
       badge: '/applogo.png',
-      tag: data.tag || 'nextquark',
+      tag: data.tag || 'iris',
       data: data.url ? { url: data.url } : undefined,
     })
   )

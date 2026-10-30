@@ -1,6 +1,6 @@
 {
-  "name": "NextQuark Admin",
-  "short_name": "NextQuark",
+  "name": "Iris Admin",
+  "short_name": "Iris",
   "description": "Internal admin dashboard for monitoring AI-powered job applications",
   "start_url": "/",
   "display": "standalone",

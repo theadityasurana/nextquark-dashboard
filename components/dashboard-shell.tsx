@@ -146,7 +146,7 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
               <NQLogo className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight text-gradient">NextQuark</h1>
+              <h1 className="text-sm font-semibold tracking-tight text-gradient">Iris</h1>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Admin</p>
             </div>
           </div>
@@ -271,7 +271,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-card ring-1 ring-border/40">
                 <NQLogo className="h-4 w-4 text-primary" />
               </div>
-              <span className="text-sm font-semibold tracking-tight truncate">NextQuark</span>
+              <span className="text-sm font-semibold tracking-tight truncate">Iris</span>
             </div>
             {collapsed && (
               <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="hidden md:flex h-8 w-8">

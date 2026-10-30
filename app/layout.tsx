@@ -12,13 +12,13 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" })
 
 export const metadata: Metadata = {
-  title: 'NextQuark Admin Dashboard',
+  title: 'Iris Admin Dashboard',
   description: 'Internal admin dashboard for monitoring AI-powered job applications',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'NextQuark Admin',
+    title: 'Iris Admin',
   },
   icons: {
     icon: [
