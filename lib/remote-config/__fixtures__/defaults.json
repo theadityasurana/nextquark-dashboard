@@ -1,0 +1,390 @@
+{
+  "copy.free_swipes": {
+    "steps": [
+      "Share your code with a friend",
+      "They sign up using your code",
+      "You both get {referral_reward} free swipes"
+    ],
+    "title": "Free Swipes",
+    "share_x": "Post on X",
+    "subtitle": "Invite a friend — you both get {referral_reward} free swipes",
+    "how_title": "How it works",
+    "code_label": "YOUR REFERRAL CODE",
+    "more_share": "More ways to share",
+    "copy_button": "Copy Code",
+    "share_story": "Story",
+    "stat_swipes": "Swipes Earned",
+    "follow_badge": "+{follow_reward} swipes",
+    "follow_title": "Follow us for free swipes",
+    "stat_friends": "Friends Joined",
+    "follow_claimed": "Claimed",
+    "share_whatsapp": "WhatsApp",
+    "code_generating": "Generating…",
+    "follow_subtitle": "Get {follow_reward} free swipes for each follow!",
+    "toast_story_sheet": "Caption copied — pick Instagram → Story, then paste it",
+    "toast_story_opened": "Caption copied — paste it as a text sticker",
+    "toast_caption_copied": "Caption copied — paste it after sharing the image"
+  },
+  "copy.out_of_swipes": {
+    "body": "Upgrade to keep applying now, or invite friends to earn free swipes.",
+    "later": "Maybe later",
+    "title": "You’re out of swipes",
+    "free_title": "Or earn free swipes",
+    "reset_soon": "Free swipes reset soon",
+    "follow_body": "+{follow_reward} swipes for each follow",
+    "invite_body": "+{referral_reward} swipes for you and each friend",
+    "premium_cta": "Upgrade to Premium",
+    "follow_title": "Follow Iris",
+    "invite_title": "Invite friends",
+    "premium_badge": "BEST VALUE",
+    "premium_title": "Go Premium",
+    "reset_countdown": "Free swipes reset in {countdown}",
+    "premium_benefits": [
+      "From 75 applications a month",
+      "Iris auto-applies for you",
+      "Resume tailored to every job"
+    ]
+  },
+  "copy.share": {
+    "x": "I'm using Iris: swipe right on a job and AI applies for you. Use my code {code} and we both get {referral_reward} free swipes.\n\n{link}",
+    "story": "Use my code {code} on Iris for {referral_reward} free swipes 👉 {link}",
+    "whatsapp": "Hey! I've been using Iris to apply to jobs. You just swipe right and AI handles the application. Use my code *{code}* and we both get {referral_reward} free swipes: {link}",
+    "job_share": "Hey! Check out this role\n\n{title} at {company}\n\nYou can apply just by swiping right on Iris\n\n{link}",
+    "image_caption": "Hey! Check out Iris — it's like Tinder for jobs. Swipe right and AI applies for you automatically. Use my referral link and we both get {referral_reward} free swipes: {link}",
+    "invite_message": "Hey! Check out Iris  - think of it like Tinder for jobs. You swipe right on jobs you like and AI applies for you automatically. It's the fastest way to apply to hundreds of jobs. Use my referral link and we both get {referral_reward} free swipes to get started: {link}",
+    "invite_link_base": "https://nextquark.in/invite/"
+  },
+  "features": {
+    "feed_source": "client",
+    "share_targets": [
+      "story",
+      "x",
+      "whatsapp"
+    ],
+    "splash_min_ms": 1400,
+    "social_follow_enabled": true,
+    "ai_role_filter_enabled": false,
+    "show_more_share_options": true
+  },
+  "feed": {
+    "adjacent_share": 0.2,
+    "rpc_timeout_ms": 12000,
+    "exclude_ids_cap": 500,
+    "starting_levels": {
+      "mid": [
+        1,
+        3
+      ],
+      "expert": [
+        4,
+        5
+      ],
+      "junior": [
+        1,
+        3
+      ],
+      "senior": [
+        2,
+        4
+      ],
+      "internship": [
+        0,
+        1
+      ],
+      "entry_level": [
+        0,
+        2
+      ]
+    },
+    "home_company_cap": 1,
+    "interleave_every": 5,
+    "title_keywords_cap": 40,
+    "adjacent_core_ratio": 4,
+    "default_company_cap": 2,
+    "generic_single_words": [
+      "developer",
+      "developers",
+      "engineer",
+      "engineers",
+      "programmer",
+      "research",
+      "researcher",
+      "analyst",
+      "manager",
+      "consultant",
+      "designer",
+      "scientist",
+      "specialist",
+      "associate",
+      "lead",
+      "director",
+      "architect",
+      "code",
+      "coding",
+      "intern",
+      "writer",
+      "operations",
+      "product",
+      "data",
+      "software",
+      "design",
+      "marketing",
+      "sales",
+      "analytics"
+    ],
+    "adjacent_keywords_cap": 20,
+    "fallback_keyword_count": 8
+  },
+  "job_card": {
+    "chips": {
+      "order": [
+        "industry",
+        "company_type",
+        "employment_type",
+        "location_type",
+        "experience",
+        "posted",
+        "salary",
+        "level",
+        "requirements",
+        "education",
+        "work_authorization"
+      ],
+      "hidden": []
+    },
+    "header": {
+      "show_linkedin": true,
+      "show_location": false,
+      "show_match_badge": true
+    },
+    "sections": {
+      "order": [
+        "requirements",
+        "fit_writeup",
+        "skills",
+        "benefits"
+      ],
+      "hidden": [],
+      "titles": {
+        "about": "About the Role",
+        "skills": "Skills",
+        "benefits": "Benefits",
+        "fit_writeup": "Why This Fits You",
+        "requirements": "Requirements"
+      },
+      "requirements_limit": 4
+    },
+    "hint_text": "Tap to see full details",
+    "show_link_button": true,
+    "show_share_button": true
+  },
+  "limits": {
+    "free_cycle_days": 30,
+    "social_follow_reward": 2,
+    "free_swipes_per_cycle": 10,
+    "referral_reward_referee": 5,
+    "referral_reward_referrer": 5,
+    "new_user_application_credits": 15
+  },
+  "logos": {
+    "providers": [
+      "company",
+      "logo_dev",
+      "google",
+      "duckduckgo"
+    ]
+  },
+  "paywall": {
+    "features": {
+      "pro": [
+        {
+          "label": "Job applications / month",
+          "included": "200"
+        },
+        {
+          "label": "Resume uploads",
+          "included": "5"
+        },
+        {
+          "label": "AI auto-fill",
+          "included": "yes"
+        },
+        {
+          "label": "Job matching & ranking",
+          "included": "yes"
+        },
+        {
+          "label": "Iris auto-apply",
+          "included": "yes"
+        },
+        {
+          "label": "Resume tailoring",
+          "included": "yes"
+        },
+        {
+          "label": "Iris AI mock interviews",
+          "included": "yes"
+        },
+        {
+          "label": "Priority support",
+          "included": "yes"
+        }
+      ],
+      "free": [
+        {
+          "label": "Job applications / month",
+          "included": "15"
+        },
+        {
+          "label": "Resume uploads",
+          "included": "1"
+        },
+        {
+          "label": "AI auto-fill",
+          "included": "yes"
+        },
+        {
+          "label": "Job matching & ranking",
+          "included": "yes"
+        },
+        {
+          "label": "Iris auto-apply",
+          "included": "no"
+        },
+        {
+          "label": "Resume tailoring",
+          "included": "no"
+        },
+        {
+          "label": "Iris AI mock interviews",
+          "included": "no"
+        },
+        {
+          "label": "Priority support",
+          "included": "no"
+        }
+      ],
+      "ultra": [
+        {
+          "label": "Job applications / month",
+          "included": "500"
+        },
+        {
+          "label": "Resume uploads",
+          "included": "5"
+        },
+        {
+          "label": "AI auto-fill",
+          "included": "yes"
+        },
+        {
+          "label": "Job matching & ranking",
+          "included": "yes"
+        },
+        {
+          "label": "Iris auto-apply",
+          "included": "yes"
+        },
+        {
+          "label": "Resume tailoring",
+          "included": "yes"
+        },
+        {
+          "label": "Iris AI mock interviews",
+          "included": "yes"
+        },
+        {
+          "label": "Priority support",
+          "included": "yes"
+        }
+      ],
+      "starter": [
+        {
+          "label": "Job applications / month",
+          "included": "75"
+        },
+        {
+          "label": "Resume uploads",
+          "included": "3"
+        },
+        {
+          "label": "AI auto-fill",
+          "included": "yes"
+        },
+        {
+          "label": "Job matching & ranking",
+          "included": "yes"
+        },
+        {
+          "label": "Iris auto-apply",
+          "included": "yes"
+        },
+        {
+          "label": "Resume tailoring",
+          "included": "yes"
+        },
+        {
+          "label": "Iris AI mock interviews",
+          "included": "no"
+        },
+        {
+          "label": "Priority support",
+          "included": "no"
+        }
+      ]
+    },
+    "plan_order": [
+      "starter",
+      "pro",
+      "ultra"
+    ],
+    "default_plan": "starter",
+    "hidden_plans": [],
+    "how_it_works": [
+      {
+        "n": "01",
+        "body": "Workday, Greenhouse, Lever, Ashby and 15+ more ATSes — scanned the moment a role goes live.",
+        "title": "Watches 50,000+ career pages"
+      },
+      {
+        "n": "02",
+        "body": "Keyword-aligned, ATS-safe materials generated from the actual job description.",
+        "title": "Tailors every application"
+      },
+      {
+        "n": "03",
+        "body": "Login, every field, open-ended questions in your voice, and the upload.",
+        "title": "Fills every field"
+      },
+      {
+        "n": "04",
+        "body": "Recruiter emails land on the right application. Status moves on its own.",
+        "title": "Manages your pipeline"
+      }
+    ],
+    "highlight_badge": "POPULAR",
+    "highlighted_plan": "pro",
+    "default_billing_period": "quarterly"
+  },
+  "social": {
+    "links": {
+      "twitter": "https://x.com/irisapp_si",
+      "linkedin": "https://www.linkedin.com/company/tryiris/posts/?viewAsMember=true",
+      "instagram": "https://www.instagram.com/irisapp.si/"
+    },
+    "follow_items": [
+      {
+        "label": "Follow us on Instagram",
+        "platform": "instagram"
+      },
+      {
+        "label": "Follow us on Twitter",
+        "platform": "twitter"
+      },
+      {
+        "label": "Follow us on LinkedIn",
+        "platform": "linkedin"
+      }
+    ]
+  }
+}

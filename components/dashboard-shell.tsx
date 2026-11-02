@@ -9,7 +9,7 @@ import { useTheme } from "@/components/theme-provider"
 import {
   LayoutDashboard, Zap, Users, Building2, Briefcase, Bot,
   ScrollText, Settings, ChevronLeft, LogOut, Menu,
-  Mail, DollarSign, Globe, Sun, Moon, BellRing, Brain, TrendingUp,
+  Mail, DollarSign, Globe, Sun, Moon, BellRing, Brain, TrendingUp, SlidersHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +30,7 @@ const navItems = [
   { label: "AI Agents",     href: "/agents",      icon: Bot },
   { label: "Email Manager",        href: "/emails",        icon: Mail },
   { label: "Notification Manager", href: "/notifications",  icon: BellRing },
+  { label: "App Control",          href: "/app-control",    icon: SlidersHorizontal },
   { label: "Revenue",              href: "/pricing",        icon: DollarSign },
   // Sits beside Logs on purpose: Logs is what happened, Learning is what the
   // system kept from it.
@@ -161,7 +162,7 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
       <ScrollArea className="relative flex-1 px-3 py-4">
         <nav className="flex flex-col gap-0.5">
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/"))
             return (
               <Link
                 key={item.href}

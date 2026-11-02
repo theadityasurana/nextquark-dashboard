@@ -1,5 +1,15 @@
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Home-directory package-lock.json was winning Turbopack root inference,
+  // so app routes 404'd as HTML and client fetch().json() threw SyntaxError.
+  turbopack: {
+    root: __dirname,
+  },
   images: {
     unoptimized: true,
   },
