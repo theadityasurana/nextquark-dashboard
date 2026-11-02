@@ -133,7 +133,11 @@
       "analytics"
     ],
     "adjacent_keywords_cap": 20,
-    "fallback_keyword_count": 8
+    "fallback_keyword_count": 8,
+    "location_tiers_enabled": true,
+    "search_relaxation_enabled": true,
+    "spelling_correction_enabled": true,
+    "show_relax_notice": true
   },
   "job_card": {
     "chips": {
@@ -385,6 +389,7 @@
         "label": "Follow us on LinkedIn",
         "platform": "linkedin"
       }
-    ]
+    ],
+    "facebook_app_id": ""
   }
 }

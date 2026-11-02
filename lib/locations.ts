@@ -1,4 +1,10 @@
 // Constants for job form dropdowns
+// jobs.loc_cities / loc_countries (the app's "near me first" ordering and
+// location filter) are filled by the database trigger jobs_set_loc from
+// the free-text location, for every writer (this form, ATS sync,
+// sync-companies). A new place here must also exist in the app repo's
+// constants/location-mappings.ts (then run scripts/gen-location-aliases.ts
+// and apply the seed), or it is stored with no country.
 
 export const LOCATIONS = [
   "Remote",

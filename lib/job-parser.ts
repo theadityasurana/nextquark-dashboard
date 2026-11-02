@@ -221,7 +221,8 @@ export function normalizeExperienceLevel(raw: string | null | undefined): Experi
 
   // Handle UI dropdown format: "Entry Level (0-1 years)", "Junior (1-3 years)", etc.
   if (lower.startsWith("entry level")) return "Entry Level"
-  if (lower.startsWith("junior")) return "Middle Level"
+  // Junior = Entry Level, as in the app's level ladder (lib/feed-policy titleSeniority).
+  if (lower.startsWith("junior")) return "Entry Level"
   if (lower.startsWith("mid-level") || lower.startsWith("mid level")) return "Middle Level"
   if (lower.startsWith("senior")) return "Senior Level"
   if (lower.startsWith("lead")) return "Lead"
@@ -235,7 +236,8 @@ export function normalizeExperienceLevel(raw: string | null | undefined): Experi
   if (/\blead\b|\bhead\s+of\b|\bmanager\b/.test(lower)) return "Lead"
   if (/\bsenior\b|\bsr\.?\b|5[\s-]?8|8\+/.test(lower)) return "Senior Level"
   if (/\bmid[\s-]?level\b|\bmiddle\b|3[\s-]?5/.test(lower)) return "Middle Level"
-  if (/\bjunior\b|\bjr\.?\b|1[\s-]?3/.test(lower)) return "Middle Level"
+  if (/\bjunior\b|\bjr\.?\b/.test(lower)) return "Entry Level"
+  if (/1[\s-]?3/.test(lower)) return "Middle Level"
   if (/\bintern(?:ship)?\b|\bco[\s-]?op\b/.test(lower)) return "Internship"
   if (/\bentry\b|0[\s-]?1/.test(lower)) return "Entry Level"
 
@@ -459,7 +461,8 @@ function extractLevelFromTitle(lowerTitle: string): string | null {
   // 8. MIDDLE LEVEL (Junior, Mid, domain-specific mid-career)
   // ═══════════════════════════════════════════════════════════════════════════
   // Explicit Junior / Jr. prefix
-  if (/\bjunior\b|\bjr\.?\s/.test(lowerTitle) && !/\bsenior\b/.test(lowerTitle)) return "Middle Level"
+  // Junior = Entry Level, matching the app (lib/feed-policy titleSeniority).
+  if (/\bjunior\b|\bjr\.?\s/.test(lowerTitle) && !/\bsenior\b/.test(lowerTitle)) return "Entry Level"
   // Explicit Mid-Level
   if (/\bmid[\s-]?level\b|\bmid[\s-]?career\b/.test(lowerTitle)) return "Middle Level"
 

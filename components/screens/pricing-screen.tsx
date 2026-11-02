@@ -3,6 +3,7 @@
 import { useState } from "react"
 import useSWR from "swr"
 import { formatCost } from "@/lib/run-cost"
+import { PLANS } from "@/lib/plans"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
@@ -10,34 +11,15 @@ import {
   PieChart, Pie, Legend, AreaChart, Area, CartesianGrid,
 } from "recharts"
 
-// ── Pricing (INTL plan IDs differ from IN plan IDs intentionally) ─────────────
-const INTL = [
-  { id: "pro",   label: "Starter", monthly: 19.99, annual: 191.88, credits: 75 },
-  { id: "power", label: "Pro",     monthly: 39.99, annual: 383.88, credits: 200 },
-  { id: "max",   label: "Power",   monthly: 59.99, annual: 575.88, credits: 500 },
-]
-const IN = [
-  { id: "starter", label: "Starter", monthly: 499,  annual: 4790,  credits: 75 },
-  { id: "pro",     label: "Pro",     monthly: 999,  annual: 9590,  credits: 200 },
-  { id: "power",   label: "Power",   monthly: 2199, annual: 21110, credits: 500 },
-]
-const INTL_MAP = Object.fromEntries(INTL.map((p) => [p.id, p]))
-const IN_MAP   = Object.fromEntries(IN.map((p) => [p.id, p]))
+// ── Pricing — from lib/plans.ts, which mirrors the app's PLAN_CONFIGS ────────
+// (subscription_plan = starter | pro | ultra; monthly or quarterly).
+const INTL = PLANS.map((p) => ({ id: p.id, label: p.label, monthly: p.INTL.monthly, quarterly: p.INTL.quarterly, credits: p.credits }))
+const IN   = PLANS.map((p) => ({ id: p.id, label: p.label, monthly: p.IN.monthly,   quarterly: p.IN.quarterly,   credits: p.credits }))
+const INTL_MAP: Record<string, (typeof INTL)[number]> = Object.fromEntries(INTL.map((p) => [p.id, p]))
+const IN_MAP: Record<string, (typeof IN)[number]>     = Object.fromEntries(IN.map((p) => [p.id, p]))
 
 const PC: Record<string, string> = {
-  free: "#6b7280", starter: "#22c4ac", pro: "#818cf8", power: "#f59e0b", max: "#f97316",
-}
-
-const LEGACY_MAP: Record<string, string> = {
-  premium: "pro", nq_premium_monthly: "pro", nq_premium_weekly: "pro",
-  nq_pro_monthly: "pro", nq_pro_yearly: "pro",
-  nq_power_monthly: "power", nq_power_yearly: "power",
-  nq_max_monthly: "max", nq_max_yearly: "max",
-  nq_starter_monthly: "starter", nq_starter_yearly: "starter",
-}
-function canon(sub: string | null | undefined): string {
-  if (!sub) return "free"
-  return LEGACY_MAP[sub.toLowerCase()] ?? sub.toLowerCase()
+  free: "#6b7280", starter: "#22c4ac", pro: "#818cf8", ultra: "#f59e0b",
 }
 
 const TT = {
@@ -67,15 +49,19 @@ interface Stats {
   planCounts: Record<string, number>
   inCounts: Record<string, number>
   intlCounts: Record<string, number>
-  monthlyCount: number; annualCount: number
+  monthlyCount: number; quarterlyCount: number
+  lapsed: number; cancelledInTerm: number
   mrrUSD: number; mrrINR: number
 }
 interface PaidUser {
   id: string; email: string; full_name: string | null
   subscription_type: string | null
+  plan: string | null
+  state: "active" | "cancelled" | "grace" | "lapsed" | "free"
   subscription_start_date: string | null
   subscription_end_date: string | null
-  region: string | null; billing_period: string | null; platform: string | null
+  region: "IN" | "INTL"; billing_period: "monthly" | "quarterly"; platform: string | null
+  monthly_revenue: number
 }
 interface CostStats {
   totalCost: number; billedRuns: number; totalSeconds: number
@@ -114,7 +100,7 @@ function PlanTable({ plans, counts, fmt, free }: {
         <tr className="border-b border-border/40 text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
           <th className="text-left px-5 py-3">Plan</th>
           <th className="text-right px-4 py-3">Monthly</th>
-          <th className="text-right px-4 py-3">Annual</th>
+          <th className="text-right px-4 py-3">Quarterly</th>
           <th className="text-right px-4 py-3">Credits</th>
           <th className="text-right px-5 py-3">Subscribers</th>
         </tr>
@@ -130,7 +116,7 @@ function PlanTable({ plans, counts, fmt, free }: {
               </div>
             </td>
             <td className="text-right px-4 py-3 tabular-nums">{fmt(p.monthly)}</td>
-            <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmt(p.annual)}</td>
+            <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{fmt(p.quarterly)}</td>
             <td className="text-right px-4 py-3 tabular-nums text-muted-foreground">{p.credits}</td>
             <td className="text-right px-5 py-3 font-semibold tabular-nums">{counts[p.id] ?? 0}</td>
           </tr>
@@ -168,12 +154,16 @@ export function PricingScreen() {
   const intlCounts = stats?.intlCounts ?? {}
   const paidPct    = total > 0 ? ((paid / total) * 100).toFixed(1) : "0"
 
-  const applePaid  = paidUsers.filter((u) => u.platform === "apple").length
-  const googlePaid = paidUsers.filter((u) => u.platform === "google").length
-  const annualPaid = paidUsers.filter((u) => u.billing_period === "annual").length
-  const monthlyPaid = paid - annualPaid
-  const inPaid     = paidUsers.filter((u) => u.region === "IN").length
+  // Paying now (lapsed rows are listed below but earn nothing).
+  const paying     = paidUsers.filter((u) => u.state !== "lapsed" && u.state !== "free")
+  const applePaid  = paying.filter((u) => u.platform === "ios").length
+  const googlePaid = paying.filter((u) => u.platform === "android").length
+  const quarterlyPaid = stats?.quarterlyCount ?? paying.filter((u) => u.billing_period === "quarterly").length
+  const monthlyPaid = paid - quarterlyPaid
+  const inPaid     = paying.filter((u) => u.region === "IN").length
   const intlPaid   = paid - inPaid
+  const revenueOf = (region: "IN" | "INTL", plan: string) =>
+    paying.filter((u) => u.region === region && u.plan === plan).reduce((sum, u) => sum + (u.monthly_revenue ?? 0), 0)
 
   const appleFees  = (applePaid  / Math.max(paid, 1)) * mrrUSD * APPLE_FEE
   const googleFees = (googlePaid / Math.max(paid, 1)) * mrrUSD * GOOGLE_FEE
@@ -182,16 +172,16 @@ export function PricingScreen() {
 
   // INTL bar data
   const intlSubBar = INTL.map((p) => ({ name: p.label, users: intlCounts[p.id] ?? 0, color: PC[p.id] }))
-  const intlRevBar = INTL.map((p) => ({ name: p.label, revenue: (intlCounts[p.id] ?? 0) * p.monthly, color: PC[p.id] }))
+  const intlRevBar = INTL.map((p) => ({ name: p.label, revenue: revenueOf("INTL", p.id), color: PC[p.id] }))
 
   // IN bar data
   const inSubBar = IN.map((p) => ({ name: p.label, users: inCounts[p.id] ?? 0, color: PC[p.id] }))
-  const inRevBar = IN.map((p) => ({ name: p.label, revenue: (inCounts[p.id] ?? 0) * p.monthly, color: PC[p.id] }))
+  const inRevBar = IN.map((p) => ({ name: p.label, revenue: revenueOf("IN", p.id), color: PC[p.id] }))
 
   // Donut: all plans combined
   const donutData = [
     { name: "Free", value: free, color: PC.free },
-    ...["starter", "pro", "power", "max"]
+    ...PLANS.map((p) => p.id)
       .filter((id) => (planCounts[id] ?? 0) > 0)
       .map((id) => ({ name: id.charAt(0).toUpperCase() + id.slice(1), value: planCounts[id] ?? 0, color: PC[id] })),
   ]
@@ -236,7 +226,7 @@ export function PricingScreen() {
           <KpiCard label="Free"          value={free} />
           <KpiCard label="INTL Paid"     value={intlPaid} sub="USD region" />
           <KpiCard label="IN Paid"       value={inPaid}   sub="INR region" />
-          <KpiCard label="Annual Billing" value={annualPaid} sub={`${paid > 0 ? ((annualPaid/paid)*100).toFixed(0) : 0}% of paid`} />
+          <KpiCard label="Quarterly Billing" value={quarterlyPaid} sub={`${paid > 0 ? ((quarterlyPaid/paid)*100).toFixed(0) : 0}% of paid · ${stats?.lapsed ?? 0} lapsed`} />
         </div>
       </div>
 
@@ -385,7 +375,7 @@ export function PricingScreen() {
             <div className="h-52 px-4 pt-5 pb-3 flex flex-col gap-4 justify-center">
               {[
                 { name: "Monthly", value: monthlyPaid, color: "#818cf8" },
-                { name: "Annual",  value: annualPaid,  color: "#f59e0b" },
+                { name: "Quarterly", value: quarterlyPaid, color: "#f59e0b" },
                 { name: "INTL",    value: intlPaid,    color: "#f97316" },
                 { name: "IN",      value: inPaid,      color: "#22c4ac" },
               ].map((b) => (
@@ -508,11 +498,13 @@ export function PricingScreen() {
               </thead>
               <tbody className="divide-y divide-border/30">
                 {paidUsers.map((user) => {
-                  const plan    = canon(user.subscription_type)
+                  const plan    = user.plan ?? "free"
                   const isIN    = user.region === "IN"
                   const planInfo = isIN ? IN_MAP[plan] : INTL_MAP[plan]
-                  const price   = planInfo ? (isIN ? fmtINR(planInfo.monthly) : fmtUSD(planInfo.monthly)) : "—"
-                  const expired = user.subscription_end_date && new Date(user.subscription_end_date) < new Date()
+                  const listPrice = planInfo ? (user.billing_period === "quarterly" ? planInfo.quarterly / 3 : planInfo.monthly) : 0
+                  const price   = planInfo ? (isIN ? fmtINR(listPrice) : fmtUSD(listPrice)) : "—"
+                  // Same rule as the app (has_paid_access): "Expired" only once access has really ended.
+                  const expired = user.state === "lapsed"
                   return (
                     <tr key={user.id} className="hover:bg-accent/20 transition-colors">
                       <td className="px-5 py-2.5">
@@ -537,7 +529,7 @@ export function PricingScreen() {
                       </td>
                       <td className="px-4 py-2.5 hidden sm:table-cell">
                         <Badge variant="secondary" className="text-[10px]">
-                          {user.billing_period === "annual" ? "Annual" : "Monthly"}
+                          {user.billing_period === "quarterly" ? "Quarterly" : "Monthly"}
                         </Badge>
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground capitalize hidden lg:table-cell">

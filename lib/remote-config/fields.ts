@@ -118,6 +118,7 @@ export const SECTIONS: SectionDef[] = [
           { path: ['links', 'instagram'], label: 'Instagram', help: 'Profile opened by the Instagram follow row.', kind: 'text' },
           { path: ['links', 'twitter'], label: 'Twitter / X', help: 'Profile opened by the Twitter follow row.', kind: 'text' },
           { path: ['links', 'linkedin'], label: 'LinkedIn', help: 'Page opened by the LinkedIn follow row.', kind: 'text' },
+          { path: ['facebook_app_id'], label: 'Facebook App ID (Instagram Stories)', help: 'Meta App ID from developers.facebook.com. Instagram only opens "Share to Story" with the invite card when the app sends one; empty = the share sheet instead.', kind: 'text' },
         ],
       },
       {
@@ -350,7 +351,7 @@ export const SECTIONS: SectionDef[] = [
   {
     key: 'feed',
     name: 'Feed tuning',
-    blurb: 'Keyword caps, timeouts, company caps, related-role share, starting levels, generic words.',
+    blurb: 'Keyword caps, timeouts, company caps, related-role share, location tiers, search relaxation, starting levels, generic words.',
     groups: [
       {
         note: 'Applies to the on-phone feed and the get-feed function. Change in small steps and watch results.',
@@ -365,6 +366,16 @@ export const SECTIONS: SectionDef[] = [
           count(['adjacent_keywords_cap'], 'Related-role keywords', 'Keywords for the related-roles query.'),
           count(['adjacent_core_ratio'], 'Core jobs per related job', 'At most one related-role job per this many core jobs.'),
           count(['interleave_every'], 'Interleave every', 'One related-role card after every N−1 core cards.'),
+        ],
+      },
+      {
+        title: 'Search, filters & location',
+        note: 'How the jobs page answers a search or filter (lib/feed-search in the app). It never shows an empty page: when nothing matches exactly it relaxes one thing at a time — levels, date, roles under a company/place, spelling, synonyms, job type, place → nearest first, company — and finally falls back to the user\'s own feed.',
+        fields: [
+          { path: ['location_tiers_enabled'], label: 'Near me first', help: 'Order jobs by the user\'s city, then their country, then everywhere else — within the same roles and levels. Uses the home location and preferred cities.', kind: 'boolean' },
+          { path: ['search_relaxation_enabled'], label: 'Relax searches & filters', help: 'When a search or filter finds nothing, relax it step by step (with a notice). Off: exact results, then straight to the user\'s own feed.', kind: 'boolean' },
+          { path: ['spelling_correction_enabled'], label: 'Spelling correction', help: 'Try a corrected reading of the search ("data analist" → "data analyst", "gogle" → "Google") before widening it.', kind: 'boolean' },
+          { path: ['show_relax_notice'], label: 'Show relax notice', help: 'The line under the filters that says what was relaxed, e.g. "No matches in Mumbai — showing the closest first".', kind: 'boolean' },
         ],
       },
       {

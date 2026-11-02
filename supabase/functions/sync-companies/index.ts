@@ -42,8 +42,9 @@ function extractExperienceFromTitle(title: string): string | null {
   if (/\bprincipal\b|\bstaff\b|\bdistinguished\b/.test(t)) return 'Principal'
   if (/\blead\b|\bhead\s+of\b/.test(t) && !/\bleader(?:ship)?\b/.test(t)) return 'Lead'
   if (/\bsenior\b|\bsr\.?\s/.test(t)) return 'Senior Level'
-  if (/\bjunior\b|\bjr\.?\s|\bmid[\s-]?level\b/.test(t)) return 'Middle Level'
-  if (/\bentry[\s-]?level\b|\bnew\s+grad\b|\btrainee\b/.test(t)) return 'Entry Level'
+  if (/\bmid[\s-]?level\b/.test(t)) return 'Middle Level'
+  // Junior = Entry Level, as in the app's level ladder.
+  if (/\bjunior\b|\bjr\.?\s|\bentry[\s-]?level\b|\bnew\s+grad\b|\btrainee\b/.test(t)) return 'Entry Level'
   return null
 }
 
@@ -58,6 +59,43 @@ function stableJobId(initial: string, url: string, title: string): string {
     hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0
   }
   return `job-${Math.abs(hash).toString(36)}-${raw.slice(0, 8).replace(/[^a-z0-9]/g, '')}`
+}
+
+// Re-syncing an existing job must not wipe what enrichment filled in: the
+// full-row upsert wrote experience = null, empty skills / requirements /
+// benefits and "Competitive salary" over real values on every run.
+function updatePatch(data: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (v === null || v === undefined || v === '') continue
+    if (Array.isArray(v) && v.length === 0) continue
+    if (k === 'salary_range' && v === 'Competitive salary') continue
+    out[k] = v
+  }
+  return out
+}
+
+async function writeJobs(supabase: any, toInsert: any[], toUpdate: any[]) {
+  if (toInsert.length) await supabase.from('jobs').upsert(toInsert, { onConflict: 'id', ignoreDuplicates: true })
+  for (let i = 0; i < toUpdate.length; i += 10) {
+    await Promise.allSettled(toUpdate.slice(i, i + 10).map(({ id, ...data }: any) =>
+      supabase.from('jobs').update(updatePatch(data)).eq('id', id)))
+  }
+}
+
+// A job someone applied to is kept (status 'closed', hidden from the feed by
+// search_jobs) instead of deleting the user's application rows first.
+async function retireStaleJobs(supabase: any, staleIds: string[]): Promise<number> {
+  const { data: applied } = await supabase.from('live_application_queue').select('job_id').in('job_id', staleIds)
+  const keep = new Set((applied || []).map((r: any) => r.job_id))
+  const toClose = staleIds.filter(id => keep.has(id))
+  const toDelete = staleIds.filter(id => !keep.has(id))
+  if (toClose.length) await supabase.from('jobs').update({ status: 'closed' }).in('id', toClose)
+  if (toDelete.length) {
+    const { error } = await supabase.from('jobs').delete().in('id', toDelete)
+    if (error) return toClose.length
+  }
+  return staleIds.length
 }
 
 async function fetchJobs(atsType: string, atsCompanyId: string): Promise<any[]> {
@@ -226,9 +264,7 @@ Deno.serve(async (req) => {
     }
 
     const allRows = [...toInsert, ...toUpdate]
-    if (allRows.length > 0) {
-      await supabase.from('jobs').upsert(allRows, { onConflict: 'id', ignoreDuplicates: false })
-    }
+    await writeJobs(supabase, toInsert, toUpdate)
 
     const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, company_name: company.name, status: 'pending' }))
     if (toEnrich.length > 0) {
@@ -261,9 +297,7 @@ Deno.serve(async (req) => {
     let deletedCount = 0
     if (staleIds.length > 0) {
       currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'deleting', `Removing ${staleIds.length} stale jobs`)
-      await supabase.from('live_application_queue').delete().in('job_id', staleIds)
-      const { error } = await supabase.from('jobs').delete().in('id', staleIds)
-      if (!error) deletedCount = staleIds.length
+      deletedCount = await retireStaleJobs(supabase, staleIds)
     }
 
     currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'done',
@@ -338,9 +372,7 @@ Deno.serve(async (req) => {
       }
 
       const allRows = [...toInsert, ...toUpdate]
-      if (allRows.length > 0) {
-        await supabase.from('jobs').upsert(allRows, { onConflict: 'id', ignoreDuplicates: false })
-      }
+      await writeJobs(supabase, toInsert, toUpdate)
 
       const toEnrich = allRows.filter(r => !r.experience).map(r => ({ job_id: r.id, job_title: r.title, company_name: company.name, status: 'pending' }))
       if (toEnrich.length > 0) {
@@ -351,9 +383,7 @@ Deno.serve(async (req) => {
       let deletedCount = 0
       if (staleIds.length > 0) {
         currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'deleting', `Removing ${staleIds.length} stale jobs`)
-        await supabase.from('live_application_queue').delete().in('job_id', staleIds)
-        const { error } = await supabase.from('jobs').delete().in('id', staleIds)
-        if (!error) deletedCount = staleIds.length
+        deletedCount = await retireStaleJobs(supabase, staleIds)
       }
 
       currentLogs = await log(supabase, sessionId, currentLogs, company.name, 'done',

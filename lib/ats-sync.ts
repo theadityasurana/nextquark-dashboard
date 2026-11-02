@@ -108,7 +108,7 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
   console.log(`${tag} loading existing jobs from DB`)
   const { data: existingJobs } = await supabase
     .from('jobs')
-    .select('id, job_url')
+    .select('id, job_url, experience')
     .eq('company_id', companyId)
 
   console.log(`${tag} found ${existingJobs?.length ?? 0} existing jobs in DB`)
@@ -116,6 +116,7 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
   const existingUrlMap = new Map(
     (existingJobs || []).filter(j => j.job_url).map(j => [jobDedupeKey(j.job_url), j.id])
   )
+  const existingExperience = new Map((existingJobs || []).map(j => [j.id, j.experience as string | null]))
 
   const today = new Date().toISOString().split('T')[0]
   const toInsert: any[] = []
@@ -149,7 +150,7 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
     const existingId = existingUrlMap.get(dedupeKey)
 
     if (existingId) {
-      toUpdate.push({ id: existingId, data: jobData })
+      toUpdate.push({ id: existingId, data: updatePatch(jobData) })
     } else {
       toInsert.push({
         id: stableJobId(company.logo_initial, job.jobUrl, job.title),
@@ -202,16 +203,7 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
       .filter(j => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url)))
       .map(j => j.id)
     if (staleIds.length > 0) {
-      console.log(`${tag} deleting ${staleIds.length} stale jobs`)
-      // Must delete queue entries first to avoid FK violation
-      await supabase.from('live_application_queue').delete().in('job_id', staleIds)
-      const { error } = await supabase.from('jobs').delete().in('id', staleIds)
-      if (!error) {
-        deletedCount = staleIds.length
-        console.log(`${tag} deleted ${deletedCount} stale jobs`)
-      } else {
-        console.error(`${tag} stale job delete error:`, error.message)
-      }
+      deletedCount = await retireStaleJobs(supabase, staleIds, tag)
     } else {
       console.log(`${tag} no stale jobs to delete`)
     }
@@ -219,10 +211,11 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
 
   console.log(`${tag} sync complete — added=${addedCount} updated=${updatedCount} deleted=${deletedCount} live=${liveJobUrls.length}`)
 
-  // Queue jobs with no experience for async LLM enrichment
+  // Queue jobs with no experience for async LLM enrichment — only those still
+  // without one (an enriched level is kept across syncs now).
   const toEnrich = [
     ...toInsert.filter(j => !j.experience).map(j => ({ job_id: j.id, job_title: j.title, company_name: j.company_name })),
-    ...toUpdate.filter(j => !j.data.experience).map(j => ({ job_id: j.id, job_title: j.data.title, company_name: j.data.company_name })),
+    ...toUpdate.filter(j => !j.data.experience && !existingExperience.get(j.id)).map(j => ({ job_id: j.id, job_title: j.data.title, company_name: j.data.company_name })),
   ]
   if (toEnrich.length > 0) {
     console.log(`${tag} queuing ${toEnrich.length} jobs for LLM experience enrichment`)
@@ -231,6 +224,47 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
   }
 
   return { addedCount, updatedCount, deletedCount, totalLive: liveJobUrls.length }
+}
+
+/**
+ * Fields for re-syncing an existing job. An ATS that leaves a field blank
+ * must not wipe what enrichment filled in: every sync used to write
+ * experience = null (undoing the LLM level, then re-queuing it),
+ * empty skills / requirements / benefits and the "Competitive salary"
+ * placeholder over real values.
+ */
+export function updatePatch<T extends Record<string, any>>(data: T): Partial<T> {
+  const out: Record<string, any> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (v === null || v === undefined || v === '') continue
+    if (Array.isArray(v) && v.length === 0) continue
+    if (k === 'salary_range' && v === 'Competitive salary') continue
+    out[k] = v
+  }
+  return out as Partial<T>
+}
+
+/**
+ * Remove jobs that left the ATS. A job someone applied to stays (marked
+ * closed, hidden from the feed by search_jobs) — deleting it used to delete
+ * the user's application rows first, emptying their Applications list.
+ */
+export async function retireStaleJobs(supabase: ReturnType<typeof createAdminClient>, staleIds: string[], tag: string): Promise<number> {
+  const { data: applied } = await supabase.from('live_application_queue').select('job_id').in('job_id', staleIds)
+  const keep = new Set((applied || []).map((r: any) => r.job_id))
+  const toDelete = staleIds.filter(id => !keep.has(id))
+  const toClose = staleIds.filter(id => keep.has(id))
+  if (toClose.length) {
+    const { error } = await supabase.from('jobs').update({ status: 'closed' }).in('id', toClose)
+    if (error) console.error(`${tag} close error:`, error.message)
+    else console.log(`${tag} closed ${toClose.length} stale jobs that have applications`)
+  }
+  if (toDelete.length) {
+    const { error } = await supabase.from('jobs').delete().in('id', toDelete)
+    if (error) { console.error(`${tag} stale job delete error:`, error.message); return 0 }
+    console.log(`${tag} deleted ${toDelete.length} stale jobs`)
+  }
+  return toDelete.length + toClose.length
 }
 
 // ── ATS fetchers (unchanged logic, just moved here) ──────────────────────────

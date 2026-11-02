@@ -108,9 +108,15 @@ Deno.serve(async (req) => {
 
     let deletedCount = 0
     if (staleIds.length > 0) {
-      await supabase.from('live_application_queue').delete().in('job_id', staleIds)
-      const { error } = await supabase.from('jobs').delete().in('id', staleIds)
-      if (!error) deletedCount = staleIds.length
+      // Keep jobs people applied to (status 'closed', hidden from the feed);
+      // deleting them used to delete the users' application rows first.
+      const { data: applied } = await supabase.from('live_application_queue').select('job_id').in('job_id', staleIds)
+      const keep = new Set((applied || []).map((r: any) => r.job_id))
+      const toClose = staleIds.filter((id: string) => keep.has(id))
+      const toDelete = staleIds.filter((id: string) => !keep.has(id))
+      if (toClose.length) await supabase.from('jobs').update({ status: 'closed' }).in('id', toClose)
+      const { error } = toDelete.length ? await supabase.from('jobs').delete().in('id', toDelete) : { error: null }
+      deletedCount = error ? toClose.length : staleIds.length
     }
 
     resultEntry = { company: company.name, deleted: deletedCount, checked: (dbJobs || []).length }
