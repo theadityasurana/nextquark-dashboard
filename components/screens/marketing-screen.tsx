@@ -127,17 +127,27 @@ function getReferralSource(meta: Record<string, unknown>): string {
   return raw.length > 20 ? raw.slice(0, 20) + "…" : raw
 }
 
+type TimeRange = "30d" | "all"
+
 export function MarketingScreen() {
   const [users, setUsers] = useState<AuthUser[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [qrRefreshKey, setQrRefreshKey] = useState(0)
+  const [timeRange, setTimeRange] = useState<TimeRange>("30d")
 
   const load = async () => {
     const res = await fetch("/api/users")
     const data = await res.json()
     if (Array.isArray(data)) setUsers(data)
   }
+
+  const filteredUsers = useMemo(() => {
+    if (timeRange === "all") return users
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    return users.filter(u => new Date(u.created_at) >= cutoff)
+  }, [users, timeRange])
 
   useEffect(() => {
     load().finally(() => setLoading(false))
@@ -152,7 +162,7 @@ export function MarketingScreen() {
 
   // ── Referral source breakdown ──────────────────────────────────────────────
   const referralData = useMemo(() => {
-    if (!users.length) {
+    if (!filteredUsers.length) {
       return [
         { name: "LinkedIn", value: 34 },
         { name: "Word of Mouth", value: 28 },
@@ -163,24 +173,23 @@ export function MarketingScreen() {
       ]
     }
     const map = new Map<string, number>()
-    for (const u of users) {
+    for (const u of filteredUsers) {
       const src = getReferralSource(u.user_metadata || {})
       map.set(src, (map.get(src) || 0) + 1)
     }
-    // If all organic (no metadata), use illustrative distribution
     const entries = [...map.entries()].sort((a, b) => b[1] - a[1])
     if (entries.length === 1 && entries[0][0] === "Organic") {
       return [
-        { name: "LinkedIn", value: Math.round(users.length * 0.34) },
-        { name: "Word of Mouth", value: Math.round(users.length * 0.28) },
-        { name: "Google Search", value: Math.round(users.length * 0.18) },
-        { name: "Twitter / X", value: Math.round(users.length * 0.10) },
-        { name: "Product Hunt", value: Math.round(users.length * 0.06) },
-        { name: "Reddit", value: Math.round(users.length * 0.04) },
+        { name: "LinkedIn", value: Math.round(filteredUsers.length * 0.34) },
+        { name: "Word of Mouth", value: Math.round(filteredUsers.length * 0.28) },
+        { name: "Google Search", value: Math.round(filteredUsers.length * 0.18) },
+        { name: "Twitter / X", value: Math.round(filteredUsers.length * 0.10) },
+        { name: "Product Hunt", value: Math.round(filteredUsers.length * 0.06) },
+        { name: "Reddit", value: Math.round(filteredUsers.length * 0.04) },
       ]
     }
     return entries.map(([name, value]) => ({ name, value }))
-  }, [users])
+  }, [filteredUsers])
 
   // ── Signups by hour of day ─────────────────────────────────────────────────
   const signupsByHour = useMemo(() => {
@@ -188,24 +197,23 @@ export function MarketingScreen() {
       hour: i === 0 ? "12am" : i < 12 ? `${i}am` : i === 12 ? "12pm" : `${i - 12}pm`,
       count: 0,
     }))
-    if (users.length) {
-      for (const u of users) {
+    if (filteredUsers.length) {
+      for (const u of filteredUsers) {
         const h = new Date(u.created_at).getHours()
         hours[h].count++
       }
     } else {
-      // Illustrative data
       const demo = [2,1,1,0,0,1,3,8,14,18,16,12,10,11,13,15,12,9,7,5,4,3,2,2]
       demo.forEach((v, i) => { hours[i].count = v })
     }
     return hours
-  }, [users])
+  }, [filteredUsers])
 
   // ── Signups by day of week ─────────────────────────────────────────────────
   const signupsByDay = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => ({ day: d, count: 0 }))
-    if (users.length) {
-      for (const u of users) {
+    if (filteredUsers.length) {
+      for (const u of filteredUsers) {
         const d = new Date(u.created_at).getDay()
         days[d].count++
       }
@@ -213,54 +221,65 @@ export function MarketingScreen() {
       [12, 28, 35, 32, 30, 22, 15].forEach((v, i) => { days[i].count = v })
     }
     return days
-  }, [users])
+  }, [filteredUsers])
 
-  // ── User growth over last 8 weeks ──────────────────────────────────────────
+  // ── User growth (weekly buckets) ──────────────────────────────────────────
   const weeklyGrowth = useMemo(() => {
     const weeks: { week: string; signups: number }[] = []
     const now = new Date()
-    for (let i = 7; i >= 0; i--) {
-      const start = new Date(now)
-      start.setDate(now.getDate() - i * 7 - 6)
-      const end = new Date(now)
-      end.setDate(now.getDate() - i * 7)
-      const label = `W${8 - i}`
-      const count = users.filter(u => {
+    if (timeRange === "all" && users.length) {
+      const earliest = users.reduce((min, u) => {
         const d = new Date(u.created_at)
-        return d >= start && d <= end
-      }).length
-      weeks.push({ week: label, signups: count })
-    }
-    // If all zeros, use illustrative
-    if (weeks.every(w => w.signups === 0)) {
-      [4, 7, 9, 12, 11, 15, 18, 22].forEach((v, i) => { weeks[i].signups = v })
+        return d < min ? d : min
+      }, new Date())
+      const msPerWeek = 7 * 24 * 60 * 60 * 1000
+      const numWeeks = Math.max(Math.ceil((now.getTime() - earliest.getTime()) / msPerWeek), 1)
+      for (let i = numWeeks - 1; i >= 0; i--) {
+        const end = new Date(now.getTime() - i * msPerWeek)
+        const start = new Date(end.getTime() - msPerWeek)
+        const label = start.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        const count = users.filter(u => { const d = new Date(u.created_at); return d >= start && d <= end }).length
+        weeks.push({ week: label, signups: count })
+      }
+    } else {
+      for (let i = 7; i >= 0; i--) {
+        const start = new Date(now)
+        start.setDate(now.getDate() - i * 7 - 6)
+        const end = new Date(now)
+        end.setDate(now.getDate() - i * 7)
+        const count = filteredUsers.filter(u => { const d = new Date(u.created_at); return d >= start && d <= end }).length
+        weeks.push({ week: `W${8 - i}`, signups: count })
+      }
+      if (weeks.every(w => w.signups === 0)) {
+        [4, 7, 9, 12, 11, 15, 18, 22].forEach((v, i) => { weeks[i].signups = v })
+      }
     }
     return weeks
-  }, [users])
+  }, [filteredUsers, users, timeRange])
 
   // ── Auth provider breakdown ────────────────────────────────────────────────
   const providerData = useMemo(() => {
     const map = new Map<string, number>()
-    for (const u of users) {
+    for (const u of filteredUsers) {
       const p = u.provider || "email"
       map.set(p, (map.get(p) || 0) + 1)
     }
     if (!map.size) return [{ name: "Email", value: 68 }, { name: "Google", value: 28 }, { name: "GitHub", value: 4 }]
     return [...map.entries()].map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
-  }, [users])
+  }, [filteredUsers])
 
   // ── Onboarding funnel ──────────────────────────────────────────────────────
-  const total = users.length || 100
+  const total = filteredUsers.length || 100
   const funnelData = [
     { name: "Signed Up", value: total, fill: COLORS[0] },
-    { name: "Email Confirmed", value: Math.round(total * (users.length ? users.filter(u => u.confirmed).length / total : 0.72)), fill: COLORS[1] },
+    { name: "Email Confirmed", value: Math.round(total * (filteredUsers.length ? filteredUsers.filter(u => u.confirmed).length / total : 0.72)), fill: COLORS[1] },
     { name: "Profile Started", value: Math.round(total * 0.58), fill: COLORS[2] },
     { name: "Profile Complete", value: Math.round(total * 0.41), fill: COLORS[3] },
     { name: "First Job Applied", value: Math.round(total * 0.29), fill: COLORS[4] },
   ]
 
-  const confirmedPct = users.length
-    ? Math.round((users.filter(u => u.confirmed).length / users.length) * 100)
+  const confirmedPct = filteredUsers.length
+    ? Math.round((filteredUsers.filter(u => u.confirmed).length / filteredUsers.length) * 100)
     : 72
 
   return (
@@ -271,9 +290,25 @@ export function MarketingScreen() {
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Marketing</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, global download QR, signup trends & onboarding funnel</p>
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+            <button
+              onClick={() => setTimeRange("30d")}
+              className={`px-3 h-7 text-xs transition-colors ${timeRange === "30d" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              Last 30d
+            </button>
+            <button
+              onClick={() => setTimeRange("all")}
+              className={`px-3 h-7 text-xs transition-colors ${timeRange === "all" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              All Time
+            </button>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Bangalore QR / download.nextquark.in — loads independently of user stats */}
@@ -292,7 +327,7 @@ export function MarketingScreen() {
       <div>
         <SectionLabel>Overview</SectionLabel>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Users" value={users.length || "—"} sub="all time signups" />
+          <StatCard label={timeRange === "all" ? "Total Users" : "Users (30d)"} value={filteredUsers.length || "—"} sub={timeRange === "all" ? "all time signups" : "last 30 days"} />
           <StatCard label="Email Confirmed" value={`${confirmedPct}%`} sub="of all signups" />
           <StatCard label="Profile Complete" value="41%" sub="completed onboarding" />
           <StatCard label="Activation Rate" value="29%" sub="applied to ≥1 job" />
@@ -411,7 +446,7 @@ export function MarketingScreen() {
       {/* Growth */}
       <div>
         <SectionLabel>Growth</SectionLabel>
-        <ChartCard title="Weekly new signups" sub="last 8 weeks — new users per week">
+        <ChartCard title="Weekly new signups" sub={timeRange === "all" ? "all time — new users per week" : "last 8 weeks — new users per week"}>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weeklyGrowth} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
