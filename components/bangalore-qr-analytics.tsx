@@ -126,9 +126,17 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
   const reload = () => {
     setLoading(true)
     fetch("/api/download-analytics")
-      .then((r) => r.json())
+      .then(async (r) => {
+        const text = await r.text()
+        try {
+          return JSON.parse(text) as DownloadAnalyticsPayload
+        } catch {
+          // Non-JSON body (e.g. a gateway timeout page): surface the status.
+          return { ...EMPTY, error: `Failed to load download analytics (HTTP ${r.status}${r.status === 504 ? ", database not responding" : ""})` }
+        }
+      })
       .then((json: DownloadAnalyticsPayload) => setData(json))
-      .catch(() => setData(EMPTY))
+      .catch((e) => setData({ ...EMPTY, error: `Failed to load download analytics (${e instanceof Error ? e.message : "network error"})` }))
       .finally(() => setLoading(false))
   }
 
@@ -233,10 +241,10 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
       <div>
         <div className="flex items-center gap-2">
           <QrCode className="h-4 w-4 text-primary" />
-          <h2 className="text-base font-semibold tracking-tight">Download QR (global)</h2>
+          <h2 className="text-base font-semibold tracking-tight">Link visits (all domains)</h2>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-          Worldwide scans on <code className="font-mono text-[11px]">{QR_URL}</code>. Place names may come from GPS reverse geocode (BigDataCloud) or Cloudflare IP geo. Disclose location and reverse geocoding in the privacy policy.
+          Every visit to irisjobs.live, download.nextquark.in, iris.nextquark.in and nextquark.in links (QR, job, invite, post), counted together. QR: <code className="font-mono text-[11px]">{QR_URL}</code>. Place names may come from GPS reverse geocode (BigDataCloud) or Cloudflare IP geo. Disclose location and reverse geocoding in the privacy policy.
         </p>
       </div>
 

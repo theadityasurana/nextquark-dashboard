@@ -27,22 +27,32 @@ const fmtSalary = (min: string, max: string) =>
 
 const counts = { scanned: 0, patched: 0, experience: 0, skills: 0, requirements: 0, benefits: 0, salary: 0, education: 0, workAuth: 0, queued: 0 }
 const samples: string[] = []
-const PAGE = 500
-let lastId = ''
+const PAGE = 200
+let lastCreatedAt = '1970-01-01T00:00:00.000Z'
 
 while (true) {
   const { data: jobs, error } = await supabase.from('jobs')
-    .select('id, title, company_name, description, detailed_requirements, experience, skills, requirements, benefits, salary_range, education_level, work_authorization')
-    .or('experience.is.null,skills.is.null,skills.eq.[],requirements.eq.[],benefits.eq.[],salary_range.eq.Competitive salary,education_level.is.null,work_authorization.is.null')
-    .gt('id', lastId).order('id').limit(PAGE)
+    .select('id, title, company_name, description, detailed_requirements, experience, skills, requirements, benefits, salary_range, education_level, work_authorization, created_at')
+    .gt('created_at', lastCreatedAt)
+    .order('created_at', { ascending: true }).limit(PAGE)
   if (error) throw error
   if (!jobs?.length) break
-  lastId = jobs[jobs.length - 1].id
+  const last = jobs[jobs.length - 1]
+  // If all rows share the same timestamp, advance by 1ms to avoid infinite loop
+  if (jobs.every(j => j.created_at === last.created_at)) {
+    lastCreatedAt = new Date(new Date(last.created_at).getTime() + 1).toISOString()
+  } else {
+    lastCreatedAt = last.created_at
+  }
 
   const updates: { id: string; patch: Record<string, unknown> }[] = []
   const toQueue: { job_id: string; job_title: string; company_name: string; status: string }[] = []
   for (const j of jobs) {
     counts.scanned++
+    const needsWork = empty(j.experience) || empty(j.skills) || empty(j.requirements) || empty(j.benefits) ||
+      empty(j.education_level) || empty(j.work_authorization) ||
+      (empty(j.salary_range) || j.salary_range === 'Competitive salary')
+    if (!needsWork) continue
     const text = [j.description, j.detailed_requirements].filter(Boolean).join('\n\n')
     const p = parseJobContent(text, j.title ?? '')
     const patch: Record<string, unknown> = {}

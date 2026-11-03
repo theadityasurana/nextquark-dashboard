@@ -108,6 +108,9 @@ interface AuthUser {
   created_at: string
   provider: string
   confirmed: boolean
+  profile_started?: boolean
+  onboarding_complete?: boolean
+  has_applied?: boolean
   user_metadata: Record<string, unknown>
 }
 
@@ -136,10 +139,26 @@ export function MarketingScreen() {
   const [qrRefreshKey, setQrRefreshKey] = useState(0)
   const [timeRange, setTimeRange] = useState<TimeRange>("30d")
 
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // No demo fallbacks anywhere below: on failure the page says so instead of
+  // showing invented numbers.
   const load = async () => {
-    const res = await fetch("/api/users")
-    const data = await res.json()
-    if (Array.isArray(data)) setUsers(data)
+    try {
+      const res = await fetch("/api/users?funnel=1")
+      const text = await res.text()
+      let data: unknown = null
+      try { data = JSON.parse(text) } catch { /* non-JSON, e.g. a gateway timeout page */ }
+      if (res.ok && Array.isArray(data)) {
+        setUsers(data as AuthUser[])
+        setLoadError(null)
+      } else {
+        const msg = (data as { error?: string } | null)?.error
+        setLoadError(msg || `HTTP ${res.status}${res.status === 504 ? " (timed out — database not responding)" : ""}`)
+      }
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Network error")
+    }
   }
 
   const filteredUsers = useMemo(() => {
@@ -162,32 +181,13 @@ export function MarketingScreen() {
 
   // ── Referral source breakdown ──────────────────────────────────────────────
   const referralData = useMemo(() => {
-    if (!filteredUsers.length) {
-      return [
-        { name: "LinkedIn", value: 34 },
-        { name: "Word of Mouth", value: 28 },
-        { name: "Google Search", value: 18 },
-        { name: "Twitter / X", value: 10 },
-        { name: "Product Hunt", value: 6 },
-        { name: "Reddit", value: 4 },
-      ]
-    }
+    if (!filteredUsers.length) return []
     const map = new Map<string, number>()
     for (const u of filteredUsers) {
       const src = getReferralSource(u.user_metadata || {})
       map.set(src, (map.get(src) || 0) + 1)
     }
     const entries = [...map.entries()].sort((a, b) => b[1] - a[1])
-    if (entries.length === 1 && entries[0][0] === "Organic") {
-      return [
-        { name: "LinkedIn", value: Math.round(filteredUsers.length * 0.34) },
-        { name: "Word of Mouth", value: Math.round(filteredUsers.length * 0.28) },
-        { name: "Google Search", value: Math.round(filteredUsers.length * 0.18) },
-        { name: "Twitter / X", value: Math.round(filteredUsers.length * 0.10) },
-        { name: "Product Hunt", value: Math.round(filteredUsers.length * 0.06) },
-        { name: "Reddit", value: Math.round(filteredUsers.length * 0.04) },
-      ]
-    }
     return entries.map(([name, value]) => ({ name, value }))
   }, [filteredUsers])
 
@@ -197,14 +197,8 @@ export function MarketingScreen() {
       hour: i === 0 ? "12am" : i < 12 ? `${i}am` : i === 12 ? "12pm" : `${i - 12}pm`,
       count: 0,
     }))
-    if (filteredUsers.length) {
-      for (const u of filteredUsers) {
-        const h = new Date(u.created_at).getHours()
-        hours[h].count++
-      }
-    } else {
-      const demo = [2,1,1,0,0,1,3,8,14,18,16,12,10,11,13,15,12,9,7,5,4,3,2,2]
-      demo.forEach((v, i) => { hours[i].count = v })
+    for (const u of filteredUsers) {
+      hours[new Date(u.created_at).getHours()].count++
     }
     return hours
   }, [filteredUsers])
@@ -212,13 +206,8 @@ export function MarketingScreen() {
   // ── Signups by day of week ─────────────────────────────────────────────────
   const signupsByDay = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => ({ day: d, count: 0 }))
-    if (filteredUsers.length) {
-      for (const u of filteredUsers) {
-        const d = new Date(u.created_at).getDay()
-        days[d].count++
-      }
-    } else {
-      [12, 28, 35, 32, 30, 22, 15].forEach((v, i) => { days[i].count = v })
+    for (const u of filteredUsers) {
+      days[new Date(u.created_at).getDay()].count++
     }
     return days
   }, [filteredUsers])
@@ -250,9 +239,6 @@ export function MarketingScreen() {
         const count = filteredUsers.filter(u => { const d = new Date(u.created_at); return d >= start && d <= end }).length
         weeks.push({ week: `W${8 - i}`, signups: count })
       }
-      if (weeks.every(w => w.signups === 0)) {
-        [4, 7, 9, 12, 11, 15, 18, 22].forEach((v, i) => { weeks[i].signups = v })
-      }
     }
     return weeks
   }, [filteredUsers, users, timeRange])
@@ -264,23 +250,22 @@ export function MarketingScreen() {
       const p = u.provider || "email"
       map.set(p, (map.get(p) || 0) + 1)
     }
-    if (!map.size) return [{ name: "Email", value: 68 }, { name: "Google", value: 28 }, { name: "GitHub", value: 4 }]
     return [...map.entries()].map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
   }, [filteredUsers])
 
   // ── Onboarding funnel ──────────────────────────────────────────────────────
-  const total = filteredUsers.length || 100
+  const total = filteredUsers.length
+  const countWhere = (pred: (u: AuthUser) => boolean | undefined) => filteredUsers.filter(pred).length
   const funnelData = [
     { name: "Signed Up", value: total, fill: COLORS[0] },
-    { name: "Email Confirmed", value: Math.round(total * (filteredUsers.length ? filteredUsers.filter(u => u.confirmed).length / total : 0.72)), fill: COLORS[1] },
-    { name: "Profile Started", value: Math.round(total * 0.58), fill: COLORS[2] },
-    { name: "Profile Complete", value: Math.round(total * 0.41), fill: COLORS[3] },
-    { name: "First Job Applied", value: Math.round(total * 0.29), fill: COLORS[4] },
+    { name: "Email Confirmed", value: countWhere(u => u.confirmed), fill: COLORS[1] },
+    { name: "Profile Started", value: countWhere(u => u.profile_started), fill: COLORS[2] },
+    { name: "Profile Complete", value: countWhere(u => u.onboarding_complete), fill: COLORS[3] },
+    { name: "First Job Applied", value: countWhere(u => u.has_applied), fill: COLORS[4] },
   ]
 
-  const confirmedPct = filteredUsers.length
-    ? Math.round((filteredUsers.filter(u => u.confirmed).length / filteredUsers.length) * 100)
-    : 72
+  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0)
+  const confirmedPct = pct(funnelData[1].value)
 
   return (
     <div className="flex flex-col gap-8">
@@ -313,7 +298,7 @@ export function MarketingScreen() {
 
       {/* Bangalore QR / download.nextquark.in — loads independently of user stats */}
       <div>
-        <SectionLabel>Download / QR analytics</SectionLabel>
+        <SectionLabel>Link &amp; QR visits</SectionLabel>
         <BangaloreQrAnalytics refreshKey={qrRefreshKey} />
       </div>
 
@@ -323,14 +308,19 @@ export function MarketingScreen() {
         </div>
       ) : (
         <>
+      {loadError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Couldn&apos;t load signup data: {loadError}. Charts below are empty until it loads — hit Refresh to retry.
+        </div>
+      )}
       {/* KPI strip */}
       <div>
         <SectionLabel>Overview</SectionLabel>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label={timeRange === "all" ? "Total Users" : "Users (30d)"} value={filteredUsers.length || "—"} sub={timeRange === "all" ? "all time signups" : "last 30 days"} />
-          <StatCard label="Email Confirmed" value={`${confirmedPct}%`} sub="of all signups" />
-          <StatCard label="Profile Complete" value="41%" sub="completed onboarding" />
-          <StatCard label="Activation Rate" value="29%" sub="applied to ≥1 job" />
+          <StatCard label={timeRange === "all" ? "Total Users" : "Users (30d)"} value={loadError ? "—" : filteredUsers.length} sub={timeRange === "all" ? "all time signups" : "last 30 days"} />
+          <StatCard label="Email Confirmed" value={loadError ? "—" : `${confirmedPct}%`} sub="of all signups" />
+          <StatCard label="Profile Complete" value={loadError ? "—" : `${pct(funnelData[3].value)}%`} sub="completed onboarding" />
+          <StatCard label="Activation Rate" value={loadError ? "—" : `${pct(funnelData[4].value)}%`} sub="applied to ≥1 job" />
         </div>
       </div>
 
