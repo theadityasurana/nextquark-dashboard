@@ -141,7 +141,8 @@ export async function recordRunOutcome(
 export async function preflight(
   supabase: SupabaseClient,
   app: KnockoutCandidate & CoverageProfile & { job_url?: string | null; job_id?: string | null },
-  job: KnockoutJob | null
+  job: KnockoutJob | null,
+  options: { ignoreKnockouts?: boolean } = {}
 ): Promise<PreflightResult> {
   const detection = app.job_url ? detectPortalScored(app.job_url) : null
   const portalName = detection?.portal.name ?? null
@@ -160,35 +161,12 @@ export async function preflight(
     coverage,
   }
 
-  // 1. Unrecognized or low-confidence portal. We have no handler and no
-  //    confident apply-URL rewrite, so a run here is a near-certain waste.
-  if (!detection) {
-    return {
-      ...base,
-      allow: false,
-      blockKind: "portal",
-      reason: "Unrecognized ATS portal — no handler for this URL. Needs manual review.",
-      retryable: false,
-    }
-  }
-  if (portalConfidence < CONFIDENT_THRESHOLD) {
-    // Embed-pattern matches (e.g. ?gh_jid= on a company careers page) are
-    // reliable enough to dispatch — the ATS is identified, just hosted on a
-    // custom domain. Allow them through rather than blocking for manual review.
-    const isEmbedMatch = detection.signals.includes("embedded form marker")
-    if (!isEmbedMatch) {
-      return {
-        ...base,
-        allow: false,
-        blockKind: "portal",
-        reason: `Low-confidence portal match (${portalName}, ${portalConfidence}%: ${detection.signals.join(", ")}). Needs manual review.`,
-        retryable: false,
-      }
-    }
-  }
+  // 1. An unrecognized portal is no longer a reason to refuse. The run uses the
+  //    generic flow, and a page that is not an application is caught and removed
+  //    by the run's own diagnosis.
 
   // 2. Explicit disqualifiers.
-  if (knockoutReport.blocked) {
+  if (knockoutReport.blocked && !options.ignoreKnockouts) {
     return {
       ...base,
       allow: false,
@@ -213,8 +191,8 @@ export async function preflight(
 
   // 4. Portal-level circuit breaker.
   try {
-    // Read off `detection` rather than `portalName`: the early returns above
-    // guarantee it's set here, but only this expression proves it to the compiler.
+    // An unrecognized portal has no breaker of its own to consult.
+    if (!detection) return { ...base, allow: true, blockKind: null, reason: null, retryable: false }
     const current = await readBreaker(supabase, detection.portal.name)
     const d = decide(current, DEFAULT_BREAKER_CONFIG)
     if (d.record.state !== current.state) {

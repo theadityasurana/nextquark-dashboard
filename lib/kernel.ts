@@ -8,16 +8,18 @@ import { RunTracker, type RunTimeline } from "./run-timeline"
 import { extractConfirmationId, looksLikeId } from "./confirmation-id"
 import { isDateQuestion, isConsentQuestion, defaultStartDate, dateCandidates, valuesAgree } from "./field-answers"
 import { optionSelectorFor } from "./ats-fields"
+import { fieldsNamedInErrors } from "./answer-ledger"
 import { selectHandler, buildHandlerProgram, type ElementDescriptor, type HandlerResult } from "./field-handlers"
 import { buildOptionPrompt, buildOptionRetryPrompt, matchReplyToOption } from "./answer-prompts"
-import { resolvePhoneCountry } from "./phone-country"
+import { nationalNumber, resolvePhoneCountry } from "./phone-country"
+import { resumeUpload } from "./resume-file"
 import { coverage, isSensitiveQuestion, recallAnswer, type AnswerCoverage } from "./application-answers"
 import { loadAnswerBank, recordAnswerUsage, recordMissingAnswer, saveAnswer } from "./answer-bank-store"
 import { classifyControl, decideNextStep, fingerprintPage, StepTracker } from "./wizard"
 import { CAPTCHA_DETECT_CODE, buildInjectCode, isSolvable, solveCaptcha, type CaptchaDetection } from "./captcha"
 import { buildJudgePrompt, parseJudgeReply, reconcile, type SubmissionEvidence } from "./submission-judge"
 import { diagnose, type Diagnosis, type RunSignals } from "./diagnose"
-import { evaluatePage as evaluateUnsafePage } from "./unsafe-page"
+import { BOT_WALL_WAIT_MS, evaluateApplicationPage, evaluatePage as evaluateUnsafePage, hasApplicationFields, isAtsHost, isBannedBotWall, isBotWall } from "./unsafe-page"
 import { HONEYPOT_PROBE, isHoneypot, type HoneypotDescriptor } from "./honeypot"
 import { AX_SCAN_CODE, mergeAxFields, needsVisionFallback, type RawAxNode } from "./ax-scan"
 import { buildDistilPrompt, parseDistilReply, skillDomain } from "./domain-skills"
@@ -29,8 +31,10 @@ import { clearConcurrencyCache, fetchConcurrencyLimit } from "./kernel-limits"
 import { acquirePooledBrowser, isPoolable, releasePooledBrowser, type PooledBrowser } from "./browser-pool"
 import { buildCodeModePrompt, CODE_MODE_ENABLED, parseCodeReply, screenCode, verifyNoSideEffects } from "./code-mode"
 import { isOptionNotice, VM_DEEP_QUERY, VM_DOM_HELPERS } from "./vm-dom"
-import { buildLlmChain, classifyLlmStatus, parseRetryDelaySeconds, refreshFreeModels, GEMINI_TEXT_MODELS, type LlmAttempt } from "./llm-models"
-import { routeField, validateAnswerForField, shapeOf, leastCommittalOption } from "./answer-policy"
+import { buildLlmChain, classifyLlmStatus, parseRetryDelaySeconds, refreshFreeModels, PRIMARY_GEMINI_MODEL, GEMINI_TEXT_MODELS, type LlmAttempt } from "./llm-models"
+import { currentScriptsInFlight, recordTiming, scriptFinished, scriptStarted, unwrapVmTimer, withVmTimer } from "./run-timing"
+import { estimateTokens, llmLimiter, MAX_LLM_WAIT_MS, STAGEHAND_CALL_TOKENS, type LlmProviderName } from "./llm-limiter"
+import { degreeFamilyOption, lastResortAnswer, plausibleOptionsFor, mustReplaceExisting, routeField, shortenForSingleLine, validateAnswerForField, shapeOf, leastCommittalOption } from "./answer-policy"
 import { AnswerLedger, type Blocker } from "./answer-ledger"
 import { applySchema, fetchAtsSchema, type AtsSchema } from "./ats-schema"
 
@@ -78,7 +82,7 @@ const PORTAL_CONFIGS: Record<string, PortalConfig> = {
   // session. A live run reached submit at 90s and finished at 118s, but a slower
   // fill (190s observed) plus the OTP wait lands near 275s — close enough to the
   // old ceiling to lose the application after the code had already been used.
-  Greenhouse:      { maxSteps: 30, timeout: 480,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  Greenhouse:      { maxSteps: 30, timeout: 480,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
   // ─── Lever and Ashby both flag the shared ISP exit IP as spam ───
   //
   // Lever rejected a real submission as "possible spam" on the default stealth ISP
@@ -95,17 +99,17 @@ const PORTAL_CONFIGS: Record<string, PortalConfig> = {
   //   403 Proxies require a paid plan
   // that forced this to false may no longer apply — and if it still does, the
   // 403 handler below drops proxy_id and continues rather than failing the run.
-  Lever:           { maxSteps: 30, timeout: 300,  model: "google/gemini-2.5-flash", residential: true,  gpu: false, cua: false, domSettleTimeout: 5000 },
-  Ashby:           { maxSteps: 30, timeout: 480,  model: "google/gemini-2.5-flash", residential: true,  gpu: false, cua: false, domSettleTimeout: 5000 },
-  Workday:         { maxSteps: 40, timeout: 600,  model: "google/gemini-2.5-flash", residential: false, gpu: true,  cua: true,  domSettleTimeout: 8000 },
-  iCIMS:           { maxSteps: 35, timeout: 480,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: true,  domSettleTimeout: 5000 },
-  SmartRecruiters: { maxSteps: 25, timeout: 420,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
-  BambooHR:        { maxSteps: 22, timeout: 300,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
-  Jobvite:         { maxSteps: 25, timeout: 420,  model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
-  LinkedIn:        { maxSteps: 25, timeout: 480,  model: "google/gemini-2.5-flash", residential: true,  gpu: true,  cua: false, domSettleTimeout: 5000 },
+  Lever:           { maxSteps: 30, timeout: 300,  model: PRIMARY_GEMINI_MODEL, residential: true,  gpu: false, cua: false, domSettleTimeout: 5000 },
+  Ashby:           { maxSteps: 30, timeout: 480,  model: PRIMARY_GEMINI_MODEL, residential: true,  gpu: false, cua: false, domSettleTimeout: 5000 },
+  Workday:         { maxSteps: 40, timeout: 600,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: true,  cua: true,  domSettleTimeout: 8000 },
+  iCIMS:           { maxSteps: 35, timeout: 480,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: true,  domSettleTimeout: 5000 },
+  SmartRecruiters: { maxSteps: 25, timeout: 420,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  BambooHR:        { maxSteps: 22, timeout: 300,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  Jobvite:         { maxSteps: 25, timeout: 420,  model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: false, domSettleTimeout: 5000 },
+  LinkedIn:        { maxSteps: 25, timeout: 480,  model: PRIMARY_GEMINI_MODEL, residential: true,  gpu: true,  cua: false, domSettleTimeout: 5000 },
 }
 
-const DEFAULT_PORTAL_CONFIG: PortalConfig = { maxSteps: 25, timeout: 420, model: "google/gemini-2.5-flash", residential: false, gpu: false, cua: false, domSettleTimeout: 5000 }
+const DEFAULT_PORTAL_CONFIG: PortalConfig = { maxSteps: 25, timeout: 420, model: PRIMARY_GEMINI_MODEL, residential: false, gpu: false, cua: false, domSettleTimeout: 5000 }
 
 /**
  * How many pages a portal's application may span before we stop advancing.
@@ -265,7 +269,7 @@ type ModelChoice = { label: string; stagehandModel: any; apiKey: string }
  *
  * OpenAI-compatible endpoint, so it needs no new transport — only a base URL.
  * Both models below are named `openai/...` in Groq's own catalogue, which means
- * they satisfy Stagehand's provider-prefix check (see STAGEHAND_PROVIDER_PREFIXES)
+ * they read like an OpenAI route to Stagehand (see viaOpenAiCompatible)
  * without any rewriting. That is what makes Groq usable for observe/act and not
  * just for text answers.
  *
@@ -279,33 +283,15 @@ export const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 const STAGEHAND_FREE_MODELS = 4
 
 /**
- * Vendor prefixes Stagehand's aiSDK layer will accept.
+ * The model name Stagehand needs for an OpenAI-compatible endpoint.
  *
- * Stagehand does not take our word for the provider. It re-derives one from the
- * text BEFORE the first slash in `modelName` and rejects anything outside this
- * set with "<vendor> is not currently supported for aiSDK".
- *
- * That is invisible for the paid entries only by luck: OpenRouter names its
- * OpenAI and Google models `openai/…` and `google/…`, which collide with real
- * provider names. Most of the free tier does not — `minimax/…`, `z-ai/…`,
- * `nvidia/…`, `dots-studio/…` — and offering those to Stagehand cost four
- * guaranteed failures and about fourteen seconds on EVERY escalation before a
- * working model was reached.
- *
- * The id cannot be rewritten to dodge this: OpenRouter needs the full vendor
- * prefix to route the call, so `openai/minimax/…` is simply a 404. Filtering is
- * the only correct move here.
- *
- * `askModel` is deliberately unaffected — it calls OpenRouter over plain fetch,
- * never through Stagehand, so the whole free tier stays available for the text
- * answers where most of the free-model value actually is.
+ * Stagehand splits on the FIRST slash: the left part picks its SDK client and only
+ * the right part is sent to the server. So Groq's "openai/gpt-oss-120b" reached
+ * Groq as "gpt-oss-120b", which does not exist, and "google/gemma-4:free" went to
+ * Google's client carrying an OpenRouter key. Prefixing keeps the full id intact.
  */
-const STAGEHAND_PROVIDER_PREFIXES = new Set(["openai", "google", "anthropic", "xai", "azure", "bedrock", "vertex"])
-
-/** Can Stagehand actually route this OpenRouter model id? */
-export function isStagehandRoutableModel(id: string): boolean {
-  const vendor = String(id || "").split("/")[0]
-  return STAGEHAND_PROVIDER_PREFIXES.has(vendor.toLowerCase())
+export function viaOpenAiCompatible(id: string): string {
+  return `openai/${id}`
 }
 
 export function buildModelChain(
@@ -317,20 +303,25 @@ export function buildModelChain(
     ? GROQ_MODELS.map((m) => ({
         label: `groq/${m}`,
         apiKey: keys.groqKey!,
-        stagehandModel: { provider: "openai", modelName: m, apiKey: keys.groqKey!, baseURL: GROQ_BASE_URL },
+        stagehandModel: { provider: "openai", modelName: viaOpenAiCompatible(m), apiKey: keys.groqKey!, baseURL: GROQ_BASE_URL },
       }))
     : []
   // OpenAI models via OpenRouter first — the DOM agent relies on function/tool-calling, which
   // OpenAI models support most reliably. Gemini-via-OpenRouter is a secondary option.
   const openRouter: ModelChoice[] = keys.openRouterKey ? [
-    { label: "openrouter/gpt-4o-mini",      apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: "openai/gpt-4o-mini",       apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
-    { label: "openrouter/gpt-4.1-mini",     apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: "openai/gpt-4.1-mini",      apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
-    { label: "openrouter/gemini-2.5-flash", apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: "google/gemini-2.5-flash", apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
+    { label: "openrouter/gpt-4o-mini",      apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: viaOpenAiCompatible("openai/gpt-4o-mini"), apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
+    { label: "openrouter/gpt-4.1-mini",     apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: viaOpenAiCompatible("openai/gpt-4.1-mini"), apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
+    { label: "openrouter/gemini-3.6-flash", apiKey: keys.openRouterKey, stagehandModel: { provider: "openai", modelName: viaOpenAiCompatible("google/gemini-3.6-flash"), apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL } },
   ] : []
   // Object form so each agent() call carries its OWN provider+key (works when many models share
   // one Stagehand instance — a bare string model would inherit the instance's construction key).
   const direct: ModelChoice[] = []
-  if (keys.geminiKey) direct.push({ label: "google/gemini-2.5-flash", apiKey: keys.geminiKey, stagehandModel: { provider: "google", modelName: "google/gemini-2.5-flash", apiKey: keys.geminiKey } })
+  // Gemini's free quota is per model, so one exhausted model must not end the provider.
+  if (keys.geminiKey) {
+    for (const modelName of [PRIMARY_GEMINI_MODEL, "google/gemini-3.5-flash-lite", "google/gemini-3.1-flash-lite"]) {
+      direct.push({ label: modelName, apiKey: keys.geminiKey, stagehandModel: { provider: "google", modelName, apiKey: keys.geminiKey } })
+    }
+  }
   if (keys.openAiKey) {
     direct.push({ label: "gpt-4.1-mini", apiKey: keys.openAiKey, stagehandModel: { provider: "openai", modelName: "gpt-4.1-mini", apiKey: keys.openAiKey } })
     direct.push({ label: "gpt-4o-mini",  apiKey: keys.openAiKey, stagehandModel: { provider: "openai", modelName: "gpt-4o-mini", apiKey: keys.openAiKey } })
@@ -349,10 +340,10 @@ export function buildModelChain(
   // (see FREE_OPENROUTER_MODELS), which is what observe/act needs, so taking the
   // head of it takes the models most likely to actually answer.
   const freeOpenRouter: ModelChoice[] = keys.openRouterKey
-    ? freeModels.filter(isStagehandRoutableModel).slice(0, STAGEHAND_FREE_MODELS).map((m) => ({
+    ? freeModels.slice(0, STAGEHAND_FREE_MODELS).map((m) => ({
         label: `openrouter-free/${m}`,
         apiKey: keys.openRouterKey,
-        stagehandModel: { provider: "openai", modelName: m, apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL },
+        stagehandModel: { provider: "openai", modelName: viaOpenAiCompatible(m), apiKey: keys.openRouterKey, baseURL: OPENROUTER_BASE_URL },
       }))
     : []
 
@@ -379,6 +370,13 @@ const CONSOLE_LOGS = process.env.KERNEL_CONSOLE_LOGS === "1"
  * reports the verdict it would have acted on.
  */
 const DRY_RUN = process.env.KERNEL_DRY_RUN === "1"
+
+/**
+ * Off by default. Warm browsers count against the plan's concurrent-session limit
+ * even while idle: one pool of 3 on a 5-session plan left room for only 2 runs, and
+ * Kernel rejected the rest. Enable only on a plan with sessions to spare.
+ */
+const BROWSER_POOL_ENABLED = process.env.KERNEL_BROWSER_POOL === "1"
 
 let consoleLogStart = Date.now()
 function consoleLog(level: string, message: string) {
@@ -535,6 +533,15 @@ async function flushLogs(): Promise<void> {
 }
 
 async function persistLog(applicationId: string, level: string, message: string) {
+  const started = Date.now()
+  try {
+    await writeRunLog(applicationId, level, message)
+  } finally {
+    recordTiming(applicationId, "dbLog", Date.now() - started)
+  }
+}
+
+async function writeRunLog(applicationId: string, level: string, message: string) {
   consoleLog(level, message)
   // With no application row to write to there is nothing to persist, but the
   // console mirror above still fires — which is what makes an ad-hoc run
@@ -679,6 +686,31 @@ const DEFAULT_SUBMISSION_SIGNALS = {
 // "form gone" is now detected by counting VISIBLE fillable inputs, not by the presence of a
 // [required] attribute — React ATS forms (Greenhouse/Lever/Ashby) validate in JS and rarely
 // set [required], which previously made formGone=true on a fully-visible empty form.
+/** Reads the page after Submit. Exported so a test can prove it parses. */
+export const SUBMISSION_CHECK_CODE = `
+const currentUrl = page.url();
+const info = await page.evaluate(() => {
+${VM_DEEP_QUERY}
+  const isVisible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
+  const bodyText = document.body.innerText;
+  const visibleInputs = nqDeepAll(
+    'input[type="text"],input[type="email"],input[type="tel"],input[type="url"],input:not([type]),textarea,select'
+  ).filter(isVisible).length;
+  const visibleSubmit = nqDeepAll('button,input[type="submit"]')
+    .some(b => isVisible(b) && /submit|apply|send application/i.test(b.innerText || b.value || ''));
+  const visibleErrors = nqDeepAll('[aria-invalid="true"],.error,.invalid,[class*="error"]')
+    .filter(isVisible).length;
+  // 2500 chars, not 800: a confirmation reference often sits below the heading
+  // and a short window was truncating it away before extractConfirmationId saw it.
+  return { bodyText: bodyText.substring(0, 2500), visibleInputs, visibleSubmit, visibleErrors };
+});
+return { currentUrl, ...info };
+`
+
 async function confirmSubmission(
   kernelClient: InstanceType<typeof Kernel>,
   sessionId: string,
@@ -705,32 +737,31 @@ async function confirmSubmission(
     const urlPatternSources = signals.urlPatterns.map(p => p.source)
     const textPatternSources = signals.confirmationText.map(p => p.source)
 
-    const checkRes = await kernelClient.browsers.playwright.execute(sessionId, {
-      code: `
-const currentUrl = page.url();
-const info = await page.evaluate(() => {
-${VM_DEEP_QUERY}
-  const isVisible = (el) => {
-    const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
-  };
-  const bodyText = document.body.innerText;
-  const visibleInputs = nqDeepAll(
-    'input[type="text"],input[type="email"],input[type="tel"],input[type="url"],input:not([type]),textarea,select'
-  )).filter(isVisible).length;
-  const visibleSubmit = nqDeepAll('button,input[type="submit"]')
-    .some(b => isVisible(b) && /submit|apply|send application/i.test(b.innerText || b.value || ''));
-  const visibleErrors = nqDeepAll('[aria-invalid="true"],.error,.invalid,[class*="error"]')
-    .filter(isVisible).length;
-  // 2500 chars, not 800: a confirmation reference often sits below the heading
-  // and a short window was truncating it away before extractConfirmationId saw it.
-  return { bodyText: bodyText.substring(0, 2500), visibleInputs, visibleSubmit, visibleErrors };
-});
-return { currentUrl, ...info };
-`,
+    let checkRes = await kernelClient.browsers.playwright.execute(sessionId, {
+      code: SUBMISSION_CHECK_CODE,
       timeout_sec: 15,
     })
+    // Ashby stays on the same URL and swaps its thank-you in later, so one early
+    // reading sees the form still there, sometimes with Submit still spinning. Look
+    // again for up to a minute, because under load the response can take that long.
+    const hasOutcome = (r: any) => {
+      if (!r) return false
+      return (r.visibleInputs === 0 && !r.visibleSubmit) || (r.visibleErrors ?? 0) > 0 ||
+        urlPatternSources.some((src) => new RegExp(src, "i").test(r.currentUrl || "")) ||
+        textPatternSources.some((src) => new RegExp(src, "i").test(r.bodyText || ""))
+    }
+    for (let look = 0; look < 12 && checkRes.success && !hasOutcome(checkRes.result); look++) {
+      if (applicationId) await persistLog(applicationId, "info", `[Submission] no outcome on the page yet, looking again (${look + 1}/12)`)
+      await new Promise((r) => setTimeout(r, 5000))
+      checkRes = await kernelClient.browsers.playwright.execute(sessionId, { code: SUBMISSION_CHECK_CODE, timeout_sec: 15 })
+    }
+
+    // A check that did not run has learned nothing. Reporting "no signal" here is
+    // what recorded real submissions as failures.
+    if (!checkRes.success) {
+      if (applicationId) await persistLog(applicationId, "error", `[Submission] confirmation check did not run: ${checkRes.error || "no error text"}`)
+      return { submitted: false, confidence: "low", reason: `Clicked Submit but the confirmation check did not run: ${checkRes.error || "unknown"}` }
+    }
 
     const { currentUrl, bodyText, visibleInputs, visibleSubmit, visibleErrors } = (checkRes.result as any) || {}
     const urlMatch = urlPatternSources.some(src => new RegExp(src, 'i').test(currentUrl || ""))
@@ -747,6 +778,8 @@ return { currentUrl, ...info };
     const receipt = ref ? { confirmationId: ref.id, confirmationLabel: ref.label } : {}
 
     if (applicationId) {
+      await persistLog(applicationId, urlMatch || textMatchSrc || formGone ? "info" : "warn",
+        `[Submission] after Submit | form gone: ${formGone} | confirmation URL: ${urlMatch} | confirmation text: ${textMatchSrc || "none"} | validation errors: ${visibleErrors ?? 0} | page: ${String(currentUrl || "").slice(0, 120)}`)
       await persistLog(applicationId, "info",
         `confirmSubmission: url=${currentUrl?.substring(0, 60)} | urlMatch=${urlMatch} | textMatch=${!!textMatchSrc} | formGone=${formGone} (inputs=${visibleInputs}, submitBtn=${visibleSubmit}) | visibleErrors=${visibleErrors}`
       )
@@ -812,7 +845,10 @@ ${VM_DEEP_QUERY}
       const inputs = nqDeepAll('input[type="file"]');
       if (inputs.some(i => i.files && i.files.length > 0)) return true;
       const stem = (name.split('.')[0] || name).toLowerCase();
-      return stem.length > 3 && document.body.innerText.toLowerCase().includes(stem);
+      if (stem.length <= 3) return false;
+      if (document.body.innerText.toLowerCase().includes(stem)) return true;
+      // innerText stops at shadow roots, and SmartRecruiters shows the file inside one.
+      return nqDeepAll('*').some((n) => !n.children.length && (n.textContent || '').toLowerCase().includes(stem));
     }, NAME);
   } catch { return false; }
 };
@@ -900,20 +936,38 @@ return { uploaded: false, method: 'none', error: lastErr.slice(0, 300) };
 // ─── selectCountryCode: 3-pattern fallback for phone country code ───
 // Claude: digits filled but flag not clicked is the #1 silent failure on phone fields.
 // Hard gate: always verify +91/India is selected AFTER phone digits are filled.
-async function selectCountryCodeInPage(
-  kernelClient: InstanceType<typeof Kernel>,
-  sessionId: string,
-  country: { name: string; dial: string; iso: string },
-  applicationId?: string
-): Promise<{ selected: boolean; matchedPattern?: string }> {
-  const result = await kernelClient.browsers.playwright.execute(sessionId, {
-    code: `
+export function buildCountryCodeScript(country: { name: string; dial: string; iso: string }): string {
+  return `
 // Derived from the candidate's own profile. This was hardcoded to India/+91,
 // which silently set the wrong dial code for every non-Indian candidate.
 const countryName = ${JSON.stringify(country.name)};
 const dialCode = ${JSON.stringify(country.dial)};
 const isoCode = ${JSON.stringify(country.iso.toLowerCase())};
 let matchedPattern = 'none';
+
+// ─── Pattern S: SmartRecruiters' spl-phone-field ───
+//
+// Its picker defaults to +1 and sits in shadow DOM beside hidden flag icons.
+const splSelect = page.locator('spl-phone-field spl-select').first();
+if (await splSelect.count() > 0) {
+  const shownDial = () => splSelect.evaluate((e) => ((e.innerText || '').match(/\\+\\d+/) || [''])[0]).catch(() => '');
+  if ((await shownDial()) === dialCode) return { selected: true, matchedPattern: 'S:already-correct' };
+  try {
+    await splSelect.locator('button[aria-label="Country code"]').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+    const search = page.locator('input[aria-label*="Search by country" i]').first();
+    if (await search.isVisible().catch(() => false)) {
+      await search.fill(countryName);
+      await page.waitForTimeout(300);
+    }
+    await page.locator('spl-select-option[label="' + countryName + '"]').first().click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+  } catch (e) {
+    return { selected: false, matchedPattern: 'S:threw' };
+  }
+  const now = await shownDial();
+  return { selected: now === dialCode, matchedPattern: now === dialCode ? 'S:selected' : 'S:not-committed:' + now };
+}
 
 // ─── Pattern A0: react-select country picker, checked HONESTLY ───
 //
@@ -945,13 +999,14 @@ if (await rsCountry.count() > 0) {
 
 // Pattern A: intl-tel-input style flag button
 const flagTrigger = page.locator('[class*="flag"],[class*="country-code"],[class*="phone-country"],[class*="iti__flag"]').first();
-if (await flagTrigger.count() > 0) {
+// A hidden flag would otherwise burn the script's whole time limit on the click.
+if (await flagTrigger.count() > 0 && await flagTrigger.isVisible().catch(() => false)) {
   const currentText = await flagTrigger.textContent() || '';
   const currentData = await flagTrigger.getAttribute('data-country') || '';
   if (currentText.includes(countryName) || currentText.includes(dialCode) || currentData.toLowerCase() === isoCode) {
     return { selected: true, matchedPattern: 'A:already-correct' };
   }
-  await flagTrigger.click();
+  await flagTrigger.click({ timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(400);
   const searchBox = page.locator('input[placeholder*="Search" i],.iti__search-input').first();
   if (await searchBox.count() > 0) {
@@ -1095,7 +1150,17 @@ for (const handle of candidates) {
 }
 
 return { selected: false, matchedPattern };
-`,
+`
+}
+
+async function selectCountryCodeInPage(
+  kernelClient: InstanceType<typeof Kernel>,
+  sessionId: string,
+  country: { name: string; dial: string; iso: string },
+  applicationId?: string
+): Promise<{ selected: boolean; matchedPattern?: string }> {
+  const result = await kernelClient.browsers.playwright.execute(sessionId, {
+    code: buildCountryCodeScript(country),
     timeout_sec: 25,
   })
 
@@ -1324,6 +1389,7 @@ function buildUserDataJson(userData: any): Record<string, any> {
 // A label auditForm emitted as a diagnostic descriptor because the element
 // carries no usable text. Never send these to act() or the LLM.
 const UNIDENTIFIED_FIELD = /^\[unidentified /i
+const SCAN_ARTEFACT_RE = /^PhoneCountry/i
 
 /**
  * Controls the user picks from rather than types into.
@@ -1636,7 +1702,7 @@ function buildPreFillCode(userData: any, resumeFileName: string | null, portalTy
   // String interpolation with manual quote-escaping was fragile — names or
   // locations containing backslashes, newlines, or Unicode broke the VM script.
   const profile = JSON.stringify({
-    phone: (userData.phone || "").replace(/\D/g, "").replace(/^91/, ""),
+    phone: nationalNumber(userData.phone, resolvePhoneCountry(userData).dial),
     firstName: userData.firstName || "",
     lastName: userData.lastName || "",
     fullName: userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim(),
@@ -1669,12 +1735,7 @@ const phone = _p.phone, firstName = _p.firstName, lastName = _p.lastName,
   // everyone else: a US number in area code 917, "9175551234", came out as
   // "75551234". Guarded on length too, so a national number that merely happens
   // to begin with its own dial digits is left alone.
-  const phoneDial = resolvePhoneCountry(userData).dial.replace(/\D/g, "")
-  const phoneDigits = (userData.phone || "").replace(/\D/g, "")
-  const phone =
-    phoneDial && phoneDigits.startsWith(phoneDial) && phoneDigits.length - phoneDial.length >= 7
-      ? phoneDigits.slice(phoneDial.length)
-      : phoneDigits
+  const phone = nationalNumber(userData.phone, resolvePhoneCountry(userData).dial)
   const firstName = (userData.firstName || "").replace(/'/g, "\\'")
   const lastName = (userData.lastName || "").replace(/'/g, "\\'")
   const fullName = (userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim()).replace(/'/g, "\\'")
@@ -1973,7 +2034,7 @@ try {
 ` : ""}
 
 // Portfolio/GitHub URL — label-first
-${githubUrl ? `
+${githubUrl && portalType !== "SmartRecruiters" ? `
 try {
   results.portfolio = await fillByLabel(/portfolio|website|github|personal site/i, '${githubUrl}', ['input[name*="github" i]','input[id*="github" i]','input[name*="website" i]','input[id*="website" i]']);
 } catch {}
@@ -2317,7 +2378,7 @@ FIELD-TO-VALUE MAPPING — match form labels to these values:
 - "Last Name" / "Surname" → ${userData.lastName || ""}
 - "Full Name" / "Name" → ${fullName}
 - "Email" → ${userData.email || ""}
-- "Phone" / "Mobile" → ${(userData.phone || "").replace(/\D/g, "").replace(/^91/, "")} (country code: +91 India)
+- "Phone" / "Mobile" → ${nationalNumber(userData.phone, resolvePhoneCountry(userData).dial)} (country code: ${resolvePhoneCountry(userData).dial} ${resolvePhoneCountry(userData).name})
 - "Location" / "City" → ${userData.location || ""}
 - "LinkedIn URL" → ${userData.linkedinUrl || ""}
 - "Portfolio" / "Website" / "GitHub" → ${userData.githubUrl || ""}
@@ -2615,8 +2676,13 @@ async function buildFillPlan(
    * without ever appearing in a log.
    *
    *   nothing on the page  → fill it
-   *   page agrees with us  → `keep`: leave it alone, save the action
-   *   page disagrees       → `correct`: overwrite, and say so in the log
+   *   anything on the page → `keep`: leave it alone
+   *
+   * Overwriting on disagreement was the visible fill, undo, refill: Phase 1 wrote a
+   * correct LinkedIn URL, then a loosely matched saved answer replaced it with a
+   * GitHub link. Each rewrite costs time and credits, and the value being replaced
+   * was usually the better one. If a value really is wrong, the form rejects it and
+   * the post-submit retry rewrites just that field.
    */
   const reconcileExisting = (
     item: InventoryItem,
@@ -2629,7 +2695,10 @@ async function buildFillPlan(
     if (valuesAgree(existing, value)) {
       return { ...item, method: "keep", value, existingValue: existing, ...extra }
     }
-    return { ...item, method: "correct", value, existingValue: existing, ...extra }
+    if (mustReplaceExisting(item.label, existing, value)) {
+      return { ...item, method: "correct", value, existingValue: existing, ...extra }
+    }
+    return { ...item, method: "keep", value: existing, existingValue: existing, why: `page already has a value; ours was "${value.slice(0, 40)}"` }
   }
 
   // ── Pass 1: route every field by SHAPE first, then text ──
@@ -2657,7 +2726,7 @@ async function buildFillPlan(
 
     const route = routeField(
       { label: item.label, kind: item.kind, required: item.required, options: item.options, schemaGroup: (item as any).schemaGroup, key: item.key },
-      userData
+      { ...userData, skipOptionalProfileLinks: /smartrecruiters/i.test(scopeContext?.ats || "") }
     )
 
     switch (route.route) {
@@ -2785,6 +2854,13 @@ async function buildFillPlan(
       p.value
     )
     if (check.ok) continue
+    // An essay in a one-line box: use a shorter version instead of leaving it blank.
+    if (/single-line/.test(check.reason)) {
+      const short = shortenForSingleLine(p.value)
+      plan[i] = { ...p, value: short }
+      if (applicationId) await persistLog(applicationId, "warn", `Shortened answer for "${p.label.slice(0, 45)}" to fit a single-line field: "${short.slice(0, 80)}"`)
+      continue
+    }
     if (applicationId) {
       await persistLog(applicationId, "warn", `Rejected answer for "${p.label.slice(0, 45)}": ${check.reason}`)
     }
@@ -2797,6 +2873,21 @@ async function buildFillPlan(
         ...p, method: p.required ? "unanswerable" : "skip", value: "", why: `rejected: ${check.reason}`,
         ...(p.required ? { blocker: { kind: "unanswerable" as const, detail: check.reason } } : {}),
       }
+    }
+  }
+
+  // ── Pass 3b: no required field leaves here unanswered ──
+  // A blank required field means a rejected submit and a wasted browser session.
+  // Set ANSWER_EVERY_FIELD=0 to go back to reporting these as blockers.
+  if (process.env.ANSWER_EVERY_FIELD !== "0") {
+    for (let i = 0; i < plan.length; i++) {
+      const p = plan[i]
+      if (!p.required || p.value || p.method === "keep") continue
+      const answer = lastResortAnswer({ label: p.label, kind: p.kind, options: p.options }, userData)
+      if (!answer) continue
+      const { blocker: _blocker, ...rest } = p
+      plan[i] = { ...rest, method: CHOICE_KINDS.includes(p.kind) ? "choice" : "deterministic", value: answer, why: `last resort: ${p.why || "nothing else answered it"}` }
+      if (applicationId) await persistLog(applicationId, "warn", `[Answer] last-resort answer for "${p.label.slice(0, 50)}": "${answer.slice(0, 60)}"`)
     }
   }
 
@@ -3045,7 +3136,7 @@ Return ONLY a JSON array. No explanation. No markdown. Example:
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${openRouterKey}` },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: PRIMARY_GEMINI_MODEL,
             messages: [{ role: "user", content: [
               { type: "text", text: prompt },
               { type: "image_url", image_url: { url: `data:image/png;base64,${pngBase64}` } },
@@ -3063,7 +3154,7 @@ Return ONLY a JSON array. No explanation. No markdown. Example:
     // Fallback: Gemini direct
     if (!visionReply && geminiKey) {
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contents: [{ parts: [
@@ -3213,10 +3304,12 @@ ${VM_DOM_HELPERS}
     return [];
   };
 
-  const allControls = Array.from(document.querySelectorAll(
+  // Deep: SmartRecruiters builds its form from spl-* components, so a plain
+  // querySelectorAll reported 0 controls on a fully rendered form.
+  const allControls = nqDeepAll(
     'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),'
     + 'select,textarea,fieldset,[role="radiogroup"],[role="combobox"]'
-  ));
+  );
 
   const valueOf = (el) => {
     const tag = el.tagName.toLowerCase();
@@ -3448,7 +3541,7 @@ const RESUME_KNOWN_ATTACHED = ${JSON.stringify(!!resumeKnownAttached)};
 const result = await page.evaluate((RESUME_KNOWN_ATTACHED) => {
 ${VM_DOM_HELPERS}
   const candidates = [];
-  document.querySelectorAll('input[required],select[required],textarea[required],[aria-required="true"]').forEach(el => candidates.push(el));
+  nqDeepAll('input[required],select[required],textarea[required],[aria-required="true"]').forEach(el => candidates.push(el));
   document.querySelectorAll('label').forEach(label => {
     if (/[*\\u2731\\uff0a\\u2217\\u066d]\\s*$/.test(label.textContent?.trim() || '')) {
       const forId = label.getAttribute('for');
@@ -3863,20 +3956,44 @@ async function ensureFreeModels(applicationId?: string): Promise<void> {
   }
 }
 
-async function callLlm(
+/** Sleep until a limited model may have capacity. False once waiting is pointless. */
+async function waitForLlmCapacity(
+  models: Array<{ model: string; provider: LlmProviderName }>,
+  deadline: number
+): Promise<boolean> {
+  const wait = llmLimiter.msUntilAvailable(models)
+  if (Date.now() + wait > deadline) return false
+  await new Promise((r) => setTimeout(r, Math.max(wait, 1000)))
+  return true
+}
+
+interface LlmPass {
+  text: string
+  model: string
+  failures: string[]
+  /** A model was skipped or refused for capacity, so trying again later can help. */
+  rateLimited: boolean
+}
+
+async function callLlmOnce(
   prompt: string,
   attempts: LlmAttempt[],
-  opts: { json?: boolean; maxTokens?: number; applicationId?: string; purpose?: string } = {}
-): Promise<{ text: string; model: string; failures: string[] }> {
+  opts: { json?: boolean; maxTokens?: number; applicationId?: string; purpose?: string }
+): Promise<LlmPass> {
   const failures: string[] = []
   const maxTokens = opts.maxTokens ?? 800
-  let chain = attempts
-  let retriedAfterWait: Set<string> | null = null
+  let rateLimited = false
 
-  for (let ci = 0; ci < chain.length; ci++) {
-    const a = chain[ci]
+  for (const a of attempts) {
     const keyId = `${a.provider}:${a.apiKey.slice(-8)}`
     if (deadKeys.has(keyId)) continue
+
+    const release = llmLimiter.tryStart(a.label, a.provider, estimateTokens(prompt, maxTokens))
+    if (!release) {
+      rateLimited = true
+      continue
+    }
+    const llmStarted = Date.now()
 
     try {
       let res: Response
@@ -3925,25 +4042,12 @@ async function callLlm(
         if (kind === "auth") {
           deadKeys.add(keyId)
         } else if (kind === "quota") {
-          // Gemini's free tier meters per model and per minute, and says how
-          // long to wait. Moving to the next model is nearly always better than
-          // waiting — but when this is the LAST attempt and the wait is short,
-          // sleeping beats returning nothing.
+          // Takes the model out of rotation for every run, not just this one.
           const body = await res.json().catch(() => null)
+          llmLimiter.noteRateLimited(a.label, `${res.status} ${JSON.stringify(body)}`)
+          rateLimited = true
           const wait = parseRetryDelaySeconds(body)
           if (wait !== null) detail += ` — retry in ${wait.toFixed(0)}s`
-          const isLast = a === chain[chain.length - 1]
-          if (isLast && wait !== null && wait <= 65) {
-            if (opts.applicationId) {
-              await persistLog(opts.applicationId, "warn", `Last model in the chain is rate-limited; waiting ${wait.toFixed(0)}s for ${a.label} rather than giving up.`)
-            }
-            await new Promise((r) => setTimeout(r, Math.ceil((wait + 1) * 1000)))
-            retriedAfterWait = retriedAfterWait || new Set()
-            if (!retriedAfterWait.has(a.label)) {
-              retriedAfterWait.add(a.label)
-              chain = [...chain, a]  // one more go, once
-            }
-          }
         }
         failures.push(`${a.label}: ${detail}`)
         continue
@@ -3964,18 +4068,39 @@ async function callLlm(
           `LLM${opts.purpose ? ` (${opts.purpose})` : ""} answered on fallback ${a.label} after ${failures.length} failed attempt(s): ${failures.slice(0, 4).join("; ")}`
         )
       }
-      return { text, model: a.label, failures }
+      return { text, model: a.label, failures, rateLimited }
     } catch (e) {
       failures.push(`${a.label}: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      recordTiming(opts.applicationId, "llm", Date.now() - llmStarted)
+      release()
     }
   }
+  return { text: "", model: "none", failures, rateLimited }
+}
 
-  if (opts.applicationId) {
-    await persistLog(opts.applicationId, "error",
-      `Every model in the chain failed${opts.purpose ? ` for ${opts.purpose}` : ""} (${chain.length} attempted): ${failures.slice(0, 8).join(" | ")}`
-    )
+/**
+ * Walk the chain, and when every model is at capacity, wait rather than leave the
+ * question unanswered. Parallel runs queue here instead of failing their forms.
+ */
+async function callLlm(
+  prompt: string,
+  attempts: LlmAttempt[],
+  opts: { json?: boolean; maxTokens?: number; applicationId?: string; purpose?: string } = {}
+): Promise<{ text: string; model: string; failures: string[] }> {
+  const deadline = Date.now() + MAX_LLM_WAIT_MS
+  const models = attempts.map((a) => ({ model: a.label, provider: a.provider as LlmProviderName }))
+  while (true) {
+    const pass = await callLlmOnce(prompt, attempts, opts)
+    if (pass.text) return pass
+    if (pass.rateLimited && (await waitForLlmCapacity(models, deadline))) continue
+    if (opts.applicationId) {
+      await persistLog(opts.applicationId, "error",
+        `Every model in the chain failed${opts.purpose ? ` for ${opts.purpose}` : ""} (${attempts.length} attempted): ${pass.failures.slice(0, 8).join(" | ")}`
+      )
+    }
+    return pass
   }
-  return { text: "", model: "none", failures }
 }
 
 /**
@@ -4002,11 +4127,11 @@ async function askModel(
       attempts.push({ label: c.label, provider: "groq", model: c.label.replace(/^groq\//, ""), apiKey: c.apiKey, json: false })
       continue
     }
-    const isOpenRouter = c.label.startsWith("openrouter/")
+    const isOpenRouter = /^openrouter(-free)?\//.test(c.label)
     if (isOpenRouter) {
-      attempts.push({ label: c.label, provider: "openrouter", model: c.label.replace(/^openrouter\//, ""), apiKey: c.apiKey, json: false })
+      attempts.push({ label: c.label, provider: "openrouter", model: String(c.stagehandModel?.modelName || "").replace(/^openai\//, ""), apiKey: c.apiKey, free: c.label.startsWith("openrouter-free/"), json: false })
     } else if (c.stagehandModel?.provider === "google") {
-      attempts.push({ label: c.label, provider: "google", model: String(c.stagehandModel.modelName || "gemini-2.5-flash").replace(/^google\//, ""), apiKey: c.apiKey, json: false })
+      attempts.push({ label: c.label, provider: "google", model: String(c.stagehandModel.modelName || PRIMARY_GEMINI_MODEL).replace(/^google\//, ""), apiKey: c.apiKey, json: false })
     } else {
       attempts.push({ label: c.label, provider: "openai", model: String(c.stagehandModel?.modelName || "gpt-4o-mini"), apiKey: c.apiKey, json: false })
     }
@@ -4083,6 +4208,20 @@ const LOOKUP_FIELD_RE =
 // Two phases, one VM round-trip each:
 //   1. describe — read the element's attributes and tag it
 //   2. drive    — run the selected handler's code against the tagged node
+/** Writes per field in this run, to expose repeated fills. Empty values only read options. */
+const fieldWrites = new Map<string, Map<string, { value: string; count: number }>>()
+
+async function noteFieldWrite(sessionId: string, label: string, value: string, applicationId?: string) {
+  if (!value) return
+  const writes = fieldWrites.get(sessionId) ?? new Map<string, { value: string; count: number }>()
+  fieldWrites.set(sessionId, writes)
+  const seen = writes.get(label)
+  writes.set(label, { value, count: (seen?.count ?? 0) + 1 })
+  if (seen && applicationId) {
+    await persistLog(applicationId, "warn", `[Refill] "${label.slice(0, 50)}" written ${seen.count + 1} times: "${seen.value.slice(0, 40)}" -> "${value.slice(0, 40)}"`)
+  }
+}
+
 async function fillFieldWithHandler(
   kernelClient: InstanceType<typeof Kernel>,
   sessionId: string,
@@ -4094,6 +4233,7 @@ async function fillFieldWithHandler(
   /** The label this answer was planned for. Checked against what we resolve. */
   expectedLabel?: string
 ): Promise<HandlerResult> {
+  await noteFieldWrite(sessionId, label, value, applicationId)
   const TARGET_ATTR = "data-nq-field"
 
   try {
@@ -4108,7 +4248,7 @@ ${VM_DOM_HELPERS}
   const el = nqResolveKey(args.key);
   if (!el) return { ok: false, reason: 'element-not-found' };
 
-  document.querySelectorAll('[' + args.tag + ']').forEach(n => n.removeAttribute(args.tag));
+  nqDeepAll('[' + args.tag + ']').forEach(n => n.removeAttribute(args.tag));
   el.setAttribute(args.tag, '1');
 
   const attr = (n) => el.getAttribute(n);
@@ -4513,7 +4653,7 @@ async function readValidationErrors(
     code: `
 const errors = await page.evaluate(() => {
 ${VM_DEEP_QUERY}
-  const clean = s => s.replace(/\\s+/g,' ').replace(/\\s*[*\\u2731\\uff0a\\u2217\\u066d]\\s*$/,'').replace(/^error[:\\s-]*/i,'').trim().slice(0,80);
+  const clean = s => s.replace(/\\s+/g,' ').replace(/\\s*[*\\u2731\\uff0a\\u2217\\u066d]\\s*$/,'').replace(/^error[:\\s-]*/i,'').trim().slice(0,400);
   const groupLabel = el => {
     const group = el.closest('[data-automation-id^="formField-"]');
     const lab = group?.querySelector('label,legend,[id$="-label"]');
@@ -4688,7 +4828,10 @@ function otpCompanyHint(portalUrl: string, userData: any): string {
   const explicit = String(userData?.companyName || userData?.company_name || "").trim()
   if (explicit) return explicit
   try {
-    const { hostname, pathname } = new URL(portalUrl)
+    const { hostname, pathname, searchParams } = new URL(portalUrl)
+    // The embed form names its company in ?for=, not in the path.
+    const embedded = searchParams.get("for")
+    if (embedded) return embedded
     const seg = pathname.split("/").filter(Boolean)
     // greenhouse.io/<board>/jobs/<id>, ashbyhq.com/<org>/<uuid>,
     // lever.co/<org>/<uuid>, smartrecruiters.com/<Company>/<id>-<slug>
@@ -4863,6 +5006,13 @@ function isPermanentModelFailure(msg: string): boolean {
   return /does not exist|do not have access|no endpoints found|not a valid model|requires more credits|insufficient (credits|balance|quota)|402|invalid api key|unauthorized|401/i.test(msg)
 }
 
+function providerOfLabel(label: string): LlmProviderName {
+  if (label.startsWith("groq/")) return "groq"
+  if (label.startsWith("google/")) return "google"
+  if (label.startsWith("openrouter")) return "openrouter"
+  return "openai"
+}
+
 async function actWithFallback(
   stagehand: any,
   models: ModelChoice[],
@@ -4872,35 +5022,196 @@ async function actWithFallback(
   if (!stagehand) return { ok: false, modelUsed: "none", message: "Stagehand is not available" }
   if (models.length === 0) return { ok: false, modelUsed: "none", message: "No LLM model configured" }
 
-  for (let mi = 0; mi < models.length; mi++) {
-    const { stagehandModel, label } = models[mi]
-    if (deadModels.has(label)) continue
-    try {
-      const observed = await stagehand.observe(instruction, { model: stagehandModel as any }) as any
-      const actions: any[] = Array.isArray(observed) ? observed : (observed?.data ?? [])
-      if (!actions.length) {
-        if (applicationId) await persistLog(applicationId, "warn", `observe via ${label}: no actions found for "${instruction.slice(0, 60)}"`)
+  const deadline = Date.now() + MAX_LLM_WAIT_MS
+  const limited = models.map((m) => ({ model: m.label, provider: providerOfLabel(m.label) }))
+
+  while (true) {
+    let rateLimited = false
+    for (let mi = 0; mi < models.length; mi++) {
+      const { stagehandModel, label } = models[mi]
+      if (deadModels.has(label)) continue
+      const release = llmLimiter.tryStart(label, providerOfLabel(label), STAGEHAND_CALL_TOKENS)
+      if (!release) {
+        rateLimited = true
         continue
       }
-      const res = await stagehand.act(actions[0], { model: stagehandModel as any }) as any
-      const data = res?.data ?? res
-      if (data?.success === false) throw new Error(data?.message || "act returned success=false")
-      const detail = [data?.actionDescription, data?.message].filter(Boolean).join(" | ")
-      return { ok: true, modelUsed: label, message: detail || "" }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      const permanent = isPermanentModelFailure(msg)
-      if (permanent) deadModels.add(label)
-      const isQuota = /402|payment required|quota|rate.?limit|429/i.test(msg)
-      if (applicationId) {
-        await persistLog(applicationId, "warn",
-          `observe/act via ${label} failed${permanent ? " (dropped for this run)" : isQuota ? " (quota/rate limit)" : ""}: ${msg.substring(0, 300)}`)
+      const stagehandStarted = Date.now()
+      try {
+        const observed = await stagehand.observe(instruction, { model: stagehandModel as any }) as any
+        const actions: any[] = Array.isArray(observed) ? observed : (observed?.data ?? [])
+        if (!actions.length) {
+          if (applicationId) await persistLog(applicationId, "warn", `observe via ${label}: no actions found for "${instruction.slice(0, 60)}"`)
+          continue
+        }
+        const res = await stagehand.act(actions[0], { model: stagehandModel as any }) as any
+        const data = res?.data ?? res
+        if (data?.success === false) throw new Error(data?.message || "act returned success=false")
+        const detail = [data?.actionDescription, data?.message].filter(Boolean).join(" | ")
+        return { ok: true, modelUsed: label, message: detail || "" }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        const permanent = isPermanentModelFailure(msg)
+        if (permanent) deadModels.add(label)
+        const isQuota = /402|payment required|quota|rate.?limit|429|more credits/i.test(msg)
+        if (isQuota) {
+          llmLimiter.noteRateLimited(label, msg)
+          rateLimited = true
+        }
+        if (applicationId) {
+          await persistLog(applicationId, "warn",
+            `observe/act via ${label} failed${permanent ? " (dropped for this run)" : isQuota ? " (quota/rate limit)" : ""}: ${msg.substring(0, 300)}`)
+        }
+        if (isQuota || permanent || mi < models.length - 1) continue
+        return { ok: false, modelUsed: label, message: msg }
+      } finally {
+        recordTiming(applicationId, "stagehand", Date.now() - stagehandStarted)
+        release()
       }
-      if (isQuota || permanent || mi < models.length - 1) continue
-      return { ok: false, modelUsed: label, message: msg }
+    }
+    if (!rateLimited || !(await waitForLlmCapacity(limited, deadline))) {
+      return { ok: false, modelUsed: "none", message: "all models exhausted" }
     }
   }
-  return { ok: false, modelUsed: "none", message: "all models exhausted" }
+}
+
+/**
+ * Replaces any other address in the page's email fields, just before Submit.
+ * Exported so a test can prove the script parses.
+ */
+export function buildEnforceEmailCode(email: string): string {
+  return `
+return await page.evaluate((want) => {
+${VM_DEEP_QUERY}
+  const fixed = [];
+  const seen = [];
+  for (const el of nqDeepAll('input:not([type="hidden"])')) {
+    const root = el.getRootNode();
+    const label = (el.labels && el.labels[0] && el.labels[0].innerText) || (el.id && root.querySelector && (root.querySelector('label[for="' + CSS.escape(el.id) + '"]') || {}).innerText) || '';
+    const text = [el.type, el.name, el.id, el.placeholder, el.autocomplete, el.getAttribute('aria-label'), label].join(' ');
+    if (!/e-?mail/i.test(text)) continue;
+    const value = (el.value || '').trim();
+    seen.push(value);
+    if (value.toLowerCase() === want.toLowerCase()) continue;
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set;
+    el.focus();
+    setter.call(el, want);
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    el.blur();
+    fixed.push({ was: value, now: el.value });
+  }
+  return { fixed, fields: seen.length };
+}, ${JSON.stringify(email)});
+`
+}
+
+async function enforceProxyEmail(
+  client: InstanceType<typeof Kernel>,
+  sessionId: string,
+  email: string | undefined,
+  applicationId?: string
+): Promise<void> {
+  if (!email || !applicationId) return
+  const res = await client.browsers.playwright.execute(sessionId, { code: buildEnforceEmailCode(email), timeout_sec: 20 }).catch(() => null)
+  const r = (res?.result as any) || {}
+  if (!res?.success) {
+    await persistLog(applicationId, "error", `[Email] could not check email fields before Submit: ${res?.error ?? "no response"}`)
+  } else if (r.fixed?.length) {
+    await persistLog(applicationId, "warn", `[Email] replaced before Submit: ${r.fixed.map((f: any) => `"${f.was}" -> "${f.now}"`).join(", ")}`)
+  } else {
+    await persistLog(applicationId, "info", `[Email] ${r.fields ?? 0} email field(s) checked before Submit, all ${email}`)
+  }
+}
+
+/**
+ * Record what is on screen: a screenshot on disk, and the page's URL, visible
+ * text and error messages in the run log. Never fails a run.
+ */
+async function snapshotPage(
+  client: InstanceType<typeof Kernel>,
+  sessionId: string,
+  applicationId: string | undefined,
+  stage: string
+): Promise<void> {
+  if (!applicationId) return
+  try {
+    const res = await client.browsers.playwright.execute(sessionId, {
+      code: `
+const shot = await page.screenshot({ type: 'jpeg', quality: 60 });
+const info = await page.evaluate(() => ({
+  text: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim(),
+  errors: Array.from(document.querySelectorAll('[role="alert"],[aria-invalid="true"],.error,.invalid,[class*="error"]'))
+    .map((el) => (el.innerText || el.getAttribute('name') || el.id || '').replace(/\\s+/g, ' ').trim())
+    .filter(Boolean).slice(0, 12),
+}));
+return { url: page.url(), image: shot.toString('base64'), ...info };
+`,
+      timeout_sec: 30,
+    })
+    const r = (res.result as any) || {}
+    let saved = "not saved"
+    if (r.image) {
+      const dir = `${process.env.RUN_SCREENS_DIR || ".run-screens"}/${applicationId}`
+      const { mkdir, writeFile } = await import("node:fs/promises")
+      await mkdir(dir, { recursive: true })
+      const file = `${dir}/${Date.now()}-${stage}.jpg`
+      await writeFile(file, Buffer.from(r.image, "base64"))
+      saved = file
+    }
+    await persistLog(applicationId, "info",
+      `[Screen:${stage}] ${String(r.url || "").slice(0, 200)} | image: ${saved} | errors: ${JSON.stringify(r.errors || [])} | text: ${String(r.text || "").slice(0, 2500)}`)
+  } catch (err) {
+    await persistLog(applicationId, "warn", `[Screen:${stage}] could not capture: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+/**
+ * Log every page script that fails. They resolve with success:false rather than
+ * throwing, so most callers read an empty result and carry on as if the page had
+ * nothing on it. That is how a syntax error hid for this long.
+ */
+const PAGE_SCRIPT_CLIENT_TIMEOUT_MS = 10 * 60_000
+const SLOW_SCRIPT_MS = 5_000
+
+function logFailedPageScripts(client: InstanceType<typeof Kernel>, applicationId?: string): void {
+  const playwright = client.browsers.playwright
+  const original = playwright.execute.bind(playwright)
+  playwright.execute = ((id: string, params: any, options?: any) => {
+    // Never let the SDK retry a page script. It re-sends on a client timeout while
+    // the first copy is still running in the browser, so a slow pre-fill typed every
+    // field several times over and a slow submit could be clicked twice.
+    const started = Date.now()
+    const inFlight = scriptStarted()
+    const call = original(id, { ...params, code: withVmTimer(String(params?.code ?? "")) }, { timeout: PAGE_SCRIPT_CLIENT_TIMEOUT_MS, maxRetries: 0, ...options })
+    const label = String(params?.code || "").trim().replace(/\s+/g, " ").slice(0, 70)
+    const timed = (call as Promise<any>).then((res: any) => {
+      const { result, vmMs } = unwrapVmTimer(res?.result)
+      const ms = Date.now() - started
+      recordTiming(applicationId, "script", ms, vmMs ?? 0)
+      if (applicationId && ms > SLOW_SCRIPT_MS) {
+        void persistLog(applicationId, "info", `[Timing] slow script ${(ms / 1000).toFixed(1)}s: VM ${vmMs === null ? "?" : (vmMs / 1000).toFixed(1)}s, wait ${vmMs === null ? "?" : ((ms - vmMs) / 1000).toFixed(1)}s | in flight at start ${inFlight}, now ${currentScriptsInFlight()} | ${label}`)
+      }
+      return res ? { ...res, result } : res
+    }).finally(scriptFinished)
+    timed.then((res: any) => {
+      if (applicationId && res && res.success === false) {
+        const code = String(params?.code || "").trim().replace(/\s+/g, " ").slice(0, 80)
+        void persistLog(applicationId, "error", `[PageScript] failed: ${String(res.error || res.stderr || "unknown").slice(0, 300)} | code: ${code}`)
+      }
+    }).catch(() => {})
+    return timed
+  }) as unknown as typeof playwright.execute
+}
+
+/** Writes each step's start and result to the run log, so a run reads top to bottom. */
+function withStageLogs<T extends { begin: Function; succeed: Function; fail: Function; skip: Function }>(tracker: T, applicationId: string): T {
+  const stage = (level: string, message: string) => void persistLog(applicationId, level, `[Stage] ${message}`)
+  const { begin, succeed, fail, skip } = tracker
+  tracker.begin = function (step: string) { stage("info", `${step}: started`); return begin.call(tracker, step) }
+  tracker.succeed = function (step: string, detail?: string) { stage("info", `${step}: OK${detail ? ` | ${detail}` : ""}`); return succeed.call(tracker, step, detail) }
+  tracker.fail = function (step: string, error: string) { stage("error", `${step}: FAILED | ${error}`); return fail.call(tracker, step, error) }
+  tracker.skip = function (step: string, detail?: string) { stage("info", `${step}: skipped${detail ? ` | ${detail}` : ""}`); return skip.call(tracker, step, detail) }
+  return tracker
 }
 
 // ─── Main entry point ───
@@ -5036,6 +5347,40 @@ async function resolveCaptcha(
 // ─── Page controls: the buttons a wizard step offers ───
 // The wizard loop needs to know whether this page advances or submits, which
 // means reading the actionable buttons rather than guessing from the portal.
+/**
+ * The labels and names of the page's fields across every frame, including cross-origin
+ * ones that document.body cannot see. Null when it cannot be read.
+ */
+async function readApplicationSignals(
+  kernelClient: InstanceType<typeof Kernel>,
+  sessionId: string
+): Promise<string | null> {
+  try {
+    const res = await kernelClient.browsers.playwright.execute(sessionId, {
+      code: `
+let out = '';
+for (const f of page.frames()) {
+  try {
+    out += ' ' + await f.evaluate(() => {
+      const fields = Array.from(document.querySelectorAll('input:not([type="hidden"]),textarea,select,[role="combobox"]')).map((el) =>
+        [el.name, el.id, el.placeholder, el.autocomplete, el.getAttribute('aria-label'),
+         Array.from(el.labels || []).map((l) => l.innerText).join(' '),
+         el.type === 'file' ? 'input-type-file' : ''].join(' '));
+      const signIn = ((document.body && document.body.innerText) || '').match(/sign in to apply|create (an )?account/i);
+      return fields.join(' | ') + ' ' + (signIn ? signIn[0] : '');
+    });
+  } catch {}
+}
+return out;
+`,
+      timeout_sec: 30,
+    })
+    return typeof res.result === "string" ? res.result : null
+  } catch {
+    return null
+  }
+}
+
 async function readPageControls(
   kernelClient: InstanceType<typeof Kernel>,
   sessionId: string
@@ -5250,7 +5595,7 @@ async function resolveEmbeddedForm(
   try {
     const res = await kernelClient.browsers.playwright.execute(sessionId, {
       code: `
-const NOISE = /googleapis|google\\.com\\/recaptcha|doubleclick|googletagmanager|hotjar|segment|intercom|youtube|vimeo/i;
+const NOISE = /googleapis|google\\.com\\/recaptcha|doubleclick|googletagmanager|hotjar|segment|intercom|winstonchat|conv-ai|livechat|drift\\.com|youtube|vimeo/i;
 const ATS = /greenhouse|lever|ashby|boards\\.|grnhse|myworkdayjobs|icims|smartrecruiters|workable|jobvite|bamboohr/i;
 
 // Does the top-level document already show a form? Then there is nothing to do.
@@ -5278,13 +5623,20 @@ if (best) {
   // The frame is same-origin and already holds the form. Nothing to navigate:
   // the VM's selectors reach into it, and so does Stagehand's iframe-aware
   // observe. Report it so the caller can log which frame we are working in.
-  return { found: true, navigated: false, url: best.url, where: 'frame', fields: best.count };
+  let sameOrigin = false;
+  try { sameOrigin = new URL(best.url).origin === new URL(page.url()).origin; } catch {}
+  if (sameOrigin) return { found: true, navigated: false, url: best.url, where: 'frame', fields: best.count };
+  // Playwright can evaluate across origins, which is how the count above worked,
+  // but the VM's document selectors cannot reach a cross-origin frame. An embedded
+  // Greenhouse form on a company careers site lands here: open it as the page.
+  await page.goto(best.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  return { found: true, navigated: true, url: page.url(), where: 'frame-url', fields: best.count };
 }
 
 // No same-origin frame with fields. Fall back to the old behaviour: find an ATS
 // iframe by URL and navigate the top-level page to it.
 const src = await page.evaluate(() => {
-  const noise = /googleapis|google\\.com\\/recaptcha|doubleclick|googletagmanager|hotjar|segment|intercom/i;
+  const noise = /googleapis|google\\.com\\/recaptcha|doubleclick|googletagmanager|hotjar|segment|intercom|winstonchat|conv-ai|livechat|drift\\.com/i;
   const ats = /greenhouse|lever|ashby|boards\\.|grnhse|myworkdayjobs|icims|smartrecruiters|workable|jobvite|bamboohr/i;
   for (const el of document.querySelectorAll('iframe')) {
     const s = el.getAttribute('src') || '';
@@ -5429,7 +5781,8 @@ const after = await page.evaluate(() => ({
   fieldCount: document.querySelectorAll('input:not([type="hidden"]),select,textarea').length,
 }));
 await page.evaluate((attr) => {
-  document.querySelectorAll('[' + attr + ']').forEach(n => n.removeAttribute(attr));
+${VM_DEEP_QUERY}
+  nqDeepAll('[' + attr + ']').forEach(n => n.removeAttribute(attr));
 }, ${JSON.stringify(TARGET_ATTR)});
 return { out, after, url: page.url() };
 `,
@@ -5514,7 +5867,9 @@ export async function fillJobApplicationWithKernel(
   // Resolved before the session is created, so start_url IS the application form
   // and the run never lands on the advert it then has to find its way off.
   const targetUrl = await resolveApplyUrl(portalUrl)
-  const portalConfig = getPortalConfig(portalType)
+  // A retry after a bot check goes out on a residential proxy: these checks judge
+  // heavily by IP, and a residential exit rotates per connection.
+  const portalConfig = { ...getPortalConfig(portalType), ...(userData?.forceResidential ? { residential: true } : {}) }
   const WIZARD_MAX_STEPS = wizardStepsFor(portalType)
 
   console.log(`[Kernel] Starting for: ${userData.name} | Portal: ${portalType} | URL: ${targetUrl}`)
@@ -5540,11 +5895,13 @@ export async function fillJobApplicationWithKernel(
   let stagehand: any = null
   let liveUrl: string | null = null
   let telemetryLogger: { stop: () => void } | null = null
-  const kernelClient = new Kernel({ apiKey })
+  // More patient than the SDK's 60s default: under load single API calls can stall.
+  const kernelClient = new Kernel({ apiKey, timeout: 180_000 })
+  logFailedPageScripts(kernelClient, applicationId)
 
   // Structured run record. Null when there's no application row to write it to
   // (ad-hoc invocations); every call site below is therefore optional-chained.
-  const run = applicationId ? makeRunTracker(applicationId) : null
+  const run = applicationId ? withStageLogs(makeRunTracker(applicationId), applicationId) : null
 
   try {
     // ─── Persistent profile ───
@@ -5572,7 +5929,7 @@ export async function fillJobApplicationWithKernel(
     // the run would log "Proxy: residential", and the two would disagree.
     //
     // Warm-start latency is worth less than the application landing.
-    if (isPoolable(portalType) && !portalConfig.residential) {
+    if (BROWSER_POOL_ENABLED && isPoolable(portalType) && !portalConfig.residential) {
       const poolLimit = await fetchConcurrencyLimit(kernelClient, PROFILE_POOL_SIZE_OVERRIDE)
       pooled = await acquirePooledBrowser(
         kernelClient,
@@ -5803,7 +6160,10 @@ export async function fillJobApplicationWithKernel(
     // extension from the local filesystem — incompatible with Kernel's remote sessions.
     const _shChain = buildModelChain(false, { openRouterKey, geminiKey, openAiKey, groqKey })
     const captchaOtpChoice = openRouterKey ? _shChain[0] : (_shChain.find(c => !c.label.startsWith("openrouter/")) ?? _shChain[0])
-    if (captchaOtpChoice) {
+    // Connected only when a field needs it, because Kernel's docs warn that anti-bot
+    // vendors scan for CDP. It used to attach on every run, and most never use it.
+    const getStagehand = async () => {
+      if (stagehand || !captchaOtpChoice) return stagehand
       const { Stagehand } = await import("@browserbasehq/stagehand")
       stagehand = new Stagehand({
         env: "LOCAL",
@@ -5811,7 +6171,8 @@ export async function fillJobApplicationWithKernel(
         model: captchaOtpChoice.stagehandModel as any,
         apiKey: captchaOtpChoice.apiKey,
         verbose: MICRO_LOGS ? 2 : 1,
-        domSettleTimeout: 30_000,
+        // Up to this long per action on a page that never goes quiet. 30s was far too long.
+        domSettleTimeout: 8_000,
         logger: (line: any) => {
           if (!MICRO_LOGS || !applicationId) return
           if ((line?.level ?? 1) >= 2) return
@@ -5825,7 +6186,15 @@ export async function fillJobApplicationWithKernel(
       } as any)
       await stagehand.init()
       if (applicationId) await persistLog(applicationId, "info", `Stagehand v3 connected · model chain: ${_shChain.map(m => m.label).join(" → ")}`)
+      return stagehand
     }
+    const dropStagehand = async () => {
+      if (!stagehand) return
+      try { await stagehand.close() } catch {}
+      stagehand = null
+      if (applicationId) await persistLog(applicationId, "info", "Stagehand disconnected before Submit")
+    }
+
 
     // Q6: Wait for page_navigation_settled telemetry event instead of a fixed timeout.
     // Falls back to 5s timeout if the event never fires (e.g. start_url failed silently).
@@ -5892,10 +6261,49 @@ export async function fillJobApplicationWithKernel(
       if (landed.tabCount > 1) {
         await switchToNewestTab(kernelClient, sessionId, 1, applicationId)
       }
-      const current = landed.tabCount > 1 ? await readPageControls(kernelClient, sessionId) : landed
+      let current = landed.tabCount > 1 ? await readPageControls(kernelClient, sessionId) : landed
       lastBodyText = current.bodyText
 
-      const verdict = evaluateUnsafePage(current.url || targetUrl, current.bodyText)
+      if (applicationId) await persistLog(applicationId, "info", `[Screen:landed] ${String(current.url || targetUrl).slice(0, 200)} | text: ${String(current.bodyText || "").replace(/\s+/g, " ").slice(0, 1500)}`)
+      // A bot check is not a verdict on the posting, so it goes to the CAPTCHA tab.
+      if (isBotWall(current.url || targetUrl, current.bodyText) && !isBannedBotWall(current.url || targetUrl)) {
+        // Give the browser's built-in solver a chance to clear it before giving up.
+        if (applicationId) await persistLog(applicationId, "info", `[Gate] bot check on the page, waiting up to ${BOT_WALL_WAIT_MS / 1000}s for it to clear: ${String(current.url || targetUrl).slice(0, 120)}`)
+        const waitUntil = Date.now() + BOT_WALL_WAIT_MS
+        while (Date.now() < waitUntil && isBotWall(current.url || targetUrl, current.bodyText)) {
+          await new Promise((r) => setTimeout(r, 5000))
+          current = await readPageControls(kernelClient, sessionId)
+        }
+        if (!isBotWall(current.url || targetUrl, current.bodyText) && applicationId) {
+          await persistLog(applicationId, "info", `[Gate] bot check cleared, now on ${String(current.url || targetUrl).slice(0, 120)}`)
+          await snapshotPage(kernelClient, sessionId, applicationId, "after-bot-check")
+          lastBodyText = current.bodyText
+        }
+      }
+      if (isBotWall(current.url || targetUrl, current.bodyText)) {
+        const banned = isBannedBotWall(current.url || targetUrl)
+        const reason = `A bot check is in front of this page${banned ? " and this IP is banned" : ""}: ${String(current.url || targetUrl).slice(0, 120)}`
+        if (applicationId) await persistLog(applicationId, "warn", `[Gate] ${reason}`)
+        run?.fail("navigate", reason)
+        return { success: false, error: reason, steps: 0, recordingUrl: liveUrl, taskId: sessionId, failure: diagnose({ captchaUnresolved: true, finalUrl: current.url }) }
+      }
+      let verdict = evaluateUnsafePage(current.url || targetUrl, current.bodyText)
+      // Known ATS hosts pass the gate regardless, so only read fields when it matters.
+      const signals = verdict.kind === "wrong_flow" || !isAtsHost(current.url || targetUrl)
+        ? await readApplicationSignals(kernelClient, sessionId)
+        : null
+      // "Join our talent network" sits in plenty of careers-site footers, under
+      // real forms. Fields a real application has outweigh the wording around it.
+      if (verdict.kind === "wrong_flow" && verdict.signal?.startsWith("wrong-flow:") && hasApplicationFields(signals)) {
+        await persistLog(applicationId || "", "info", `[Gate] ignored "${verdict.signal}": the page has application fields`)
+        verdict = evaluateApplicationPage(current.url || targetUrl, signals)
+      } else if (!verdict.blocked) {
+        verdict = evaluateApplicationPage(current.url || targetUrl, signals)
+      }
+      if (applicationId) {
+        await persistLog(applicationId, verdict.blocked ? "warn" : "info",
+          `[Gate] ${verdict.blocked ? `NOT an application: ${verdict.signal}` : "application page"} | ${String(current.url || targetUrl).slice(0, 140)}`)
+      }
       if (verdict.blocked) {
         unsafeReason = verdict.reason
         if (applicationId) {
@@ -5925,6 +6333,10 @@ export async function fillJobApplicationWithKernel(
       // different shape, not a broken one. It used to reach the submit gate,
       // find nothing to submit, and be recorded as a failure.
       const emailTarget = detectEmailApply(current.bodyText, current.hasForm)
+      // Sending this email is a real submission, so a dry run stops short of it.
+      if (emailTarget && DRY_RUN) {
+        return { success: false, error: `DRY RUN — would email the application to ${emailTarget.address}`, steps: 0, recordingUrl: liveUrl, taskId: sessionId }
+      }
       if (emailTarget) {
         if (applicationId) {
           await persistLog(applicationId, "info", `No application form — the posting directs applications to ${emailTarget.address} ("${emailTarget.evidence}")`)
@@ -5992,9 +6404,10 @@ export async function fillJobApplicationWithKernel(
           run?.fail("resume_download", `Invalid file: ${buf.length} bytes, content-type "${contentType || "unknown"}" — the résumé URL likely 404'd`)
         } else {
           resumeBuffer = buf
-          resumeFileName = (userData.resume.split("/").pop() || "resume.pdf").split("?")[0]
-          if (contentType) resumeMimeType = contentType
-          if (applicationId) await persistLog(applicationId, "info", `Resume downloaded: ${buf.length} bytes, ${contentType || "unknown type"} → will attach via page`)
+          const upload = resumeUpload(userData.resume, buf, contentType)
+          resumeFileName = upload.name
+          resumeMimeType = upload.mime
+          if (applicationId) await persistLog(applicationId, "info", `Resume downloaded: ${buf.length} bytes, ${contentType || "unknown type"} → will attach as ${resumeFileName} (${resumeMimeType})`)
           run?.succeed("resume_download", `${resumeFileName} · ${Math.round(buf.length / 1024)} KB`)
         }
       } catch (err) {
@@ -6488,7 +6901,7 @@ return await page.evaluate(async () => {
         options: item?.options || [],
         key: fieldKey,
       }
-      const route = routeField(field, userData)
+      const route = routeField(field, { ...userData, skipOptionalProfileLinks: portalType === "SmartRecruiters" })
 
       if (route.route === 'sensitive') {
         const b: Blocker = { key: fieldKey, label: rawLabel, kind: 'human-required', detail: route.why, required: field.required }
@@ -6572,6 +6985,9 @@ return await page.evaluate(async () => {
         for (const f of (audit.fields ?? [])) {
           if (inventoryKeys.has(f.key)) continue
           if (UNIDENTIFIED_FIELD.test(f.label)) continue
+          // "No form" is the audit's verdict on the page, not a question. Treating
+          // it as one spent minutes asking every model to answer it.
+          if (f.key === 'audit:no-form') continue
           formInventory.push({ key: f.key, label: f.label, kind: 'unknown', required: true, options: [] })
           inventoryKeys.add(f.key)
           if (applicationId) await persistLog(applicationId, 'info', `New field appeared mid-fill: "${f.label.slice(0, 50)}"`)
@@ -6674,7 +7090,7 @@ return await page.evaluate(async () => {
               const learned = String(widget.picked || value || "").trim()
               if (learned) {
                 try {
-                  await saveAnswer(supabase, userId, label, learned, "derived", { context: scopeContext })
+                  if (!DRY_RUN) await saveAnswer(supabase, userId, label, learned, "derived", { context: scopeContext })
                   await recordAnswerUsage(supabase, userId, [label])
                 } catch (err) {
                   // Never let bookkeeping fail a run that is otherwise going fine.
@@ -6707,7 +7123,21 @@ return await page.evaluate(async () => {
           // avoid an evasive answer to a question we simply failed to read; wrong
           // here, where "not in your list" is the literal truth.
           if (widget.needsModelChoice && widget.options?.length && value && LOOKUP_FIELD_RE.test(label)) {
-            const other = widget.options.find(o => /^other\b|^not listed\b|^none of the above\b/i.test(o.trim()))
+            const family = /degree/i.test(label) ? degreeFamilyOption(String(value), widget.options) : null
+            const other = family || widget.options.find(o => /^other\b|^not listed\b|^none of the above\b/i.test(o.trim()))
+            // A long list renders only its first page, so "Other" may be further
+            // down it. Search for it before anything falls through to a guess.
+            if (!other) {
+              const search = await fillFieldWithHandler(kernelClient, sid, field.key, label, "Other", portalType, applicationId, field.label)
+              totalSteps++
+              if (search.filled) {
+                if (applicationId) await persistLog(applicationId, "info", `"${String(value).slice(0, 40)}" is not listed for "${label.slice(0, 45)}" — found "Other" by searching`)
+                ledger.record(field.key, field.label, "Other", 'model-choice')
+                progressed = true
+                ledger.settle(field.key)
+                continue
+              }
+            }
             if (other) {
               if (applicationId) {
                 await persistLog(applicationId, "info",
@@ -6720,7 +7150,13 @@ return await page.evaluate(async () => {
             }
           }
 
+          if (widget.needsModelChoice && widget.options?.length && !plausibleOptionsFor(label, widget.options).length) {
+            if (applicationId) await persistLog(applicationId, "warn", `"${label.slice(0, 55)}" offered nothing that could be an answer: ${widget.options.slice(0, 6).join(" / ")}`)
+            widget.needsModelChoice = false
+          }
+
           if (widget.needsModelChoice && widget.options?.length) {
+            widget.options = plausibleOptionsFor(label, widget.options)
             const rejected = knownValidationErrors.find(e => norm(e).includes(norm(label)) || norm(label).includes(norm(e)))
             const ctx = {
               candidateName: userData.name,
@@ -6825,7 +7261,7 @@ return await page.evaluate(async () => {
               ? ` NOTE: The form previously rejected these fields: ${knownValidationErrors.join(', ')}. Fix them first.`
               : ''
             const instruction = `In this job application form, find the field labeled "${label}" and set it to "${value}". If it is a text box, clear it and type the value. If it is a dropdown, listbox, radio group, or set of option buttons, choose the option that best matches "${value}". If the field already contains this exact value, leave it unchanged and do nothing. Do NOT click any Submit or Apply button.${validationHint}${skillGuidance}`
-            const r = await actWithFallback(stagehand, modelChain, instruction, applicationId)
+            const r = await actWithFallback(await getStagehand(), modelChain, instruction, applicationId)
             totalSteps++
             allAgentText += ' ' + (r.message || '')
             if (applicationId) {
@@ -6920,7 +7356,9 @@ return await page.evaluate(async () => {
       }
 
       // ── Scan and plan this page ──
-      formInventory = await scanCurrentPage(stepLabel)
+      // PhoneCountry... is the scanner reading the phone widget's wrapper, not a field.
+      // It failed 55 times across runs, spending a model call and retries each time.
+      formInventory = (await scanCurrentPage(stepLabel)).filter((i) => !SCAN_ARTEFACT_RE.test(i.label))
       // The ledger is NOT reset between steps. A field settled on page 2 stays
       // settled; an answer fixed on page 1 is reused verbatim if page 4 asks the
       // same question. Resetting per page is what used to let one question get
@@ -7122,6 +7560,7 @@ return await page.evaluate(async () => {
     const structuralCaptcha = await detectCaptchaOnPage(kernelClient, sessionId, applicationId)
     const needsVerification = detectCaptcha(allAgentText) || detectOtp(allAgentText) || otpOnPage || !!structuralCaptcha
     let captchaUnresolved = false
+    let otpNotReceived = false
     if (needsVerification) run?.begin("verification")
     else run?.skip("verification", "No CAPTCHA or OTP challenge")
 
@@ -7177,11 +7616,14 @@ return await page.evaluate(async () => {
         if (DRY_RUN) {
           if (applicationId) await persistLog(applicationId, "warn", "DRY RUN — a CAPTCHA needs a human; not waiting for one.")
         } else {
-          while (true) {
+          // Bounded: an unattended wait would hold a concurrency slot forever.
+          let humanCleared = false
+          for (let waited = 0; waited < 18 && !humanCleared; waited++) {
             await new Promise(r => setTimeout(r, 10000))
             const { data: row } = await supabase.from("live_application_queue").select("status").eq("id", applicationId).single()
-            if (row?.status === "processing") break
+            humanCleared = row?.status === "processing"
           }
+          if (!humanCleared) throw new Error("CAPTCHA was not solved by a human within 3 minutes")
         }
       }
       captchaUnresolved = false
@@ -7248,7 +7690,7 @@ return await page.evaluate(async () => {
         await persistLog(applicationId, "info", `OTP obtained: ${otp}`)
         if (onStep) onStep({ status: "in_progress", log: `OTP: ${otp}. Entering...`, liveUrl })
         await supabase.from("live_application_queue").update({ status: "processing" }).eq("id", applicationId)
-        await actWithFallback(stagehand, modelChain, `Enter "${otp}" into the verification code / OTP input field, then click the Verify or Submit button.`, applicationId)
+        await actWithFallback(await getStagehand(), modelChain, `Enter "${otp}" into the verification code / OTP input field, then click the Verify or Submit button.`, applicationId)
         await supabase.from("live_application_queue").update({ verification_otp: null }).eq("id", applicationId)
         allAgentText = ""
         // Confirm against the page rather than assuming the entry worked — the
@@ -7411,12 +7853,25 @@ return await page.evaluate(async () => {
           `Submit gate: ${knownBlockers.length} required field(s) were never completed — ${knownBlockers.map(b => `"${b.label.slice(0, 45)}" [${b.kind}] ${b.detail}`).join(" | ")}`
         )
       }
-      if (inventoryBlockers.length === 0 && knownBlockers.length === 0 && auditUnfilled.length === 0 && !resumeMissing) {
+      // Completion comes first: a blank we misread must not stop a submit. If a field
+      // really is empty, the form rejects it, and the targeted retry below fills
+      // what the form named. Set SUBMIT_WITH_BLANKS=0 to refuse instead.
+      const hasBlanks = inventoryBlockers.length > 0 || knownBlockers.length > 0 || auditUnfilled.length > 0 || resumeMissing
+      const submitAnyway = process.env.SUBMIT_WITH_BLANKS !== "0"
+      if (hasBlanks && submitAnyway && applicationId) {
+        await persistLog(applicationId, "warn",
+          `[Submission] submitting with possible blanks: ${[...inventoryBlockers.map(i => i.label), ...knownBlockers.map(b => b.label), ...auditUnfilled.map((f: { label: string }) => f.label), ...(resumeMissing ? ["résumé"] : [])].map(l => String(l).slice(0, 40)).join(" | ")}`)
+      }
+      if (!hasBlanks || submitAnyway) {
         run?.succeed("audit", "All required fields filled")
         run?.begin("submit")
         if (onStep) onStep({ step: 5, status: "in_progress", log: "All required fields filled — submitting...", liveUrl })
+        await dropStagehand()
+        await enforceProxyEmail(kernelClient, sessionId, userData.email, applicationId)
         const clickRes = await clickSubmitButton(kernelClient, sessionId, applicationId)
         submitClicked = clickRes.clicked
+        if (applicationId) await persistLog(applicationId, submitClicked ? "info" : "warn", `[Submission] Submit click: clicked=${clickRes.clicked} | HTTP status=${clickRes.submitStatus ?? "none"} | page: ${String(clickRes.url || "").slice(0, 160)}`)
+        await snapshotPage(kernelClient, sessionId, applicationId, "after-submit")
 
         // Post-submit validation error check: React portals (Greenhouse/Lever/Ashby) validate
         // in JS and don't set [required] on DOM elements, so auditForm can miss them.
@@ -7494,13 +7949,15 @@ return await page.evaluate(async () => {
             // accepted the application and issued a code, so abandoning here means
             // a submission that exists on their side and never completed on ours.
             // The session timeout above is sized to outlast this.
-            let code = await fetchOtpViaApi(applicationId || "", otpAddress, 150000, {
+            // Five minutes: some codes take far longer than the usual seconds to arrive.
+            let code = await fetchOtpViaApi(applicationId || "", otpAddress, 300000, {
               sinceMs: requestedAt,
               company: companyHint,
             })
             if (!code) {
               captchaUnresolved = true
               if (applicationId) {
+                otpNotReceived = true
                 await persistLog(applicationId, "error",
                   `Portal asked for an emailed code and none arrived for ${otpAddress}` +
                   `${companyHint ? ` matching "${companyHint}"` : ""} (attempt ${attempt}). The application is filled but unsubmitted.`)
@@ -7560,7 +8017,9 @@ return await page.evaluate(async () => {
             run?.fail("submit", `Form rejected the submit: ${validationErrors.join("; ")}`)
             submitClicked = false
             run?.begin("ai_fill")
-            await runFillLoop(3, validationErrors)
+            const namedFields = fieldsNamedInErrors(validationErrors)
+            if (applicationId) await persistLog(applicationId, "info", `[Validation] form named: ${namedFields.join(" | ")}`)
+            await runFillLoop(3, namedFields)
             run?.succeed("ai_fill", `Targeted retry on ${validationErrors.length} rejected field(s)`)
             // Re-attempt submit after fixing validation errors
             if (!detectCaptcha(allAgentText) && !detectOtp(allAgentText)) {
@@ -7612,6 +8071,11 @@ return await page.evaluate(async () => {
     const processingTime = Date.now() - startTime
     run?.begin("confirm")
     const confirmation = await confirmSubmission(kernelClient, sessionId, portalType, targetUrl, submitClicked, applicationId)
+    if (!confirmation.submitted) await snapshotPage(kernelClient, sessionId, applicationId, "not-submitted")
+    const writes = [...(fieldWrites.get(sessionId)?.values() ?? [])]
+    if (applicationId) await persistLog(applicationId, "info", `[Refill] summary: ${writes.length} fields written, ${writes.filter((w) => w.count > 1).length} more than once, ${writes.reduce((n, w) => n + w.count, 0)} writes in total`)
+    fieldWrites.delete(sessionId)
+    if (applicationId) await persistLog(applicationId, confirmation.submitted ? "info" : "warn", `[Submission] VERDICT submitted=${confirmation.submitted} | confidence=${confirmation.confidence} | ${confirmation.reason}`)
 
     // ── Receipt fallback: ask the page for the reference the regex missed ──
     //
@@ -7848,7 +8312,7 @@ return await page.evaluate(async () => {
     }
     return {
       success: false,
-      error: `Submission not confirmed: ${confirmation.reason}${humanInputFields.length > 0 ? ` | Human input needed: ${humanInputFields.join(", ")}` : ""}${failureSuffix}`,
+      error: `Submission not confirmed: ${otpNotReceived ? "the verification code email never arrived | " : ""}${confirmation.reason}${humanInputFields.length > 0 ? ` | Human input needed: ${humanInputFields.join(", ")}` : ""}${failureSuffix}`,
       steps: totalSteps,
       recordingUrl: liveUrl,
       taskId: sessionId,

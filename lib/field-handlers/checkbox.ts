@@ -24,7 +24,7 @@ export const checkboxHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const el = document.querySelector('[${ctx.targetAttr}="1"]');
+const el = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!el) return { handled: true, filled: false, reason: 'element-vanished' };
 
 if (readState(el)) return { handled: true, filled: true, reason: 'already-checked' };
@@ -41,14 +41,14 @@ await sleep(rnd(200, 500));
 clickVia(el);
 await sleep(280);
 
-let ok = readState(document.querySelector('[${ctx.targetAttr}="1"]'));
+let ok = readState(nqDeepOne('[${ctx.targetAttr}="1"]'));
 if (!ok) {
   // Second attempt: dispatch a real click on the input itself.
   try {
-    const again = document.querySelector('[${ctx.targetAttr}="1"]');
+    const again = nqDeepOne('[${ctx.targetAttr}="1"]');
     again.click();
     await sleep(250);
-    ok = readState(document.querySelector('[${ctx.targetAttr}="1"]'));
+    ok = readState(nqDeepOne('[${ctx.targetAttr}="1"]'));
   } catch {}
 }
 return { handled: true, filled: ok, reason: ok ? 'checked' : 'check-failed' };

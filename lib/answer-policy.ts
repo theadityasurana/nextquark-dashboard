@@ -96,6 +96,18 @@ const NOT_APPLICABLE_RE =
 /** Identity rules whose answer is a URL, and so can stand in for one another. */
 const URL_IDENTITY_IDS = new Set(["linkedin", "github", "portfolio", "website"])
 
+const OPTIONAL_PROFILE_LINK_RE =
+  /^\s*(your\s+)?(linked\s*-?\s*in|git\s*-?\s*hub|web\s*site|portfolio|twitter|x(\s*\(fka\s+twitter\))?|facebook|instagram)(\s+(url|profile|link|page))?\s*\*?\s*$/i
+
+const PLACE_QUESTION_RE = /\b(city|location|located|where\s+(are\s+you|do\s+you\s+live))\b/i
+const NOT_A_PLACE_RE =
+  /^(yes|no|male|female|non-?binary|decline|prefer not|i (confirm|acknowledge|certify|agree)|hispanic|white|black|asian|native|two or more|veteran|i am not|i don'?t)\b/i
+
+/** For a location question, drops options that cannot be places. Other questions keep them all. */
+export function plausibleOptionsFor(label: string, options: string[]): string[] {
+  return PLACE_QUESTION_RE.test(label) ? options.filter((o) => !NOT_A_PLACE_RE.test(o.trim())) : options
+}
+
 const SURVEY_NAME_RE = /(^|[.:[])(surveysResponses|eeo|demographic|selfIdentification|voluntary_self_id)\b/i
 
 /**
@@ -420,7 +432,7 @@ const IDENTITY: IdentityRule[] = [
   },
   {
     id: "currentCompany",
-    re: /\b(current|present|most recent)\s+(employer|company|organi[sz]ation)\b|^(?:\*\s*)?(company|employer|organi[sz]ation)\s*\*?$/i,
+    re: /\b(current|present|most recent|last|previous)\s+(employer|company|organi[sz]ation)\b|\bwhere\b.{0,20}\b(recently|currently|last)\s+work|\bwhere do you (currently )?work\b|^(?:\*\s*)?(company|employer|organi[sz]ation)\s*\*?$/i,
     get: (u) => currentRole(u).company,
     shapes: ["text", "unknown"],
   },
@@ -439,6 +451,13 @@ const IDENTITY: IdentityRule[] = [
     get: (u) => u.location || "",
     // A location field is very often a typeahead (Greenhouse, Lever, LinkedIn).
     shapes: ["text", "typeahead", "unknown"],
+  },
+  {
+    // Named on its own only, so "Why do you want to work at Facebook?" stays an essay.
+    id: "social",
+    re: /^\s*(your\s+)?(facebook|instagram|tiktok|threads|snapchat|youtube|pinterest)(\s+(url|profile|link|page))?\s*\*?\s*$/i,
+    get: () => "",
+    shapes: ["text", "unknown"],
   },
   {
     id: "twitter",
@@ -1039,12 +1058,38 @@ export function leastCommittalOption(options: string[]): string | null {
  * bank keyword, because a canned "Yes" in a free-text box is both wrong and
  * obviously machine-written to whoever reads it.
  */
+const FAVORABLE_YES_RE =
+  /\b(authori[sz]ed|authori[sz]ation|right to work|legally (eligible|able|entitled|permitted)|eligible to work|work (permit|eligib)|citizen|permanent resident|green card|security clearance|active clearance|clearance eligib|without (visa )?sponsorship|pass a (background|drug)|consent to a (background|drug)|submit to a (background|drug))/i
+const FAVORABLE_NO_RE =
+  /\b(sponsor|convict|felon|misdemean|criminal|plead(ed)? (guilty|no contest)|nolo contendere|arrest|pending charges|debarred|non-?compete|non-?solicit|ever been (terminated|dismissed|fired))/i
+
+/**
+ * The answer that keeps a test candidate in the running on an eligibility or
+ * attestation question, or null when the question is not one of those.
+ *
+ * Only reached when `positiveAnswers` is set: see lib/test-candidates.ts.
+ */
+export function favorableAnswer(label: string, options: string[]): string | null {
+  // "Authorized to work without sponsorship" mentions sponsorship but wants a yes.
+  const wantYes = /without (visa )?sponsorship/i.test(label) || (!FAVORABLE_NO_RE.test(label) && FAVORABLE_YES_RE.test(label))
+  const wantNo = !wantYes && FAVORABLE_NO_RE.test(label)
+  if (!wantYes && !wantNo) return null
+  if (!options.length) return wantYes ? "Yes" : "No"
+  const pattern = wantYes ? AFFIRMATIVE : NEGATIVE
+  return options.find((o) => pattern.test(o.trim())) ?? null
+}
+
 export function routeField(field: PolicyField, userData: any): AnswerRoute {
   const label = (field.label || "").replace(/[*✱＊]+/g, " ").replace(/\s+/g, " ").trim()
   const shape = shapeOf(field.kind)
 
   if (shape === "file") return { route: "file", why: "handled by the résumé upload path" }
   if (!label) return { route: "skip", why: "no label to answer against" }
+
+  if (userData?.positiveAnswers) {
+    const favorable = favorableAnswer(label, field.options)
+    if (favorable) return { route: "choice", value: favorable, why: "test candidate: most favorable answer" }
+  }
 
   // ─── A résumé question is a file question whatever it is made of ───
   //
@@ -1162,6 +1207,11 @@ export function routeField(field: PolicyField, userData: any): AnswerRoute {
       route: "skip",
       why: "conditional follow-up — only applies if its trigger option was selected",
     }
+  }
+
+  // SmartRecruiters' optional "Your Profiles" block.
+  if (!field.required && userData?.skipOptionalProfileLinks && OPTIONAL_PROFILE_LINK_RE.test(label)) {
+    return { route: "skip", why: "optional profile link" }
   }
 
   // Identity, before essays: "Tell us your LinkedIn" is still just the URL.
@@ -1524,4 +1574,101 @@ export function validateAnswerForField(
   }
 
   return { ok: true }
+}
+
+/**
+ * The dropdown option for a degree, by level. "BTech" is not offered by name on
+ * most forms, but it is a bachelor's degree, not "Other".
+ */
+export function degreeFamilyOption(value: string, options: string[]): string | null {
+  const v = value.toLowerCase().replace(/[.\s]/g, "")
+  const find = (re: RegExp) => options.find((o) => re.test(o)) ?? null
+  if (/phd|doctor|dphil/.test(v)) return find(/ph\.?\s?d|doctor of philosophy|doctorate/i)
+  if (/mba/.test(v)) return find(/\bmba\b|master of business/i) ?? find(/master/i)
+  if (/^m(tech|e|s|sc|a|ca|com|eng)\b|master/.test(v)) return find(/master(?!.*business)/i)
+  if (/^b(tech|e|s|sc|a|ca|com|ba|eng)\b|bachelor|undergrad/.test(v)) return find(/bachelor/i)
+  if (/associate|diploma/.test(v)) return find(/associate/i)
+  return null
+}
+
+/**
+ * A long answer cut down to fit a single-line box: its first sentence if that
+ * fits, otherwise the text up to the last word within the limit. A shorter answer
+ * beats a required field left blank.
+ */
+export function shortenForSingleLine(value: string, limit = 200): string {
+  const text = (value || "").replace(/\s+/g, " ").trim()
+  if (text.length <= limit) return text
+  const sentence = text.match(/^.{10,}?[.!?](?=\s|$)/)?.[0]
+  if (sentence && sentence.length <= limit) return sentence
+  return text.slice(0, limit).replace(/\s+\S*$/, "")
+}
+
+const CHOICE_SHAPES = new Set<string>(["select", "multiselect", "radio", "checkbox", "typeahead", "buttons", "checkboxgroup"])
+
+/**
+ * An answer for a required field nothing else could answer. Test runs aim for a
+ * completed submit, so an imperfect answer beats a blank, which the form rejects.
+ * No model call is involved, so this works with every provider rate-limited.
+ * Returns null only for what cannot be typed: a file, or a dropdown whose options
+ * are not known yet.
+ */
+export function lastResortAnswer(
+  field: { label: string; kind: string; options: string[] },
+  userData: any
+): string | null {
+  const shape = shapeOf(field.kind)
+  if (shape === "file") return null
+  const label = (field.label || "").toLowerCase()
+
+  if (field.options?.length) {
+    const favorable = favorableAnswer(field.label, field.options)
+    if (favorable) return favorable
+    const yes = field.options.find((o) => /^yes\b/i.test(o.trim()))
+    return yes ?? leastCommittalOption(field.options)
+  }
+  // A search box with nothing listed yet still takes a typed query, for the kinds
+  // of field where one will find something. Other choices wait for their options.
+  if (CHOICE_SHAPES.has(shape)) {
+    if (shape !== "typeahead") return null
+    if (/city|location/.test(label)) return userData?.location || "Bangalore, India"
+    if (/country/.test(label)) return "India"
+    if (/school|university|college/.test(label)) return userData?.educationEntries?.[0]?.institution || "Other"
+    return null
+  }
+
+  const name = String(userData?.name || `${userData?.firstName || ""} ${userData?.lastName || ""}`).trim()
+  if (/e-?mail/.test(label)) return userData?.email || null
+  if (/phone|mobile|telephone/.test(label)) return userData?.phone || null
+  if (/linkedin/.test(label)) return userData?.linkedinUrl || "https://www.linkedin.com/in/candidate"
+  if (/github/.test(label)) return userData?.githubUrl || "https://github.com/candidate"
+  if (/\b(url|website|portfolio|link)\b/.test(label)) return userData?.linkedinUrl || "https://www.linkedin.com/in/candidate"
+  if (/first name|given name/.test(label)) return userData?.firstName || "Candidate"
+  if (/last name|family name|surname/.test(label)) return userData?.lastName || "Candidate"
+  if (/\bname\b/.test(label)) return name || "Candidate"
+  if (/salary|compensation|ctc|pay\b/.test(label)) return String(userData?.salaryMin || 100000)
+  if (/notice period/.test(label)) return "30 days"
+  if (/\bgpa\b|grade point/.test(label)) return "3.5"
+  if (/years|how many|how much|number of|\bscore\b/.test(label) || field.kind === "number") return "3"
+  if (/date|when|start/.test(label) || field.kind === "date") return new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+  if (/city|location|address|where/.test(label)) return userData?.location || "Bangalore, India"
+  if (/country/.test(label)) return "India"
+  if (/compan|employer/.test(label)) return userData?.experienceEntries?.[0]?.company || "Independent"
+  if (/title|role|position/.test(label)) return userData?.headline || userData?.jobTitle || "Software Engineer"
+  if (/school|university|college/.test(label)) return userData?.educationEntries?.[0]?.institution || "Other"
+  if (/how did you hear|source|referr/.test(label)) return "LinkedIn"
+  if (shape === "longtext" || /\b(why|describe|tell us|explain|what|how)\b/.test(label)) {
+    return userData?.bio || `I am very interested in this role and my experience is a strong match for what the team needs.`
+  }
+  return "Yes"
+}
+
+/**
+ * The one exception to leaving a filled field alone. Résumé autofill can replace
+ * the candidate's proxy address with the personal one on the résumé, and then
+ * verification codes and confirmations go where we can never read them.
+ */
+export function mustReplaceExisting(label: string, existing: string, ours: string): boolean {
+  if (!/e-?mail/i.test(label || "") || !ours.includes("@")) return false
+  return existing.trim().toLowerCase() !== ours.trim().toLowerCase()
 }

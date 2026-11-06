@@ -18,7 +18,7 @@ export const dropdownHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const el = document.querySelector('[${ctx.targetAttr}="1"]');
+const el = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!el) return { handled: true, filled: false, reason: 'element-vanished' };
 
 const all = Array.from(el.options);

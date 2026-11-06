@@ -32,7 +32,7 @@ export const checkboxGroupHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const seed = document.querySelector('[${ctx.targetAttr}="1"]');
+const seed = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!seed || !seed.name) return { handled: true, filled: false, reason: 'element-vanished' };
 
 const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();

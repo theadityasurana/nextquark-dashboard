@@ -46,6 +46,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+// Last responses, in memory only, so returning to this tab shows them at once.
+const agentsSeen = new Map<string, any>()
+
 export function AgentsScreen() {
   const router = useRouter()
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
@@ -76,15 +79,25 @@ export function AgentsScreen() {
   const fetchAgents = async () => {
       try {
         const statusParam = activeTab !== 'all' ? `&status=${activeTab}` : ''
-        const response = await fetch(`/api/agents?page=${agentsPage}&limit=${AGENTS_PER_PAGE}${statusParam}`)
-        const data = await response.json()
-        if (data.agents) {
+        const url = `/api/agents?page=${agentsPage}&limit=${AGENTS_PER_PAGE}${statusParam}`
+        const show = (data: any) => {
           setAgents(data.agents)
           setStats(data.stats)
           if (data.pagination) {
             setTotalPages(data.pagination.totalPages)
             setTotalFiltered(data.pagination.total)
           }
+        }
+        const seen = agentsSeen.get(url)
+        if (seen) {
+          show(seen)
+          setLoading(false)
+        }
+        const response = await fetch(url)
+        const data = await response.json()
+        if (data.agents) {
+          agentsSeen.set(url, data)
+          show(data)
         }
       } catch (error) {
         console.error('Failed to fetch agents:', error)

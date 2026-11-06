@@ -110,6 +110,7 @@ function nqDeepAll(sel, root) {
     let all = [];
     try { all = Array.prototype.slice.call(node.querySelectorAll('*')); } catch { all = []; }
     for (const el of all) if (el.shadowRoot) walk(el.shadowRoot);
+    if (node.shadowRoot) walk(node.shadowRoot);
   };
   walk(root || document);
   return out;
@@ -465,7 +466,18 @@ function nqHasRealControl(c) {
 }
 
 /** Find the control a key refers to. The inverse of nqKeyOf. */
+function nqRealControl(el) {
+  // SmartRecruiters' SPL-INPUT and the INPUT inside it share an id, and the lookup
+  // finds the wrapper first. No fill handler can drive a wrapper.
+  if (!el || !el.tagName || !el.tagName.includes('-')) return el;
+  const inner = nqDeepAll('input:not([type="hidden"]),textarea,select', el);
+  return inner.find((i) => el.id && i.id === el.id) || inner.find((i) => nqIsVisible(i)) || inner[0] || el;
+}
 function nqResolveKey(key) {
+  const found = nqLookupKey(key);
+  return key && (key.startsWith('btn:') || key.startsWith('group:')) ? found : nqRealControl(found);
+}
+function nqLookupKey(key) {
   if (!key) return null;
   try {
     if (key.startsWith('id:')) return document.getElementById(key.slice(3)) || nqDeepOne('#' + nqEsc(key.slice(3)));

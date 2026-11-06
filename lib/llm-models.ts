@@ -47,25 +47,31 @@ export interface LlmAttempt {
  * offline default and the ordering preference.
  */
 export const FREE_OPENROUTER_MODELS: string[] = [
-  // JSON + tools, largest context first.
-  "minimax/minimax-m3:free",
+  // Verified 2026-11-06 with a real two-question JSON form prompt, fastest valid
+  // reply first. Slugs that have left the free tier (minimax-m3, glm-5.2, ...) are
+  // gone: each one was a guaranteed 404 on every fallback walk.
+  "nvidia/nemotron-3.5-super-vl:free",
+  "liquid/lfm-2.5-2.6b:free",
+  "cohere/north-mini-code:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "recursive/flint-v1.0:free",
   "dots-studio/dots-3-note-preview:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "z-ai/glm-5.2:free",
+  "xingchen-agi/xing4.0-29b-a4b:free",
   "google/gemma-4-31b-it:free",
   "google/gemma-4-26b-a4b-it:free",
-  "minimax/minimax-m2.7:free",
-  // OpenRouter's own auto-router over the free tier — a good last resort
-  // because it picks whatever is currently up.
-  "openrouter/free",
-  "liquid/lfm-2.5-2.6b:free",
-  // Tool-capable but no declared JSON mode; still worth trying before failing.
-  "nvidia/nemotron-3.5-lightning:free",
   "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "thinkingmachines/inkling:free",
-  "poolside/laguna-s-2.1:free",
-  "inclusionai/ling-3.0-flash-fin:free",
+  // OpenRouter's own auto-router over the free tier: slow but picks what is up.
+  "openrouter/free",
 ]
+
+/**
+ * Never sent applicant data. `stealth/*` models are unreleased and anonymous, so
+ * there is no named provider accountable for the personal data in a form prompt.
+ * They price at zero, so catalogue discovery would otherwise pull them in.
+ */
+export function isAllowedFreeModel(id: string): boolean {
+  return !String(id || "").toLowerCase().startsWith("stealth/")
+}
 
 /**
  * Gemini text models, ordered by capability.
@@ -80,18 +86,25 @@ export const FREE_OPENROUTER_MODELS: string[] = [
  * Image, TTS and embedding variants are deliberately absent.
  */
 export const GEMINI_TEXT_MODELS: string[] = [
-  "gemini-2.5-flash",
-  "gemini-flash-latest",
-  "gemini-2.5-flash-lite",
-  "gemini-flash-lite-latest",
-  "gemini-3-flash-preview",
-  "gemini-3.1-flash-lite",
+  // Newest first. The free tier allows only 20 requests/day PER MODEL, so this
+  // ladder is capacity as much as it is fallback. gemini-4-argon is left out: it
+  // reports no free-tier quota at all. gemini-2.5-flash-lite and gemini-2.0-flash
+  // are retired and return 404.
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
-  "gemma-4-31b-it",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash-preview",
+  "gemini-flash-latest",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash",
   "gemma-4-26b-a4b-it",
-  "gemini-2.5-pro",
 ]
+
+/** Default Gemini model for Stagehand and vision calls, with the provider prefix. */
+export const PRIMARY_GEMINI_MODEL = "google/gemini-3.6-flash"
 
 /** How many newly-discovered free models to append beyond the curated list. */
 const MAX_DISCOVERED_FREE_MODELS = 6
@@ -162,7 +175,7 @@ export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
     // OpenRouter declares modality per model; a model we can use must be able to
     // emit text. Where the field is absent, keep the model: an unlabelled entry
     // is far more likely to be an ordinary chat model than a music generator.
-    const usable = (m: any) => isFree(m) && emitsOnlyText(m)
+    const usable = (m: any) => isFree(m) && emitsOnlyText(m) && isAllowedFreeModel(String(m?.id || ""))
 
     const live: string[] = (data?.data ?? []).filter(usable).map((m: any) => String(m.id))
     if (live.length === 0) return FREE_OPENROUTER_MODELS
@@ -196,7 +209,7 @@ export async function refreshFreeModels(timeoutMs = 6000): Promise<string[]> {
  * health probe, so it happens once per run rather than once per field.
  */
 /** Groq model ids, in the order they should be tried. */
-export const GROQ_TEXT_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+export const GROQ_TEXT_MODELS = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
 
 export function buildLlmChain(keys: {
   openRouterKey?: string
@@ -223,25 +236,23 @@ export function buildLlmChain(keys: {
     }
   }
 
-  if (openRouterKey) {
-    for (const m of ["openai/gpt-4o-mini", "openai/gpt-4.1-mini", "google/gemini-2.5-flash"]) {
-      out.push({ label: `openrouter/${m}`, provider: "openrouter", model: m, apiKey: openRouterKey, json: true })
-    }
-  }
   if (geminiKey) {
     for (const m of keys.geminiModels ?? GEMINI_TEXT_MODELS) {
       out.push({ label: `google/${m}`, provider: "google", model: m, apiKey: geminiKey, json: true })
     }
   }
-  if (openAiKey) {
-    out.push({ label: "openai/gpt-4o-mini", provider: "openai", model: "gpt-4o-mini", apiKey: openAiKey, json: true })
-  }
-  // The free tier last: slower and less reliable, but it is the difference
-  // between a question being answered and being left blank.
+  // Free before paid: the OpenRouter account has no credit, so its paid models
+  // are a guaranteed HTTP 402 and must never sit in front of a free model.
   if (openRouterKey) {
     for (const m of keys.freeModels ?? FREE_OPENROUTER_MODELS) {
       out.push({ label: `openrouter-free/${m}`, provider: "openrouter", model: m, apiKey: openRouterKey, free: true, json: true })
     }
+    for (const m of ["openai/gpt-4o-mini", "openai/gpt-4.1-mini"]) {
+      out.push({ label: `openrouter/${m}`, provider: "openrouter", model: m, apiKey: openRouterKey, json: true })
+    }
+  }
+  if (openAiKey) {
+    out.push({ label: "openai/gpt-4o-mini", provider: "openai", model: "gpt-4o-mini", apiKey: openAiKey, json: true })
   }
   // A chain longer than this is not resilience, it is a stall: every entry is
   // tried in order on each failure, and the tail is the least capable.

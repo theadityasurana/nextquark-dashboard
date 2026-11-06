@@ -33,8 +33,16 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    const { id } = await request.json()
+    const body = await request.json()
     const supabase = createAdminClient()
+
+    if (body.deleteAllPending) {
+      const { error } = await supabase.from('live_application_queue').delete().eq('status', 'pending')
+      if (error) return Response.json({ error: error.message }, { status: 500 })
+      return Response.json({ success: true })
+    }
+
+    const { id } = body
     const { error } = await supabase.from('live_application_queue').delete().eq('id', id)
 
     if (error) return Response.json({ error: error.message }, { status: 500 })

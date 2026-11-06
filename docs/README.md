@@ -3,5 +3,6 @@
 | Document | Description |
 |---|---|
 | [SYSTEM_DESIGN.md](./SYSTEM_DESIGN.md) | Full system architecture with Mermaid diagrams — frontend, API layer, automation engine, database schema, email system, integrations, and design patterns |
+| [APPLICATION_PIPELINE.md](./APPLICATION_PIPELINE.md) | How applications get submitted: worker, claiming, each step, tabs, logs, running it, scaling findings and known problems |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Complete API reference — every endpoint, method, query params, request/response shapes |
 | [ANALYTICS.md](./ANALYTICS.md) | Download QR (global) — heat map, country/recent tables, GPS vs IP, CARTO `/api/map-basemap` |

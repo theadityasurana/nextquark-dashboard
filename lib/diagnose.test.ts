@@ -86,3 +86,11 @@ describe("diagnose", () => {
     expect(d.portalFault).toBe(false)
   })
 })
+
+describe("a page with no form", () => {
+  it("is not an application, rather than an incomplete form to retry", () => {
+    const d = diagnose({ unfilledRequired: ["no form on this page — nothing to fill"] })
+    expect(d.failureClass).toBe("not_application")
+    expect(d.permanent).toBe(true)
+  })
+})

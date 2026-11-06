@@ -280,7 +280,7 @@ data: {"status":"completed","success":true,"steps":12,"recordingUrl":"https://..
 
 ### `POST /api/auto-apply-queue`
 
-Batch dispatch — picks up pending entries from `live_application_queue` and triggers runs.
+Manual start for one application. Automatic dispatch is the worker: see [APPLICATION_PIPELINE.md](./APPLICATION_PIPELINE.md). Previously: batch dispatch — picks up pending entries from `live_application_queue` and triggers runs.
 
 **Body:**
 ```json

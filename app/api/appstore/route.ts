@@ -1,3 +1,4 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 
@@ -20,7 +21,7 @@ async function asc(path: string, token: string) {
   return res.json()
 }
 
-export async function GET() {
+async function load(request: Request) {
   try {
     const token = generateToken()
 
@@ -91,4 +92,8 @@ export async function GET() {
     console.error('App Store Connect error:', err.message)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
+}
+
+export function GET(request: Request) {
+  return cachedRoute(request, 300_000, () => load(request))
 }

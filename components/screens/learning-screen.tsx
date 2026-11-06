@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useApi } from "@/lib/api-cache"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +37,36 @@ interface LearningData {
   outcomes: Array<{ domain: string; attempts: number; submitted: number; successRate: number; avgSeconds: number | null; topReason: string | null }>
   recentRuns: Array<{ company: string; domain: string | null; submitted: boolean; seconds: number | null; reason: string | null; confirmationId: string | null; at: string }>
   unavailable: Record<string, string> | null
+  health?: {
+    runs: number
+    results: Record<string, number>
+    fieldFailures: Array<{ field: string; reason: string; applications: number }>
+    rejections: Array<{ reason: string; applications: number }>
+    lastResort: Array<{ field: string; applications: number }>
+    refills: { runsMeasured: number; runsWithRefills: number; extraWrites: number }
+    queue: Record<string, number>
+    removedReasons: Record<string, number>
+  }
+}
+
+function Ranked({ title, rows, empty }: { title: string; rows: Array<{ label: string; detail?: string; count: number }>; empty: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-2">
+        <p className="text-sm font-medium">{title}</p>
+        {rows.length === 0 && <p className="text-sm text-muted-foreground">{empty}</p>}
+        {rows.map((r) => (
+          <div key={`${r.label}-${r.detail ?? ""}`} className="flex items-start justify-between gap-3 text-sm">
+            <span className="min-w-0 break-words">
+              {r.label}
+              {r.detail && <span className="text-muted-foreground"> · {r.detail}</span>}
+            </span>
+            <span className="tabular-nums text-muted-foreground shrink-0">{r.count}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
 }
 
 function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
@@ -51,25 +82,8 @@ function Stat({ label, value, hint }: { label: string; value: string | number; h
 }
 
 export function LearningScreen() {
-  const [data, setData] = useState<LearningData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/learning", { cache: "no-store" })
-      const json = await res.json()
-      if (json.error) setError(json.error)
-      else { setData(json); setError(null) }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { load() }, [load])
+  const { data, error: loadError, isLoading: loading, refresh: load } = useApi<LearningData>("/api/learning")
+  const error = loadError?.message ?? null
 
   const totalSkills = data?.domains.reduce((n, d) => n + d.versions.length, 0) ?? 0
   const retiredSkills = data?.domains.reduce((n, d) => n + d.retired, 0) ?? 0
@@ -122,6 +136,51 @@ export function LearningScreen() {
           hint="every reuse past the first"
         />
       </div>
+
+      {/* ─── What is going wrong, ranked by how many applications it touched ─── */}
+      {data?.health && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            What to fix next <span className="font-normal">· last 7 days, counted per application</span>
+          </h2>
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <Stat label="Completed" value={data.health.queue.completed ?? 0} hint={`${data.health.queue.pending ?? 0} still pending`} />
+            <Stat label="Failed" value={data.health.queue.failed ?? 0} hint={`${data.health.queue.blocked ?? 0} blocked`} />
+            <Stat
+              label="Runs with refills"
+              value={`${data.health.refills.runsWithRefills}/${data.health.refills.runsMeasured}`}
+              hint={`${data.health.refills.extraWrites} wasted writes`}
+            />
+            <Stat
+              label="Removed"
+              value={Object.values(data.health.removedReasons).reduce((n, v) => n + v, 0)}
+              hint="dead links, non-applications, no résumé"
+            />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Ranked
+              title="Fields that could not be filled"
+              rows={data.health.fieldFailures.map((f) => ({ label: f.field, detail: f.reason, count: f.applications }))}
+              empty="None recorded."
+            />
+            <Ranked
+              title="Rejected by the form after Submit"
+              rows={data.health.rejections.map((r) => ({ label: r.reason, count: r.applications }))}
+              empty="None recorded."
+            />
+            <Ranked
+              title="Answered with a last-resort default"
+              rows={data.health.lastResort.map((r) => ({ label: r.field, count: r.applications }))}
+              empty="None recorded."
+            />
+            <Ranked
+              title="Why applications were removed"
+              rows={Object.entries(data.health.removedReasons).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, count]) => ({ label, count }))}
+              empty="None recorded."
+            />
+          </div>
+        </div>
+      )}
 
       {/* ─── Site knowledge ─── */}
       <div className="space-y-3">

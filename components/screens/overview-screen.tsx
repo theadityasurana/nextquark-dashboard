@@ -11,7 +11,8 @@ import {
 } from "lucide-react"
 import { SystemHealthPanel } from "@/components/system-health-panel"
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
-import { useEffect, useState, useCallback } from "react"
+import { useState } from "react"
+import { useApi } from "@/lib/api-cache"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AnalyticsScreen } from "@/components/screens/analytics-screen"
@@ -54,22 +55,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function OverviewScreen() {
-  const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const { prefs, setPrefs } = useUIPreferences()
   const { chartRange, companyRange, agentRange, jobRange } = prefs
 
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/overview?chartRange=${chartRange}&companyRange=${companyRange}&agentRange=${agentRange}&jobRange=${jobRange}`)
-      const json = await res.json()
-      if (!json.error) setData(json)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
-  }, [chartRange, companyRange, agentRange, jobRange])
-
-  useEffect(() => { fetchData() }, [fetchData])
+  const { data, isLoading: loading, refresh: fetchData } = useApi<any>(
+    `/api/overview?chartRange=${chartRange}&companyRange=${companyRange}&agentRange=${agentRange}&jobRange=${jobRange}`,
+  )
 
   const handleRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false) }
 

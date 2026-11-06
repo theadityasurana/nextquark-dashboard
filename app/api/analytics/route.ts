@@ -1,7 +1,8 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+async function load(request: Request) {
   try {
     const supabase = createAdminClient()
 
@@ -34,4 +35,8 @@ export async function GET() {
     console.error('Analytics fetch error:', err)
     return NextResponse.json({ jobs: [], applications: [] }, { status: 500 })
   }
+}
+
+export function GET(request: Request) {
+  return cachedRoute(request, 120_000, () => load(request))
 }

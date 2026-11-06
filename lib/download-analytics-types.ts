@@ -72,7 +72,7 @@ export type CampaignSpotRow = {
 }
 
 export type DownloadAnalyticsPayload = {
-  kpis: { today: number; d7: number; d30: number; gps_pins: number; ip_pins: number; gps_geocode: number; gps_only: number; ip_place: number }
+  kpis: { today: number; d7: number; d30: number; total: number; gps_pins: number; ip_pins: number; gps_geocode: number; gps_only: number; ip_place: number }
   pins: DownloadVisitPin[]
   recentVisits: DownloadRecentVisit[]
   byCountry: DownloadCountryStat[]

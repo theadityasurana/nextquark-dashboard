@@ -27,14 +27,18 @@ const statusConfig: Record<ServiceStatus, { color: string; dot: string; icon: Re
   down:     { color: 'text-destructive',    dot: 'bg-destructive',    icon: XCircle },
 }
 
+// Last result in memory, so the card has something to show when you return to the tab.
+let lastHealth: HealthData | null = null
+
 export function SystemHealthPanel() {
-  const [health, setHealth] = useState<HealthData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [health, setHealth] = useState<HealthData | null>(lastHealth)
+  const [loading, setLoading] = useState(!lastHealth)
 
   const fetchHealth = useCallback(async () => {
     try {
       const res = await fetch('/api/system-health')
       const json = await res.json()
+      lastHealth = json
       setHealth(json)
     } catch {
       // silently fail — panel just stays in loading state

@@ -50,3 +50,4 @@ next-env.d.ts
 *.swo
 *~
 .env.local.bak
+.run-screens/

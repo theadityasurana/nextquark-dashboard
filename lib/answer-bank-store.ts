@@ -51,6 +51,8 @@ function rowScope(r: AnswerRow): AnswerScope {
  * Best-effort on the DB read — a missing table (migration not yet applied)
  * degrades to the derived-only bank rather than failing the run.
  */
+const IDENTITY_QUESTION_RE = /^(phone|mobile|telephone|cell)( ?(number|phone))?\*?$|^e-?mail( address| or phone)?\*?$|^(legal |full |first |last |preferred )?(first )?name\*?$|^(linkedin|github|website|portfolio|personal site|twitter|x)( ?(profile|url|link))?\*?$/i
+
 export async function loadAnswerBank(
   supabase: SupabaseClient,
   userId: string,
@@ -75,6 +77,10 @@ export async function loadAnswerBank(
   const byKey = new Map<string, ApplicationAnswer>()
   for (const a of derived) byKey.set(normalizeQuestion(a.question), a)
   for (const r of stored) {
+    // Phone and email are facts on the profile. Remembered "answers" to them have
+    // been junk, like a consent sentence or 123456789, and would override the
+    // real value.
+    if (IDENTITY_QUESTION_RE.test(r.question.trim())) continue
     // `missing` rows are gap markers with no answer text. They belong in the
     // review UI, not in the recall bank — a blank exact match would otherwise
     // beat a perfectly good derived answer and fill the field with nothing.

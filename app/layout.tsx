@@ -6,6 +6,7 @@ import { DataProvider } from '@/lib/data-context'
 import { LogsProvider } from '@/lib/logs-context'
 import { ThemeProvider } from '@/components/theme-provider'
 import { PWARegister } from '@/components/pwa-register'
+import { ApiCacheProvider } from '@/lib/api-cache'
 import './globals.css'
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -40,13 +41,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} dark`}>
       <body className="font-sans antialiased">
         <ThemeProvider>
-          <DataProvider>
-            <LogsProvider>
-              <DashboardShell>
-                {children}
-              </DashboardShell>
-            </LogsProvider>
-          </DataProvider>
+          <ApiCacheProvider>
+            <DataProvider>
+              <LogsProvider>
+                <DashboardShell>
+                  {children}
+                </DashboardShell>
+              </LogsProvider>
+            </DataProvider>
+          </ApiCacheProvider>
         </ThemeProvider>
         <PWARegister />
         <Analytics />

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('jobs')
-    .select('*', { count: 'exact' })
+    .select('*', { count: companyId ? 'exact' : 'estimated' })
     .order('created_at', { ascending: false })
 
   if (companyId) query = query.eq('company_id', companyId)
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error('[jobs] GET error:', error.message)
-    return NextResponse.json({ data: [], total: 0 })
+    return NextResponse.json({ data: [], total: 0, error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({ data: data || [], total: count || 0 })

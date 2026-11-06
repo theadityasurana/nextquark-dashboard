@@ -56,15 +56,17 @@ function InfoTip({ text }: { text: string }) {
   )
 }
 
+// Kept in memory only, for the moment between leaving this tab and coming back.
+let lastSeenApplications: LiveApplicationQueue[] = []
+
 export function QueueScreen() {
   const [selectedApp, setSelectedApp] = useState<LiveApplicationQueue | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
-  const [applications, setApplications] = useState<LiveApplicationQueue[]>([])
+  const [applications, setApplications] = useState<LiveApplicationQueue[]>(lastSeenApplications)
+  useEffect(() => { lastSeenApplications = applications }, [applications])
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [isStartingAll, setIsStartingAll] = useState(false)
-  // Local queue backlog depth — shown in the tray so the operator knows how many are waiting
-  const [localQueueDepth, setLocalQueueDepth] = useState(0)
+  const [confirmDeleteAllPending, setConfirmDeleteAllPending] = useState(false)
   // Per-application streaming state — replaces the single isStreaming boolean
   // that was disabling Start for every app whenever any one was running.
   const [streamingApps, setStreamingApps] = useState<Set<string>>(new Set())
@@ -73,7 +75,7 @@ export function QueueScreen() {
   const { prefs, setPrefs, loaded: prefsLoaded } = useUIPreferences()
   const autoStart = prefs.autoStart
   const premiumOnly = prefs.premiumOnly
-  const maxConcurrent = prefs.maxConcurrent ?? 3
+  const maxConcurrent = prefs.maxConcurrent ?? 5
   const setAutoStart = (val: boolean) => setPrefs({ autoStart: val })
   const setPremiumOnly = (val: boolean) => setPrefs({ premiumOnly: val })
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({})
@@ -85,19 +87,8 @@ export function QueueScreen() {
 
   const QUEUE_PER_PAGE = 10
 
-  // Refs that survive re-renders without causing them
-  const autoStartTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
-  const processingCountRef = useRef(0)
-  const pendingQueueRef = useRef<LiveApplicationQueue[]>([])
   // AbortControllers keyed by app id — cancelled when an app is deleted mid-run
   const abortControllersRef = useRef<Record<string, AbortController>>({})
-  // Keep refs to latest values so callbacks always see current values
-  const premiumOnlyRef = useRef(premiumOnly)
-  useEffect(() => { premiumOnlyRef.current = premiumOnly }, [premiumOnly])
-  const maxConcurrentRef = useRef(maxConcurrent)
-  useEffect(() => { maxConcurrentRef.current = maxConcurrent }, [maxConcurrent])
-  // streamingAppsRef mirrors streamingApps state so enqueueOrStart can read it synchronously
-  const streamingAppsRef = useRef<Set<string>>(new Set())
 
   const { addLog } = useLogs()
 
@@ -129,7 +120,7 @@ export function QueueScreen() {
         body: JSON.stringify({ id: appId, status: 'processing' }),
       })
       setApplications(prev => prev.map(a => a.id === appId ? { ...a, status: 'processing' as const } : a))
-      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: appId, message: `CAPTCHA marked as solved. Automation will resume automatically.`, applicationId: appId })
+      addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: appId, message: `CAPTCHA marked as solved. A live run resumes; a finished one goes back to the queue.`, applicationId: appId })
     } catch (error) {
       addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: appId, message: `Failed to mark CAPTCHA as solved: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: appId })
     } finally {
@@ -137,53 +128,14 @@ export function QueueScreen() {
     }
   }
 
-  // ─── Application dispatch ─────────────────────────────────────────────────
-
-  // A ref so processNext always calls the latest startApplication without
-  // creating a circular useCallback dependency.
-  const startApplicationRef = useRef<(app: LiveApplicationQueue) => Promise<void>>(async () => {})
-  // Mirror of applications state readable synchronously inside callbacks
-  const applicationsRef = useRef<LiveApplicationQueue[]>([])
-  useEffect(() => { applicationsRef.current = applications }, [applications])
-
-  // processNext: when a slot frees, pull the next eligible pending app from
-  // live DB state (applicationsRef) rather than a stale in-memory queue.
-  // Falls back to pendingQueueRef for apps enqueued before the last DB load.
-  const processNext = useCallback(() => {
-    while (processingCountRef.current < maxConcurrentRef.current) {
-      // Prefer pendingQueueRef first (already-scheduled overflow)
-      let next = pendingQueueRef.current.shift()
-      if (!next) {
-        // Fall back to first eligible pending app from live state
-        next = applicationsRef.current.find(
-          a => a.status === 'pending'
-            && (!premiumOnlyRef.current || a.is_premium)
-            && !streamingAppsRef.current.has(a.id)
-        )
-        if (!next) break
-      }
-      startApplicationRef.current(next)
-    }
-    setLocalQueueDepth(pendingQueueRef.current.length)
-  }, [])
+  // ─── Manual start ─────────────────────────────────────────────────────────
+  // Automatic dispatch lives in the server-side worker, so it does not depend on
+  // this page being open. This only streams progress for a run started by hand.
 
   const startApplication = useCallback(async (app: LiveApplicationQueue) => {
-    processingCountRef.current++
-
-    // Add to the active tray so the user can see progress without keeping the modal open
-    setActiveTray(prev => {
-      if (prev.some(t => t.app.id === app.id)) return prev
-      return [...prev, { app, minimized: false }]
-    })
-    setStreamingApps(prev => { const n = new Set(prev); n.add(app.id); streamingAppsRef.current = n; return n })
-
-    await fetch('/api/live-queue', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: app.id, status: 'processing' }),
-    })
-    setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'processing' as const } : a))
-    addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name} (${processingCountRef.current}/${maxConcurrentRef.current} slots used)`, applicationId: app.id })
+    setActiveTray(prev => prev.some(t => t.app.id === app.id) ? prev : [...prev, { app, minimized: false }])
+    setStreamingApps(prev => { const n = new Set(prev); n.add(app.id); return n })
+    addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Starting task for ${app.first_name} ${app.last_name} - ${app.job_title} at ${app.company_name}`, applicationId: app.id })
 
     const abortController = new AbortController()
     abortControllersRef.current[app.id] = abortController
@@ -195,76 +147,38 @@ export function QueueScreen() {
         body: JSON.stringify({ applicationId: app.id, stream: true }),
         signal: abortController.signal,
       })
-      if (!response.ok) throw new Error(`Server error: ${response.status}`)
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error || `Server error: ${response.status}`)
+      }
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       if (!reader) throw new Error('No response stream')
 
+      // The row's status arrives through realtime; only the log lines come from here.
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const lines = decoder.decode(value).split("\n")
-        for (const line of lines) {
+        for (const line of decoder.decode(value).split("\n")) {
           if (!line.startsWith("data: ")) continue
           try {
             const data = JSON.parse(line.slice(6))
             if (data.log) addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: data.status === "error" ? "error" : "info", agentId: app.id, message: data.log, applicationId: app.id })
-            if (data.status === "retrying") {
-              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `Attempt ${data.attempt}/${data.maxAttempts} failed: ${data.error}. Will retry automatically...`, applicationId: app.id })
-              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'pending' as const } : a))
+            if (data.outcome) {
+              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: data.outcome === "completed" ? "info" : "warn", agentId: app.id, message: `Finished: ${data.outcome}${data.error ? ` (${data.error})` : ""}`, applicationId: app.id })
+              setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, app: { ...t.app, status: data.outcome === "completed" ? 'completed' as const : 'failed' as const } } : t))
             }
-            if (data.status === "error") {
-              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: app.id, message: `All ${data.maxAttempts || 1} attempts failed: ${data.error || "An error occurred"}`, applicationId: app.id })
-              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'failed' as const } : a))
-              setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, app: { ...t.app, status: 'failed' as const } } : t))
-            }
-            if (data.status === "awaiting_captcha") {
-              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `CAPTCHA detected. Browser session is live — waiting for human to solve it.${data.liveUrl ? ` Live URL: ${data.liveUrl}` : ''}`, applicationId: app.id })
-              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'awaiting_captcha' as const, live_url: data.liveUrl || a.live_url } : a))
-            }
-            if (data.status === "awaiting_otp") {
-              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "warn", agentId: app.id, message: `OTP verification required. Automation paused. Waiting for OTP...`, applicationId: app.id })
-              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'awaiting_otp' as const } : a))
-            }
-            if (data.status === "completed" && data.success !== false) {
-              addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "info", agentId: app.id, message: `Application submitted & confirmed after ${data.steps ?? 0} steps`, applicationId: app.id })
-              const updatePayload: any = { id: app.id, status: 'completed' }
-              if (data.recordingUrl) updatePayload.recording_url = data.recordingUrl
-              await fetch('/api/live-queue', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) })
-              setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'completed' as const, recording_url: data.recordingUrl || a.recording_url } : a))
-              setActiveTray(prev => prev.map(t => t.app.id === app.id ? { ...t, app: { ...t.app, status: 'completed' as const } } : t))
-            }
-          } catch { /* ignore parse errors */ }
+          } catch { /* partial chunk */ }
         }
       }
     } catch (error) {
       addLog({ id: `log-${Date.now()}-${Math.random()}`, timestamp: new Date().toLocaleTimeString(), level: "error", agentId: app.id, message: `Task error: ${error instanceof Error ? error.message : 'Unknown error'}`, applicationId: app.id })
     } finally {
-      processingCountRef.current--
       delete abortControllersRef.current[app.id]
-      setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); streamingAppsRef.current = n; return n })
-      processNext()
+      setStreamingApps(prev => { const n = new Set(prev); n.delete(app.id); return n })
     }
-  }, [addLog, processNext])
-
-  // Keep the ref pointing at the latest startApplication so processNext
-  // always dispatches the current version.
-  useEffect(() => { startApplicationRef.current = startApplication }, [startApplication])
-
-  // enqueueOrStart: respects the concurrency cap; guards against double-dispatch
-  const enqueueOrStart = useCallback((app: LiveApplicationQueue) => {
-    // Never start or queue an app that is already streaming
-    if (streamingAppsRef.current.has(app.id)) return
-    if (processingCountRef.current < maxConcurrentRef.current) {
-      startApplicationRef.current(app)
-    } else {
-      if (!pendingQueueRef.current.some(a => a.id === app.id)) {
-        pendingQueueRef.current.push(app)
-        setLocalQueueDepth(pendingQueueRef.current.length)
-      }
-    }
-  }, [])
+  }, [addLog])
 
   // ─── Realtime data loading ────────────────────────────────────────────────
 
@@ -275,13 +189,6 @@ export function QueueScreen() {
         const data = await response.json()
         if (Array.isArray(data)) {
           setApplications(data)
-          // Fix #2: sync processingCountRef with actual DB state on every load
-          // so a page refresh doesn't reset the counter to 0 while apps are running
-          const activeCount = data.filter((a: LiveApplicationQueue) =>
-            a.status === 'processing'
-          ).length
-          processingCountRef.current = Math.max(processingCountRef.current, activeCount)
-          // Fix #8: clamp page to valid range after data changes
           setQueuePage(p => {
             const maxPage = Math.max(1, Math.ceil(data.length / QUEUE_PER_PAGE))
             return p > maxPage ? maxPage : p
@@ -296,124 +203,42 @@ export function QueueScreen() {
 
     const { createClient } = require('@/lib/supabase/client')
     const supabase = createClient()
-    let fallbackInterval: NodeJS.Timeout | null = null
 
+    // Apply each change directly. Refetching the whole queue per event meant a
+    // 240 KB download for every status write of every running application.
     const channel = supabase
       .channel('live-queue-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, loadApplications)
-      .on('system', {}, (status: any) => {
-        if (status === 'SUBSCRIBED') {
-          setRealtimeConnected(true)
-          if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null }
-        } else if (['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status)) {
-          setRealtimeConnected(false)
-          if (!fallbackInterval) fallbackInterval = setInterval(loadApplications, 10000)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, (payload: any) => {
+        if (payload.eventType === 'DELETE') {
+          setApplications(prev => prev.filter(a => a.id !== payload.old?.id))
+        } else if (payload.eventType === 'INSERT') {
+          setApplications(prev => prev.some(a => a.id === payload.new.id) ? prev : [payload.new, ...prev])
+        } else {
+          setApplications(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a))
         }
       })
-      .subscribe()
+      .subscribe((status: string) => {
+        setRealtimeConnected(status === 'SUBSCRIBED')
+        // Catch up on anything missed while the socket was down.
+        if (status === 'SUBSCRIBED') loadApplications()
+      })
+
+    // A safety net for dropped events, not the sync mechanism.
+    const resync = setInterval(loadApplications, 60_000)
 
     return () => {
       supabase.removeChannel(channel)
-      if (fallbackInterval) clearInterval(fallbackInterval)
+      clearInterval(resync)
     }
   }, [])
 
-  // ─── Auto-start logic ─────────────────────────────────────────────────────
-  // FIX: The old implementation had a broken cleanup — the effect's return function
-  // ran on every `applications` change, clearing timers that were just set.
-  // Now timers are managed imperatively: we only ADD timers for newly-seen pending
-  // apps and only REMOVE timers for apps that are no longer pending.
-  // premiumOnlyRef is used inside the timer callback so it always reads the
-  // current value at fire-time, not the value when the timer was created.
-
-  const autoStartRef = useRef(autoStart)
-  useEffect(() => { autoStartRef.current = autoStart }, [autoStart])
-
-  useEffect(() => {
-    if (!prefsLoaded) return
-
-    if (!autoStart) {
-      // Turn off: cancel every pending timer immediately
-      Object.values(autoStartTimersRef.current).forEach(clearTimeout)
-      autoStartTimersRef.current = {}
-      return
-    }
-
-    // Which apps should auto-start right now?
-    const eligible = applications.filter(a =>
-      a.status === 'pending' && (!premiumOnlyRef.current || a.is_premium)
-    )
-    const eligibleIds = new Set(eligible.map(a => a.id))
-
-    // Cancel timers for apps that are no longer eligible
-    for (const id of Object.keys(autoStartTimersRef.current)) {
-      if (!eligibleIds.has(id)) {
-        clearTimeout(autoStartTimersRef.current[id])
-        delete autoStartTimersRef.current[id]
-      }
-    }
-
-    // Set timers for newly eligible apps that don't have one yet
-    for (const app of eligible) {
-      if (streamingAppsRef.current.has(app.id)) continue
-      if (!autoStartTimersRef.current[app.id]) {
-        autoStartTimersRef.current[app.id] = setTimeout(() => {
-          delete autoStartTimersRef.current[app.id]
-          // Re-read autoStart from ref at fire time — prefs may have changed
-          if (!autoStartRef.current) return
-          if (!premiumOnlyRef.current || app.is_premium) {
-            enqueueOrStart(app)
-          }
-        }, 2000)
-      }
-    }
-  }, [autoStart, applications, enqueueOrStart, prefsLoaded])
-
-  // ─── Client-side processing timeout ─────────────────────────────────────
-  // If a job has been in 'processing' for >15 min and the cron hasn't fired yet,
-  // mark it completed locally and patch Supabase so the UI stays accurate.
-  useEffect(() => {
-    const TIMEOUT_MS = 15 * 60 * 1000
-    const interval = setInterval(() => {
-      const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString()
-      const timedOut = applications.filter(
-        a => a.status === 'processing' && a.started_at && new Date(a.started_at).toISOString() < cutoff
-      )
-      if (timedOut.length === 0) return
-      timedOut.forEach(async (app) => {
-        await fetch('/api/live-queue', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: app.id,
-            status: 'completed',
-          }),
-        })
-      })
-      setApplications(prev => prev.map(a =>
-        timedOut.some(t => t.id === a.id)
-          ? { ...a, status: 'completed' as const }
-          : a
-      ))
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [applications])
-
-  // When premiumOnly changes while autoStart is ON, cancel timers for
-  // non-premium apps that were already scheduled
-  useEffect(() => {
-    if (!autoStart) return
-    if (premiumOnly) {
-      // Cancel any pending timers for non-premium apps
-      for (const [id, timer] of Object.entries(autoStartTimersRef.current)) {
-        const app = applications.find(a => a.id === id)
-        if (app && !app.is_premium) {
-          clearTimeout(timer)
-          delete autoStartTimersRef.current[id]
-        }
-      }
-    }
-  }, [premiumOnly, autoStart, applications])
+  const handleDeleteAllPending = async () => {
+    try {
+      await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deleteAllPending: true }) })
+      setApplications(prev => prev.filter(a => a.status !== 'pending'))
+      setConfirmDeleteAllPending(false)
+    } catch (err) { console.error('Failed to delete all pending:', err) }
+  }
 
   const handleDelete = async (id: string) => {
     try {
@@ -422,9 +247,6 @@ export function QueueScreen() {
         abortControllersRef.current[id].abort()
         delete abortControllersRef.current[id]
       }
-      // Remove from local pending queue too
-      pendingQueueRef.current = pendingQueueRef.current.filter(a => a.id !== id)
-      setLocalQueueDepth(pendingQueueRef.current.length)
       await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       setApplications(applications.filter(app => app.id !== id))
       setDeleteId(null)
@@ -491,6 +313,19 @@ export function QueueScreen() {
           <h1 className="text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
+        {/* Header actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {pending.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={() => setConfirmDeleteAllPending(true)}
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete All Pending ({pending.length})
+            </Button>
+          )}
         {/* Live connection indicator top-right */}
         <div className="flex items-center gap-1.5 shrink-0">
           {realtimeConnected ? (
@@ -509,6 +344,7 @@ export function QueueScreen() {
               <span className="text-xs text-yellow-500">Reconnecting...</span>
             </>
           )}
+        </div>
         </div>
       </div>
 
@@ -558,7 +394,7 @@ export function QueueScreen() {
             />
             <Play className="h-3 w-3 shrink-0" />
             <span className="text-xs font-medium">Auto Start</span>
-            <InfoTip text="When ON, every eligible pending application starts automatically 2 seconds after it arrives. Extras queue up and start as slots free." />
+            <InfoTip text="When ON, the server-side worker starts every eligible pending application within seconds, up to the concurrency limit. The dashboard does not need to be open." />
           </div>
 
           {/* Concurrency slider */}
@@ -567,41 +403,21 @@ export function QueueScreen() {
             <input
               type="range"
               min={1}
-              max={10}
+              max={50}
               value={maxConcurrent}
               onChange={(e) => setPrefs({ maxConcurrent: Number(e.target.value) })}
               className="flex-1 accent-primary cursor-pointer"
             />
-            <span className="text-xs font-mono w-4 text-center shrink-0">{maxConcurrent}</span>
-            <InfoTip text="Controls how many SSE streams this browser opens at once. The server-side Kernel gate may queue further — this is the client dispatch limit." />
+            <span className="text-xs font-mono w-6 text-center shrink-0">{maxConcurrent}</span>
+            <InfoTip text="The maximum number of applications running at once, across the worker and manual starts." />
           </div>
 
           {/* Start All + backlog in one cell */}
           <div className="flex items-center gap-2">
-            {!autoStart && (
-              <>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setIsStartingAll(true)
-                    for (const app of eligiblePending) enqueueOrStart(app)
-                    setIsStartingAll(false)
-                  }}
-                  disabled={isStartingAll || eligiblePending.length === 0}
-                  className="gap-1.5 h-8 flex-1 min-[480px]:flex-none"
-                >
-                  {isStartingAll
-                    ? <><Loader className="h-3.5 w-3.5 animate-spin" /> Starting...</>
-                    : <><Play className="h-3.5 w-3.5" /> Start All{eligiblePending.length > 0 ? ` (${eligiblePending.length})` : ''}</>
-                  }
-                </Button>
-                <InfoTip text={`Immediately dispatches all ${eligiblePending.length} eligible pending application(s). Runs ${maxConcurrent} at a time — the rest wait in line.`} />
-              </>
-            )}
-            {waitingForSlot > streamingApps.size && (
+            {autoStart && waitingForSlot > 0 && (
               <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
-                <span className="text-xs text-blue-500 font-medium">{waitingForSlot - streamingApps.size} waiting</span>
-                <InfoTip text="Applications queued locally, waiting for a concurrency slot to free up." />
+                <span className="text-xs text-blue-500 font-medium">{waitingForSlot} waiting</span>
+                <InfoTip text="Pending applications waiting for a concurrency slot. The worker picks them up as slots free." />
               </div>
             )}
           </div>
@@ -847,6 +663,18 @@ export function QueueScreen() {
         </div>
       )}
 
+      {/* Delete all pending confirmation */}
+      <AlertDialog open={confirmDeleteAllPending} onOpenChange={setConfirmDeleteAllPending}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete All Pending</AlertDialogTitle>
+          <AlertDialogDescription>This will permanently delete all {pending.length} pending applications. This action cannot be undone.</AlertDialogDescription>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAllPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete All</AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
@@ -882,7 +710,7 @@ export function QueueScreen() {
               }}
               isStreaming={streamingApps.has(selectedApp.id)}
               recordingUrl={null}
-              canStart={processingCountRef.current < maxConcurrentRef.current && !streamingApps.has(selectedApp.id)}
+              canStart={liveApps.length < maxConcurrent && !streamingApps.has(selectedApp.id)}
               onStatusChange={(id, status) => {
                 setApplications(prev => prev.map(a => a.id === id ? { ...a, status } : a))
                 setSelectedApp(prev => prev?.id === id ? { ...prev, status } : prev)
@@ -952,7 +780,7 @@ export function QueueScreen() {
                       {app.status === 'failed'    && <span className="text-[10px] text-destructive">Failed</span>}
                     </div>
                     {/* Fix #11: slot bar uses maxConcurrent state (not ref) so it re-renders on slider change */}
-                    <div className="flex items-center gap-1 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1 mt-0.5">
                       {Array.from({ length: maxConcurrent }).map((_, i) => (
                         <div
                           key={i}

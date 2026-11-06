@@ -646,7 +646,7 @@ logQueue[] → scheduleLogFlush (1200ms debounce) → supabase.insert(batch)
 
 ### Distributed Concurrency Gate
 
-`lib/distributed-gate.ts` + `lib/kernel-limits.ts` enforce per-plan concurrency limits across workers. The Kernel plan's concurrency limit is read once and cached; the gate prevents over-dispatching.
+Superseded: see [APPLICATION_PIPELINE.md](./APPLICATION_PIPELINE.md). `lib/distributed-gate.ts` + `lib/kernel-limits.ts` enforce per-plan concurrency limits across workers. The Kernel plan's concurrency limit is read once and cached; the gate prevents over-dispatching.
 
 ### Circuit Breaker
 

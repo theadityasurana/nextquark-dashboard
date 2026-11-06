@@ -32,7 +32,7 @@ export const buttonGroupHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const host = document.querySelector('[${ctx.targetAttr}="1"]');
+const host = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!host) return { handled: true, filled: false, reason: 'element-vanished' };
 
 const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();

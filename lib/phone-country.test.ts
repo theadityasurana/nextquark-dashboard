@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_COUNTRY, resolvePhoneCountry } from "./phone-country"
+import { DEFAULT_COUNTRY, resolvePhoneCountry, nationalNumber, usablePhone } from "./phone-country"
 
 describe("resolvePhoneCountry", () => {
   it("prefers an explicit stored dial code", () => {
@@ -61,5 +61,38 @@ describe("resolvePhoneCountry", () => {
     for (const input of [{ countryCode: "91" }, { phone: "+4407700900000" }, {}]) {
       expect(resolvePhoneCountry(input).dial.startsWith("+")).toBe(true)
     }
+  })
+})
+
+describe("nationalNumber", () => {
+  it("keeps a 10-digit Indian mobile that begins with 91", () => {
+    expect(nationalNumber("9131852613", "+91")).toBe("9131852613")
+    expect(nationalNumber("91318 52613", "+91")).toBe("9131852613")
+  })
+  it("strips the dial code when it is really there", () => {
+    expect(nationalNumber("+91 98765 43210", "+91")).toBe("9876543210")
+    expect(nationalNumber("919876543210", "+91")).toBe("9876543210")
+    expect(nationalNumber("15551234567", "+1")).toBe("5551234567")
+  })
+  it("keeps a US number whose area code starts with its dial digit", () => {
+    expect(nationalNumber("1175551234", "+1")).toBe("1175551234")
+  })
+  it("handles a number with no dial code", () => {
+    expect(nationalNumber("8765432109", "+91")).toBe("8765432109")
+    expect(nationalNumber("", "+91")).toBe("")
+  })
+})
+
+describe("usablePhone", () => {
+  it("keeps a real number exactly as written", () => {
+    expect(usablePhone("9131852613", "+91")).toBe("9131852613")
+    expect(usablePhone("+91 98765 43210", "+91")).toBe("+91 98765 43210")
+  })
+  it("makes one up when the number is missing or invalid", () => {
+    expect(usablePhone("123456789", "+91")).toBe("9000000001")
+    expect(usablePhone("307407662", "+91")).toBe("9000000001")
+    expect(usablePhone("", "+91")).toBe("9000000001")
+    expect(usablePhone(null, "+1")).toBe("2025550123")
+    expect(usablePhone("0000000000", "+91")).toBe("9000000001")
   })
 })

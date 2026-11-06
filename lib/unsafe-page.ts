@@ -22,7 +22,7 @@
  * Pure and DOM-free: it reads a URL plus page text, so it is fully testable.
  */
 
-export type UnsafeKind = "wrong_flow" | "unsafe" | "sso"
+export type UnsafeKind = "wrong_flow" | "unsafe" | "sso" | "not_application"
 
 export interface UnsafePageVerdict {
   blocked: boolean
@@ -87,13 +87,15 @@ const WRONG_FLOW_TEXT: Array<{ re: RegExp; label: string }> = [
 const UNSAFE_TEXT: Array<{ re: RegExp; label: string }> = [
   { re: /\b(take|upload) a selfie|selfie verification|face (scan|verification|capture)|liveness check\b/i, label: "biometric / selfie verification" },
   { re: /upload (a photo of )?(your )?(government|photo) (issued )?id|passport (photo|scan)|driver'?s licen[cs]e (photo|scan|upload)/i, label: "government ID upload" },
-  { re: /\b(credit card|debit card|card number|cvv|billing address|payment (details|information|method))\b/i, label: "payment details" },
+  // Worded as a request: a fintech's job description says "credit card" and
+  // "billing address" freely, and matching those words deleted real applications.
+  { re: /\b(enter|provide|add|submit|confirm) (your|a|the) (credit card|debit card|card number|billing address|payment (details|information|method))\b|\bcvv\b/i, label: "payment details" },
   // National identity / tax numbers are NOT a hard stop any more. Abandoning the
   // whole posting over one field meant a form whose other 22 inputs were filled
   // correctly produced no application at all. They are answered with a reserved
   // placeholder instead — see the `national_id` rule in answer-policy — which
   // fills the field without asserting a real person's identifier.
-  { re: /\b(bank account|routing number|ifsc|account number for (direct )?deposit)\b/i, label: "bank account details" },
+  { re: /\b(enter|provide|add|submit|confirm) (your|a|the) (bank account|routing number|ifsc|account number)\b/i, label: "bank account details" },
   { re: /(allow|enable|grant) (access to )?(your )?(camera|microphone|webcam|screen sharing)|record (a|your) video (introduction|answer)/i, label: "camera / microphone access or a video recording" },
   { re: /install (this )?(browser )?extension to (apply|continue)|proctoring software/i, label: "an installed extension or proctoring software" },
 ]
@@ -197,4 +199,78 @@ export function evaluateUrl(url: string): UnsafePageVerdict {
     }
   }
   return ALLOW
+}
+
+/** Hosts that serve application forms, so their page text need not prove it. */
+const ATS_HOSTS = [
+  "greenhouse.io", "lever.co", "ashbyhq.com", "myworkdayjobs.com", "myworkdaysite.com", "workday.com",
+  "icims.com", "smartrecruiters.com", "jobvite.com", "bamboohr.com", "workable.com", "taleo.net",
+  "successfactors.com", "teamtailor.com", "recruitee.com", "breezy.hr", "jazz.co", "applytojob.com",
+  "rippling.com", "dover.com", "gem.com", "oraclecloud.com", "ultipro.com", "paylocity.com", "linkedin.com",
+]
+
+/** The kinds of field an application asks for. Real forms ask for several. */
+const APPLICATION_FIELD_KINDS: RegExp[] = [
+  /first[\s_-]?name|last[\s_-]?name|full[\s_-]?name|legal[\s_-]?name|given[\s_-]?name|family[\s_-]?name|surname/i,
+  /e-?mail/i,
+  /phone|mobile/i,
+  /resume|résumé|curriculum vitae|\bcv\b|cover[\s_-]?letter|input-type-file/i,
+  /linkedin/i,
+]
+
+/** Shown on the sign-in step in front of a form, which has no form fields yet. */
+const SIGN_IN_STEP_RE = /sign in to apply|create (an )?account/i
+
+/**
+ * Is this page an application form at all?
+ *
+ * A careers site's job search has inputs too ("Search for a role", "Enter work
+ * email"), and one can hide a stray file input, so a single match proves nothing.
+ * It takes two different kinds of application field. `signalText` is the labels
+ * and names of the page's fields across all frames, not its prose, since a job
+ * listing can say "resume" anywhere. Null means it could not be read, which proves
+ * nothing, and the result is deletion, so that must pass.
+ */
+export function isAtsHost(url: string): boolean {
+  const host = hostOf(url)
+  return !host.startsWith("api.") && !!hostMatches(host, ATS_HOSTS)
+}
+
+export function hasApplicationFields(signalText: string | null): boolean {
+  if (!signalText) return false
+  if (SIGN_IN_STEP_RE.test(signalText)) return true
+  return APPLICATION_FIELD_KINDS.filter((kind) => kind.test(signalText)).length >= 2
+}
+
+export function evaluateApplicationPage(url: string, signalText: string | null): UnsafePageVerdict {
+  const pass: UnsafePageVerdict = { blocked: false, kind: null, reason: null, signal: null }
+  const host = hostOf(url)
+  // An API endpoint on an ATS domain returns data, not a form.
+  if (!host.startsWith("api.") && hostMatches(host, ATS_HOSTS)) return pass
+  if (signalText === null || hasApplicationFields(signalText)) return pass
+  return {
+    blocked: true,
+    kind: "not_application",
+    reason: `Landed on a page that is not a job application: ${url}`,
+    signal: "no-application-fields",
+  }
+}
+
+const BOT_WALL_HOSTS = ["captcha-delivery.com", "challenges.cloudflare.com", "perimeterx.net", "hcaptcha.com", "recaptcha.net"]
+const BOT_WALL_TEXT_RE = /verify (that )?you are (a )?human|checking your browser|press (&|and) hold|are you a robot|attention required|unusual traffic/i
+
+/**
+ * A bot check standing in front of the real page. It says nothing about the
+ * posting, so it must never count as "not an application", which deletes the row.
+ */
+export function isBotWall(url: string, pageText: string): boolean {
+  if (hostMatches(hostOf(url), BOT_WALL_HOSTS)) return true
+  return (pageText || "").length < 2000 && BOT_WALL_TEXT_RE.test(pageText || "")
+}
+
+export const BOT_WALL_WAIT_MS = 45_000
+
+/** DataDome marks a directly banned IP with t=bv. Only a different IP gets past it. */
+export function isBannedBotWall(url: string): boolean {
+  return /captcha-delivery\.com/i.test(url) && /[?&]t=bv\b/i.test(url)
 }

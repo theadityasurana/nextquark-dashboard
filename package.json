@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker": "node --env-file=.env.local --import tsx scripts/application-worker.ts",
+    "dry-run": "KERNEL_DRY_RUN=1 node --env-file=.env.local --import tsx scripts/dry-run-batch.mts"
   },
   "overrides": {
     "zod": "^4.4.3"
@@ -99,6 +101,7 @@
     "@types/web-push": "^3.6.4",
     "postcss": "^8.5",
     "tailwindcss": "^4.2.0",
+    "tsx": "^4.23.15",
     "tw-animate-css": "1.3.3",
     "typescript": "5.7.3",
     "vitest": "^3.2.7"

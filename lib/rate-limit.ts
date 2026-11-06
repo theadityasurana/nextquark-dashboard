@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
- * Simple rate limiter backed by Supabase.
+ * Per-IP, fixed-window rate limiter, held in memory.
  *
- * Uses a sliding window counter per IP. No Redis required.
- * For higher traffic, swap the Supabase calls for an Upstash Redis client.
- *
- * Limits (per IP, per window):
- *   - /api/overview:          30 requests / 60s  (dashboard refresh)
- *   - /api/auto-apply*:       10 requests / 60s  (automation trigger)
- *   - /api/live-queue:        60 requests / 60s  (queue operations)
- *   - everything else:       120 requests / 60s  (general API)
+ * This used to write a Postgres row in middleware, adding a database round trip
+ * in front of EVERY API call. Limits are now per server instance rather than
+ * global, which is enough to stop a runaway client and costs no network.
  */
 
 interface RateLimit {
@@ -22,19 +16,23 @@ interface RateLimit {
 const LIMITS: Record<string, RateLimit> = {
   '/api/overview':        { requests: 30,  windowSeconds: 60 },
   '/api/auto-apply':      { requests: 10,  windowSeconds: 60 },
-  '/api/auto-apply-queue':{ requests: 10,  windowSeconds: 60 },
-  '/api/live-queue':      { requests: 60,  windowSeconds: 60 },
+  '/api/auto-apply-queue':{ requests: 30,  windowSeconds: 60 },
+  '/api/live-queue':      { requests: 120, windowSeconds: 60 },
   '/api/ats-sync':        { requests: 20,  windowSeconds: 60 },
   '/api/ats-sync-all':    { requests: 5,   windowSeconds: 60 },
   '/api/cleanup-jobs':    { requests: 5,   windowSeconds: 60 },
 }
 const DEFAULT_LIMIT: RateLimit = { requests: 120, windowSeconds: 60 }
+const MAX_TRACKED_KEYS = 10_000
+
+const counters = new Map<string, number>()
 
 function getLimit(pathname: string): RateLimit {
-  for (const [path, limit] of Object.entries(LIMITS)) {
-    if (pathname.startsWith(path)) return limit
-  }
-  return DEFAULT_LIMIT
+  // Longest prefix wins: /api/auto-apply must not shadow /api/auto-apply-queue.
+  const match = Object.keys(LIMITS)
+    .filter((path) => pathname.startsWith(path))
+    .sort((a, b) => b.length - a.length)[0]
+  return match ? LIMITS[match] : DEFAULT_LIMIT
 }
 
 function getIp(request: NextRequest): string {
@@ -46,46 +44,28 @@ function getIp(request: NextRequest): string {
 }
 
 export async function rateLimit(request: NextRequest): Promise<NextResponse | null> {
-  // Skip rate limiting for cron routes (they use CRON_SECRET auth instead)
+  // Cron routes authenticate with CRON_SECRET instead.
   if (request.nextUrl.pathname.startsWith('/api/cron')) return null
 
-  const ip = getIp(request)
   const path = request.nextUrl.pathname
   const limit = getLimit(path)
   const windowKey = Math.floor(Date.now() / (limit.windowSeconds * 1000))
-  const key = `${ip}:${path}:${windowKey}`
+  const key = `${getIp(request)}:${path}:${windowKey}`
 
-  try {
-    const supabase = createAdminClient()
-    const { data, error } = await supabase.rpc('increment_rate_limit', {
-      key_arg: key,
-      ttl_seconds: limit.windowSeconds,
-    })
+  if (counters.size > MAX_TRACKED_KEYS) counters.clear()
+  const count = (counters.get(key) ?? 0) + 1
+  counters.set(key, count)
+  if (count <= limit.requests) return null
 
-    if (error) {
-      // Fail open — a broken rate limiter must not take down the API
-      console.warn('[rate-limit] rpc error, failing open:', error.message)
-      return null
+  return NextResponse.json(
+    { error: 'Too many requests. Please slow down.' },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(limit.windowSeconds),
+        'X-RateLimit-Limit': String(limit.requests),
+        'X-RateLimit-Remaining': '0',
+      },
     }
-
-    const count = data as number
-    if (count > limit.requests) {
-      return NextResponse.json(
-        { error: 'Too many requests. Please slow down.' },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': String(limit.windowSeconds),
-            'X-RateLimit-Limit': String(limit.requests),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': String((windowKey + 1) * limit.windowSeconds),
-          },
-        }
-      )
-    }
-
-    return null // allowed
-  } catch {
-    return null // fail open
-  }
+  )
 }

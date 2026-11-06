@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useApi } from "@/lib/api-cache"
 import dynamic from "next/dynamic"
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -99,7 +100,7 @@ function CopyBtn({ value }: { value: string }) {
 }
 
 const EMPTY: DownloadAnalyticsPayload = {
-  kpis: { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 },
+  kpis: { today: 0, d7: 0, d30: 0, total: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 },
   pins: [],
   recentVisits: [],
   byCountry: [],
@@ -114,36 +115,23 @@ const EMPTY: DownloadAnalyticsPayload = {
   spotsError: null,
 }
 
-export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
-  const [data, setData] = useState<DownloadAnalyticsPayload | null>(null)
-  const [loading, setLoading] = useState(true)
+export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number; range: "30d" | "all" }) {
+  const { data: loaded, error: loadError, isLoading: loading, isUpdating, refresh: reload } = useApi<DownloadAnalyticsPayload>(`/api/download-analytics?range=${range}`)
+  const data: DownloadAnalyticsPayload | null = loaded ?? (loadError ? { ...EMPTY, error: `Failed to load download analytics (${loadError.message})` } : null)
+  const rangeLabel = range === "all" ? "all time" : "last 30 days"
   const [mapMode, setMapMode] = useState<QrMapMode>("clusters")
   const [picking, setPicking] = useState(false)
   const [spotForm, setSpotForm] = useState({ campaign: "", label: "", latitude: "", longitude: "", notes: "" })
   const [spotSaving, setSpotSaving] = useState(false)
   const [spotMsg, setSpotMsg] = useState<string | null>(null)
 
-  const reload = () => {
-    setLoading(true)
-    fetch("/api/download-analytics")
-      .then(async (r) => {
-        const text = await r.text()
-        try {
-          return JSON.parse(text) as DownloadAnalyticsPayload
-        } catch {
-          // Non-JSON body (e.g. a gateway timeout page): surface the status.
-          return { ...EMPTY, error: `Failed to load download analytics (HTTP ${r.status}${r.status === 504 ? ", database not responding" : ""})` }
-        }
-      })
-      .then((json: DownloadAnalyticsPayload) => setData(json))
-      .catch((e) => setData({ ...EMPTY, error: `Failed to load download analytics (${e instanceof Error ? e.message : "network error"})` }))
-      .finally(() => setLoading(false))
-  }
-
+  // The parent's Refresh button. Not on first render: the hook above already loads.
+  const lastRefreshKey = useRef(refreshKey)
   useEffect(() => {
-    reload()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey])
+    if (refreshKey === lastRefreshKey.current) return
+    lastRefreshKey.current = refreshKey
+    void reload()
+  }, [refreshKey, reload])
 
   const hourData = useMemo(
     () => (data?.byHour ?? []).map((d) => ({ ...d, label: hourLabel(d.hour) })),
@@ -228,9 +216,9 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
     )
   }
 
-  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
-  const geocodePct = kpis.d30 > 0 ? Math.round((kpis.gps_geocode / kpis.d30) * 100) : 0
-  const ipPlacePct = kpis.d30 > 0 ? Math.round((kpis.ip_place / kpis.d30) * 100) : 0
+  const kpis = data?.kpis ?? { today: 0, d7: 0, d30: 0, total: 0, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
+  const geocodePct = kpis.total > 0 ? Math.round((kpis.gps_geocode / kpis.total) * 100) : 0
+  const ipPlacePct = kpis.total > 0 ? Math.round((kpis.ip_place / kpis.total) * 100) : 0
   const devices = data?.devices ?? []
   const deviceTotal = devices.reduce((s, d) => s + d.value, 0)
   const tagged = (data?.posters ?? []).filter((p) => p.spot !== "(untagged QR)")
@@ -242,6 +230,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
         <div className="flex items-center gap-2">
           <QrCode className="h-4 w-4 text-primary" />
           <h2 className="text-base font-semibold tracking-tight">Link visits (all domains)</h2>
+          {isUpdating && <span className="text-[11px] text-muted-foreground">Updating…</span>}
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
           Every visit to irisjobs.live, download.nextquark.in, iris.nextquark.in and nextquark.in links (QR, job, invite, post), counted together. QR: <code className="font-mono text-[11px]">{QR_URL}</code>. Place names may come from GPS reverse geocode (BigDataCloud) or Cloudflare IP geo. Disclose location and reverse geocoding in the privacy policy.
@@ -265,16 +254,20 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Scans today" value={kpis.today.toLocaleString()} sub="IST calendar day" />
         <StatCard label="Last 7 days" value={kpis.d7.toLocaleString()} sub="rolling" />
-        <StatCard label="Last 30 days" value={kpis.d30.toLocaleString()} sub="rolling" />
+        <StatCard
+          label={range === "all" ? "All time" : "Last 30 days"}
+          value={(range === "all" ? kpis.total : kpis.d30).toLocaleString()}
+          sub={range === "all" ? `${kpis.d30.toLocaleString()} in the last 30 days` : "rolling"}
+        />
         <StatCard
           label="GPS+address"
-          value={kpis.d30 ? `${geocodePct}%` : "—"}
-          sub={`${ipPlacePct}% IP · last 30d`}
+          value={kpis.total ? `${geocodePct}%` : "—"}
+          sub={`${ipPlacePct}% IP · ${rangeLabel}`}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="Scans by country" sub="ISO country from network geo (last 30 days)">
+        <ChartCard title="Scans by country" sub={`ISO country from network geo (${rangeLabel})`}>
           <div className="overflow-x-auto max-h-56 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
@@ -411,7 +404,7 @@ export function BangaloreQrAnalytics({ refreshKey }: { refreshKey: number }) {
           </div>
         </ChartCard>
 
-        <ChartCard title="Daily scans" sub="last 14 days, IST">
+        <ChartCard title="Daily scans" sub={range === "all" ? "all time, IST" : "last 14 days, IST"}>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>

@@ -1,19 +1,13 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
-// Pages through a table's id column (PostgREST caps responses at 1000 rows).
-async function collectIds(
-  supabase: ReturnType<typeof createAdminClient>,
-  table: string,
-  column: string,
-  filter?: { column: string; value: boolean },
-): Promise<Set<string>> {
+// PostgREST caps responses at 1000 rows, so these page through.
+async function collectIds(supabase: ReturnType<typeof createAdminClient>, table: string, column: string): Promise<Set<string>> {
   const ids = new Set<string>()
   const size = 1000
   for (let from = 0; ; from += size) {
-    let q = supabase.from(table).select(column).range(from, from + size - 1)
-    if (filter) q = q.eq(filter.column, filter.value)
-    const { data, error } = await q
+    const { data, error } = await supabase.from(table).select(column).range(from, from + size - 1)
     if (error) throw new Error(`${table}: ${error.message}`)
     for (const row of (data ?? []) as unknown as Record<string, string | null>[]) {
       const id = row[column]
@@ -24,9 +18,31 @@ async function collectIds(
   return ids
 }
 
-export async function GET(request: Request) {
+type FunnelProfile = { id: string; is_onboarding_complete: boolean | null; heard_about_us: string | null }
+
+async function collectProfiles(supabase: ReturnType<typeof createAdminClient>): Promise<Map<string, FunnelProfile>> {
+  const profiles = new Map<string, FunnelProfile>()
+  const size = 1000
+  for (let from = 0; ; from += size) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, is_onboarding_complete, heard_about_us')
+      .order('id')
+      .range(from, from + size - 1)
+    if (error) throw new Error(`profiles: ${error.message}`)
+    for (const row of (data ?? []) as FunnelProfile[]) profiles.set(row.id, row)
+    if (!data || data.length < size) break
+  }
+  return profiles
+}
+
+export function GET(request: Request) {
+  return cachedRoute(request, 60_000, () => load(request))
+}
+
+async function load(request: Request) {
   const supabase = createAdminClient()
-  // ?funnel=1 adds onboarding/application flags (used by the Marketing funnel).
+  // ?funnel=1 is the Marketing page: signup facts and onboarding flags, no contact details.
   const withFunnel = new URL(request.url).searchParams.get('funnel') === '1'
 
   const allUsers: ReturnType<typeof supabase.auth.admin.listUsers> extends Promise<{ data: { users: infer U } }> ? U : never[] = []
@@ -41,27 +57,30 @@ export async function GET(request: Request) {
     page++
   }
 
-  let profileIds: Set<string> | null = null
-  let onboardedIds: Set<string> | null = null
-  let appliedIds: Set<string> | null = null
   if (withFunnel) {
     try {
-      ;[profileIds, onboardedIds, appliedIds] = await Promise.all([
-        collectIds(supabase, 'profiles', 'id'),
-        collectIds(supabase, 'profiles', 'id', { column: 'onboarding_complete', value: true }),
-        collectIds(supabase, 'live_application_queue', 'user_id'),
-      ])
+      const [profiles, appliedIds] = await Promise.all([collectProfiles(supabase), collectIds(supabase, 'live_application_queue', 'user_id')])
+      return NextResponse.json(
+        allUsers.map((user) => {
+          const profile = profiles.get(user.id)
+          return {
+            id: user.id,
+            created_at: user.created_at,
+            provider: user.app_metadata?.provider || 'email',
+            confirmed: !!user.email_confirmed_at,
+            profile_started: !!profile,
+            onboarding_complete: !!profile?.is_onboarding_complete,
+            has_applied: appliedIds.has(user.id),
+            heard_about_us: profile?.heard_about_us ?? null,
+          }
+        }),
+      )
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load funnel data' }, { status: 500 })
     }
   }
 
   const users = allUsers.map(user => ({
-    ...(withFunnel ? {
-      profile_started: profileIds!.has(user.id),
-      onboarding_complete: onboardedIds!.has(user.id),
-      has_applied: appliedIds!.has(user.id),
-    } : {}),
     id: user.id,
     email: user.email || 'No email',
     phone: user.phone || null,

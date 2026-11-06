@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isHoneypot, type HoneypotDescriptor } from "./honeypot"
+import { HONEYPOT_PROBE, isHoneypot, type HoneypotDescriptor } from "./honeypot"
 
 const field = (over: Partial<HoneypotDescriptor> = {}): HoneypotDescriptor => ({
   name: "first_name",
@@ -75,5 +75,12 @@ describe("isHoneypot", () => {
   it("gives a reason whenever it flags something", () => {
     const v = isHoneypot(field({ name: "honeypot" }))
     expect(v.reason).toBeTruthy()
+  })
+})
+
+describe("HONEYPOT_PROBE", () => {
+  it("reports page coordinates, so a scrolled page does not read as off-canvas", () => {
+    expect(HONEYPOT_PROBE).toContain("r.top + window.scrollY")
+    expect(HONEYPOT_PROBE).toContain("r.left + window.scrollX")
   })
 })

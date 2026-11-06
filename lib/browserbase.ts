@@ -17,18 +17,18 @@ interface PortalConfig {
 }
 
 const PORTAL_CONFIGS: Record<string, PortalConfig> = {
-  Greenhouse:      { maxSteps: 20, timeout: 300,  model: "google/gemini-2.5-flash" },
-  Lever:           { maxSteps: 20, timeout: 300,  model: "google/gemini-2.5-flash" },
-  Ashby:           { maxSteps: 20, timeout: 300,  model: "google/gemini-2.5-flash" },
-  Workday:         { maxSteps: 40, timeout: 600,  model: "google/gemini-2.5-flash" },
-  iCIMS:           { maxSteps: 35, timeout: 480,  model: "google/gemini-2.5-flash" },
-  SmartRecruiters: { maxSteps: 30, timeout: 420,  model: "google/gemini-2.5-flash" },
-  BambooHR:        { maxSteps: 25, timeout: 300,  model: "google/gemini-2.5-flash" },
-  Jobvite:         { maxSteps: 30, timeout: 420,  model: "google/gemini-2.5-flash" },
-  LinkedIn:        { maxSteps: 35, timeout: 480,  model: "google/gemini-2.5-flash" },
+  Greenhouse:      { maxSteps: 20, timeout: 300,  model: "google/gemini-3.6-flash" },
+  Lever:           { maxSteps: 20, timeout: 300,  model: "google/gemini-3.6-flash" },
+  Ashby:           { maxSteps: 20, timeout: 300,  model: "google/gemini-3.6-flash" },
+  Workday:         { maxSteps: 40, timeout: 600,  model: "google/gemini-3.6-flash" },
+  iCIMS:           { maxSteps: 35, timeout: 480,  model: "google/gemini-3.6-flash" },
+  SmartRecruiters: { maxSteps: 30, timeout: 420,  model: "google/gemini-3.6-flash" },
+  BambooHR:        { maxSteps: 25, timeout: 300,  model: "google/gemini-3.6-flash" },
+  Jobvite:         { maxSteps: 30, timeout: 420,  model: "google/gemini-3.6-flash" },
+  LinkedIn:        { maxSteps: 35, timeout: 480,  model: "google/gemini-3.6-flash" },
 }
 
-const DEFAULT_PORTAL_CONFIG: PortalConfig = { maxSteps: 30, timeout: 420, model: "google/gemini-2.5-flash" }
+const DEFAULT_PORTAL_CONFIG: PortalConfig = { maxSteps: 30, timeout: 420, model: "google/gemini-3.6-flash" }
 
 function getPortalConfig(portalName: string): PortalConfig {
   return PORTAL_CONFIGS[portalName] || DEFAULT_PORTAL_CONFIG

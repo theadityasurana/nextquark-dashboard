@@ -90,32 +90,19 @@ function mapApplication(a: Record<string, unknown>): Application {
   }
 }
 
-const fetcher = async (url: string) => {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) {
-      console.log("[v0] fetcher error for", url, "status:", res.status)
-      return []
-    }
-    const data = await res.json()
-    if (Array.isArray(data)) return data
-    if (data && Array.isArray(data.data)) return data.data
-    return []
-  } catch (err) {
-    console.log("[v0] fetcher exception for", url, err)
-    return []
-  }
+// These throw on failure so a Supabase error keeps the last good data on screen,
+// rather than replacing it with an empty list.
+const jobsFetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
+  return res.json()
 }
 
-const jobsFetcher = async (url: string) => {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return { data: [], total: 0 }
-    return await res.json()
-  } catch (err) {
-    console.log("[v0] jobsFetcher exception", err)
-    return { data: [], total: 0 }
-  }
+const fetcher = async (url: string) => {
+  const data = await jobsFetcher(url)
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.data)) return data.data
+  return []
 }
 
 interface DataContextType {
@@ -145,17 +132,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [jobsPage, setJobsPage] = useState(1)
   const [accumulatedJobs, setAccumulatedJobs] = useState<Job[]>([])
 
-  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR("/api/companies?all=true", fetcher, {
-    fallbackData: [],
-    revalidateOnFocus: false,
-  })
+  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR("/api/companies?all=true", fetcher)
   const { data: rawJobsResponse, isLoading: loadingJobs } = useSWR(
     `/api/jobs?page=${jobsPage}&limit=${JOBS_PER_PAGE}`,
     jobsFetcher,
-    {
-      fallbackData: { data: [], total: 0 },
-      revalidateOnFocus: false,
-    }
   )
 
   useEffect(() => {
@@ -296,7 +276,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateJob,
         refreshCompanies,
         refreshJobs,
-        isLoading: loadingCompanies || loadingJobs || loadingApplications,
+        isLoading: (loadingCompanies && !rawCompanies) || (loadingJobs && !rawJobsResponse) || loadingApplications,
       }}
     >
       {children}

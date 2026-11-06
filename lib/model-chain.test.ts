@@ -43,7 +43,7 @@ describe("buildModelChain", () => {
   it("puts direct Gemini ahead of every OpenRouter entry", () => {
     for (const cua of [false, true]) {
       const l = labels(cua)
-      const gemini = l.indexOf("google/gemini-2.5-flash")
+      const gemini = l.indexOf("google/gemini-3.6-flash")
       const firstOpenRouter = l.findIndex((x) => x.startsWith("openrouter/"))
       expect(gemini, `cua=${cua}`).toBeGreaterThanOrEqual(0)
       expect(firstOpenRouter, `cua=${cua}`).toBeGreaterThan(gemini)
@@ -76,22 +76,10 @@ describe("buildModelChain", () => {
     expect(free).toHaveLength(4)
   })
 
-  // Stagehand re-derives the provider from the vendor prefix and rejects anything
-  // it does not recognise, so an unroutable id is not a long shot — it is a
-  // guaranteed failure, and a slow one, in front of a model that works.
-  it("offers Stagehand only free models it can actually route", () => {
+  it("offers Stagehand any vendor's free model, capped", () => {
     const free = labels(false).filter((x) => x.startsWith("openrouter-free/"))
-    expect(free).toEqual([
-      "openrouter-free/google/gemma-4-31b-it:free",
-      "openrouter-free/google/gemma-4-26b-a4b-it:free",
-      "openrouter-free/openai/some-free-model:free",
-    ])
-  })
-
-  it("falls straight through to paid when no free model is routable", () => {
-    const l = labels(false, KEYS, ["minimax/m:free", "z-ai/g:free", "nvidia/n:free"])
-    expect(l.some((x) => x.startsWith("openrouter-free/"))).toBe(false)
-    expect(l[0]).toBe("google/gemini-2.5-flash")
+    expect(free).toHaveLength(4)
+    expect(free[0]).toBe("openrouter-free/minimax/minimax-m3:free")
   })
 
   it("offers no free models when there is no OpenRouter key to call them with", () => {
@@ -107,7 +95,7 @@ describe("buildModelChain", () => {
 
   it("degrades to OpenRouter alone when no direct key is configured", () => {
     const l = labels(false, { openRouterKey: "or-key", geminiKey: "", openAiKey: "" })
-    expect(l).toHaveLength(6)
+    expect(l).toHaveLength(7)
     expect(l.every((x) => x.startsWith("openrouter"))).toBe(true)
   })
 
@@ -124,15 +112,15 @@ describe("buildModelChain with Groq", () => {
     const l = labels(false, WITH_GROQ)
     expect(l[0]).toBe("groq/openai/gpt-oss-120b")
     expect(l[1]).toBe("groq/openai/gpt-oss-20b")
-    expect(l.indexOf("google/gemini-2.5-flash")).toBe(2)
+    expect(l.indexOf("google/gemini-3.6-flash")).toBe(2)
   })
 
-  // Groq's ids are `openai/...` in its own catalogue, which is what lets
-  // Stagehand route them without any rewriting.
-  it("uses model ids Stagehand can route", async () => {
-    const { isStagehandRoutableModel } = (await import("./kernel")) as any
-    expect(isStagehandRoutableModel("openai/gpt-oss-120b")).toBe(true)
-    expect(isStagehandRoutableModel("openai/gpt-oss-20b")).toBe(true)
+  // Stagehand strips everything up to the first slash before calling the server.
+  it("keeps the full model id after Stagehand strips its route", () => {
+    const chain = buildModelChain(false, { ...KEYS, groqKey: "gsk-key" }, ["google/gemma-4-31b-it:free"])
+    const name = (label: string) => (chain.find((c) => c.label === label) as any).stagehandModel.modelName
+    expect(name("groq/openai/gpt-oss-120b")).toBe("openai/openai/gpt-oss-120b")
+    expect(name("openrouter-free/google/gemma-4-31b-it:free")).toBe("openai/google/gemma-4-31b-it:free")
   })
 
   it("keeps every other provider as a fallback behind it", () => {
@@ -143,11 +131,29 @@ describe("buildModelChain with Groq", () => {
   })
 
   it("falls back to the old order when no Groq key is set", () => {
-    expect(labels(false)[0]).toBe("google/gemini-2.5-flash")
+    expect(labels(false)[0]).toBe("google/gemini-3.6-flash")
   })
 
   it("can run on Groq alone", () => {
     const l = labels(false, { openRouterKey: "", geminiKey: "", openAiKey: "", groqKey: "gsk-key" })
     expect(l).toEqual(["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"])
+  })
+})
+
+describe("SUBMISSION_CHECK_CODE", () => {
+  it("is valid JavaScript, since a syntax error reads as no confirmation on every run", async () => {
+    const { SUBMISSION_CHECK_CODE } = (await import("./kernel")) as any
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+    expect(() => new AsyncFunction("page", SUBMISSION_CHECK_CODE)).not.toThrow()
+  })
+})
+
+describe("buildEnforceEmailCode", () => {
+  it("is valid JavaScript with the address embedded safely", async () => {
+    const { buildEnforceEmailCode } = (await import("./kernel")) as any
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+    const code = buildEnforceEmailCode(`a"b@nextquark.in`)
+    expect(() => new AsyncFunction("page", code)).not.toThrow()
+    expect(code).toContain(JSON.stringify(`a"b@nextquark.in`))
   })
 })

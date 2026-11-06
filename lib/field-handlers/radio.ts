@@ -25,7 +25,7 @@ export const radioHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const host = document.querySelector('[${ctx.targetAttr}="1"]');
+const host = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!host) return { handled: true, filled: false, reason: 'element-vanished' };
 
 // The tagged node may be the group container OR one radio inside it.

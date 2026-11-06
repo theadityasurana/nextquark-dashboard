@@ -176,7 +176,9 @@ export const HONEYPOT_PROBE = `
     tabIndex: ti === null ? null : parseInt(ti, 10),
     autocomplete: (el.getAttribute('autocomplete') || '').toLowerCase() || null,
     ariaHidden: el.getAttribute('aria-hidden') === 'true',
-    rect: { width: r.width, height: r.height, top: r.top, left: r.left },
+    // Page coordinates. Rects are relative to the viewport, so after scrolling
+    // down, a real First Name field reads as off-canvas at a large negative top.
+    rect: { width: r.width, height: r.height, top: r.top + window.scrollY, left: r.left + window.scrollX },
     ancestorRect,
     clipped,
     hiddenOverflowAncestor,

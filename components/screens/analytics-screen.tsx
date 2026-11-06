@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
+import { useApi } from "@/lib/api-cache"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -67,40 +68,23 @@ function StarRow({ star, count, max }: { star: number; count: number; max: numbe
 }
 
 export function AnalyticsScreen() {
-  const [jobCount, setJobCount]     = useState(0)
-  const [apps, setApps]             = useState<AApp[]>([])
-  const [ios, setIos]               = useState<any>(null)
-  const [loading, setLoading]       = useState(true)
-  const [iosLoading, setIosLoading] = useState(true)
+  const platform = useApi<{ jobCount?: number; applications?: any[] }>("/api/analytics")
+  const iosApi = useApi<any>("/api/appstore")
+  const jobCount = platform.data?.jobCount ?? 0
+  const apps = useMemo<AApp[]>(() => (platform.data?.applications ?? []).map((a: any) => ({
+    id: a.id, jobId: a.job_id, company_name: a.company_name,
+    status: a.status, createdAt: a.created_at,
+  })), [platform.data])
+  const ios = iosApi.data ?? null
+  const loading = platform.isLoading
+  const iosLoading = iosApi.isLoading
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter]         = useState("all")
   const [swipesPage, setSwipesPage] = useState(1)
 
-  const loadPlatform = async () => {
-    const res = await fetch("/api/analytics")
-    const d   = await res.json()
-    if (d.jobCount !== undefined) setJobCount(d.jobCount)
-    if (d.applications) setApps(d.applications.map((a: any) => ({
-      id: a.id, jobId: a.job_id, company_name: a.company_name,
-      status: a.status, createdAt: a.created_at,
-    })))
-  }
-
-  const loadIos = async () => {
-    setIosLoading(true)
-    const res = await fetch("/api/appstore")
-    const d   = await res.json()
-    if (!d.error) setIos(d)
-    setIosLoading(false)
-  }
-
-  useEffect(() => {
-    Promise.all([loadPlatform(), loadIos()]).finally(() => setLoading(false))
-  }, [])
-
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([loadPlatform(), loadIos()])
+    await Promise.all([platform.refresh(), iosApi.refresh()])
     setRefreshing(false)
   }
 

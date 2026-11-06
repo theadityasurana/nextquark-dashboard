@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { evaluatePage, evaluateUrl } from "./unsafe-page"
+import { evaluateApplicationPage, isAtsHost, isBannedBotWall, isBotWall, evaluatePage, evaluateUrl } from "./unsafe-page"
 
 const GREENHOUSE = "https://boards.greenhouse.io/acme/jobs/4012345"
 
@@ -90,5 +90,75 @@ describe("evaluateUrl", () => {
 
   it("does not match a lookalike host", () => {
     expect(evaluateUrl("https://nottoptal.com/careers").blocked).toBe(false)
+  })
+})
+
+describe("evaluateApplicationPage", () => {
+  it("rejects a careers search page, even though it has inputs", () => {
+    const text = "Search for a role. Enter work email. United States. Choose your country."
+    expect(evaluateApplicationPage("https://stripe.com/jobs/search?gh_jid=8137997", text).blocked).toBe(true)
+  })
+  it("rejects a listing page holding one stray file input", () => {
+    expect(evaluateApplicationPage("https://www.anduril.com/open-roles", "search jobs input-type-file").blocked).toBe(true)
+  })
+  it("accepts a sign-in step in front of a form", () => {
+    expect(evaluateApplicationPage("https://acme.com/apply", "Create an account to continue").blocked).toBe(false)
+  })
+  it("rejects a careers page with no form", () => {
+    expect(evaluateApplicationPage("https://avathon.com/company/careers/", "Join our team. Open roles.").kind).toBe("not_application")
+  })
+  it("rejects an API endpoint on an ATS domain", () => {
+    expect(evaluateApplicationPage("https://api.smartrecruiters.com/v1/companies/x/postings/1", '{"id":"1"}').blocked).toBe(true)
+  })
+  it("accepts a form on a company site", () => {
+    expect(evaluateApplicationPage("https://acme.com/apply", "First Name Last Name Email Resume").blocked).toBe(false)
+    expect(evaluateApplicationPage("https://acme.com/apply", "Email input-type-file").blocked).toBe(false)
+  })
+  it("trusts ATS hosts, whose forms can hide in shadow DOM", () => {
+    expect(evaluateApplicationPage("https://jobs.smartrecruiters.com/acme/1", "").blocked).toBe(false)
+    expect(evaluateApplicationPage("https://boards.greenhouse.io/acme/jobs/1", "").blocked).toBe(false)
+  })
+  it("does not delete when the page could not be read", () => {
+    expect(evaluateApplicationPage("https://acme.com/x", null).blocked).toBe(false)
+  })
+})
+
+describe("job descriptions must not read as a request", () => {
+  it("allows a posting that merely discusses payments", () => {
+    const jd = "You will build credit card processing, billing address validation, payment details storage and bank account linking."
+    expect(evaluatePage(GREENHOUSE, jd).blocked).toBe(false)
+  })
+  it("still blocks an actual request", () => {
+    expect(evaluatePage(GREENHOUSE, "Please enter your billing address").kind).toBe("unsafe")
+    expect(evaluatePage(GREENHOUSE, "Provide your bank account").kind).toBe("unsafe")
+  })
+})
+
+describe("isBotWall", () => {
+  it("recognises a bot check by host", () => {
+    expect(isBotWall("https://geo.captcha-delivery.com/captcha/?initialCid=abc", "")).toBe(true)
+  })
+  it("recognises a short challenge page by its text", () => {
+    expect(isBotWall("https://acme.com/jobs/1", "Checking your browser before accessing acme.com")).toBe(true)
+  })
+  it("leaves a real page alone, even one that mentions the words", () => {
+    expect(isBotWall("https://acme.com/jobs/1", "First Name Last Name Resume")).toBe(false)
+    expect(isBotWall("https://acme.com/jobs/1", `Are you a robot enthusiast? ${"Job description. ".repeat(200)}`)).toBe(false)
+  })
+})
+
+describe("isBannedBotWall", () => {
+  it("reads DataDome's ban marker", () => {
+    expect(isBannedBotWall("https://geo.captcha-delivery.com/captcha/?initialCid=a&t=bv&cid=b")).toBe(true)
+    expect(isBannedBotWall("https://geo.captcha-delivery.com/captcha/?initialCid=a&t=fe&cid=b")).toBe(false)
+    expect(isBannedBotWall("https://acme.com/?t=bv")).toBe(false)
+  })
+})
+
+describe("isAtsHost", () => {
+  it("knows ATS hosts, but not their API endpoints or company sites", () => {
+    expect(isAtsHost("https://job-boards.greenhouse.io/acme/jobs/1")).toBe(true)
+    expect(isAtsHost("https://api.smartrecruiters.com/v1/companies/x")).toBe(false)
+    expect(isAtsHost("https://stripe.com/jobs/search")).toBe(false)
   })
 })

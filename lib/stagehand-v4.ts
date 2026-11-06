@@ -34,6 +34,7 @@
  *     spend. See {@link pickStagehandModel}.
  */
 
+import { PRIMARY_GEMINI_MODEL } from "./llm-models"
 import type { z } from "zod/v4"
 
 /** A model this seam can hand to Stagehand v4. */
@@ -74,7 +75,7 @@ export function pickStagehandModel(keys: {
 export function buildV4ModelChain(keys: { geminiKey?: string; openAiKey?: string }): V4ModelChoice[] {
   const chain: V4ModelChoice[] = []
   if (keys.geminiKey) {
-    chain.push({ modelName: "google/gemini-2.5-flash", apiKey: keys.geminiKey, label: "gemini-2.5-flash" })
+    chain.push({ modelName: PRIMARY_GEMINI_MODEL, apiKey: keys.geminiKey, label: PRIMARY_GEMINI_MODEL.replace("google/", "") })
   }
   if (keys.openAiKey) {
     chain.push({ modelName: "openai/gpt-4.1-mini", apiKey: keys.openAiKey, label: "gpt-4.1-mini" })

@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest"
 import {
+  degreeFamilyOption,
+  mustReplaceExisting,
+  lastResortAnswer,
+  shortenForSingleLine,
+  favorableAnswer,
   routeField,
   validateAnswerForField,
   isBooleanChoice,
   looksLikeEssay,
   shapeOf,
   leastCommittalOption,
+  plausibleOptionsFor,
   type PolicyField,
 } from "./answer-policy"
 
@@ -1169,5 +1175,152 @@ describe("credential and clearance attestations", () => {
       USER
     )
     expect(r).toMatchObject({ route: "choice", value: "Yes" })
+  })
+})
+
+describe("favorableAnswer", () => {
+  const yesNo = ["Yes", "No"]
+  it("answers yes to eligibility", () => {
+    expect(favorableAnswer("Are you legally authorized to work in the US?", yesNo)).toBe("Yes")
+    expect(favorableAnswer("Are you authorized to work without sponsorship?", yesNo)).toBe("Yes")
+  })
+  it("answers no to sponsorship and criminal history", () => {
+    expect(favorableAnswer("Will you now or in the future require visa sponsorship?", yesNo)).toBe("No")
+    expect(favorableAnswer("Have you ever been convicted of a felony?", yesNo)).toBe("No")
+  })
+  it("leaves ordinary questions to the normal chain", () => {
+    expect(favorableAnswer("Why do you want to work here?", [])).toBeNull()
+    expect(favorableAnswer("Years of Python experience?", ["0-2", "3-5"])).toBeNull()
+  })
+  it("matches worded options and gives up when none fit", () => {
+    expect(favorableAnswer("Do you require sponsorship?", ["Yes, I do", "No, I do not"])).toBe("No, I do not")
+    expect(favorableAnswer("Citizenship status", ["US Citizen", "Other"])).toBeNull()
+  })
+  it("only applies when the run opts in", () => {
+    const field = { label: "Have you been convicted of a felony?", kind: "radio", options: yesNo } as any
+    expect(routeField(field, {}).route).toBe("sensitive")
+    expect(routeField(field, { positiveAnswers: true })).toMatchObject({ route: "choice", value: "No" })
+  })
+})
+
+describe("degreeFamilyOption", () => {
+  const options = ["Associate's Degree", "Bachelor's Degree", "Doctor of Philosophy (Ph.D.)", "Master of Business Administration (M.B.A.)", "Master's Degree", "Other"]
+  it("maps degree names to the level a form offers", () => {
+    expect(degreeFamilyOption("BTech", options)).toBe("Bachelor's Degree")
+    expect(degreeFamilyOption("B.E.", options)).toBe("Bachelor's Degree")
+    expect(degreeFamilyOption("M.Tech", options)).toBe("Master's Degree")
+    expect(degreeFamilyOption("PhD", options)).toBe("Doctor of Philosophy (Ph.D.)")
+    expect(degreeFamilyOption("MBA", options)).toBe("Master of Business Administration (M.B.A.)")
+  })
+  it("leaves unknown degrees to the caller", () => {
+    expect(degreeFamilyOption("Certificate in Pottery", options)).toBeNull()
+  })
+})
+
+describe("shortenForSingleLine", () => {
+  it("keeps the first sentence of an essay", () => {
+    expect(shortenForSingleLine(`I most recently worked at Acme as an engineer. ${"More detail here. ".repeat(30)}`)).toBe("I most recently worked at Acme as an engineer.")
+  })
+  it("cuts at a word boundary when the first sentence is too long", () => {
+    const short = shortenForSingleLine("word ".repeat(100))
+    expect(short.length).toBeLessThanOrEqual(200)
+    expect(short.endsWith("word")).toBe(true)
+  })
+  it("leaves a short answer alone", () => {
+    expect(shortenForSingleLine("Acme Corp")).toBe("Acme Corp")
+  })
+})
+
+describe("most recent employer questions", () => {
+  const profile = { experienceEntries: [{ company: "Acme Corp", title: "Engineer", isCurrent: true }] }
+  it("answers from the profile, not the model", () => {
+    const route = routeField({ label: "Where have you most recently worked?", kind: "text", required: true, options: [] } as any, profile)
+    expect(route).toMatchObject({ value: "Acme Corp" })
+  })
+})
+
+describe("lastResortAnswer", () => {
+  const user = { firstName: "Asha", lastName: "Rao", name: "Asha Rao", email: "a@x.in", phone: "9131852613", location: "Bangalore", bio: "Engineer." }
+  const ask = (label: string, kind = "text", options: string[] = []) => lastResortAnswer({ label, kind, options }, user)
+
+  it("takes a positive option when a dropdown offers one", () => {
+    expect(ask("Do you have experience with Kafka?", "select", ["Yes", "No"])).toBe("Yes")
+    expect(ask("Are you authorized to work here?", "radio", ["Yes", "No"])).toBe("Yes")
+    expect(ask("Will you require sponsorship?", "radio", ["Yes", "No"])).toBe("No")
+  })
+  it("always picks a real option from a list with no yes", () => {
+    expect(ask("Preferred office", "select", ["Austin", "Boston"])).toBe("Boston")
+  })
+  it("fits the answer to what a text field asks", () => {
+    expect(ask("Years of Python experience")).toBe("3")
+    expect(ask("Portfolio website")).toContain("linkedin")
+    expect(ask("How did you hear about us?")).toBe("LinkedIn")
+    expect(ask("Current city")).toBe("Bangalore")
+    expect(ask("Why do you want this job?", "textarea")).toBe("Engineer.")
+  })
+  it("answers a question it knows nothing about", () => {
+    expect(ask("Favourite colour")).toBe("Yes")
+  })
+  it("leaves files and option-less dropdowns to their handlers", () => {
+    expect(ask("Resume", "file")).toBeNull()
+    expect(ask("Preferred team", "typeahead")).toBeNull()
+    expect(ask("Preferred team", "select")).toBeNull()
+  })
+  it("types a query into a location or country search box", () => {
+    expect(ask("Country", "typeahead")).toBe("India")
+    expect(ask("Location (City)", "typeahead")).toBe("Bangalore")
+    expect(lastResortAnswer({ label: "Location (City)", kind: "typeahead", options: [] }, {})).toBe("Bangalore, India")
+  })
+})
+
+describe("mustReplaceExisting", () => {
+  const proxy = "nikhil.pratapsingh@nextquark.in"
+  it("replaces a personal address that autofill put in", () => {
+    expect(mustReplaceExisting("Email", "singhnikhil@gmail.com", proxy)).toBe(true)
+    expect(mustReplaceExisting("Confirm your email", "singhnikhil@gmail.com", proxy)).toBe(true)
+  })
+  it("leaves the proxy address alone, whatever its case", () => {
+    expect(mustReplaceExisting("Email", "Nikhil.PratapSingh@nextquark.in", proxy)).toBe(false)
+  })
+  it("leaves every other filled field alone", () => {
+    expect(mustReplaceExisting("LinkedIn Profile", "https://linkedin.com/in/a", "https://github.com/a")).toBe(false)
+    expect(mustReplaceExisting("Phone", "9131852613", "9000000001")).toBe(false)
+  })
+})
+
+describe("optional profile links", () => {
+  const field = (label: string, required = false): PolicyField => ({ label, kind: "text", required, options: [], key: label })
+
+  it("never writes anything into an optional Facebook field", () => {
+    expect(routeField(field("Facebook"), USER).route).toBe("skip")
+    expect(routeField(field("Instagram profile"), USER).route).toBe("skip")
+  })
+
+  it("still treats a question about Facebook as a question", () => {
+    expect(routeField({ ...field("Why do you want to work at Facebook?"), kind: "textarea" }, USER).route).toBe("llm")
+  })
+
+  it("skips SmartRecruiters' optional links even when the profile has them", () => {
+    const user = { ...USER, linkedinUrl: "https://linkedin.com/in/a", githubUrl: "https://github.com/a", skipOptionalProfileLinks: true }
+    for (const label of ["LinkedIn", "Facebook", "X (fka Twitter)", "Website"]) expect(routeField(field(label), user).route).toBe("skip")
+  })
+
+  it("still answers a required link there", () => {
+    const user = { ...USER, linkedinUrl: "https://linkedin.com/in/a", skipOptionalProfileLinks: true }
+    expect(routeField(field("LinkedIn", true), user).route).toBe("profile")
+  })
+
+  it("leaves other portals' LinkedIn alone", () => {
+    expect(routeField(field("LinkedIn"), { ...USER, linkedinUrl: "https://linkedin.com/in/a" }).route).toBe("profile")
+  })
+})
+
+describe("plausibleOptionsFor", () => {
+  it("removes the form controls a live Ashby run offered as locations", () => {
+    expect(plausibleOptionsFor("Where are you currently located?", ["Yes", "No", "Male", "Decline to self-identify", "Kolkata, West Bengal, India"])).toEqual(["Kolkata, West Bengal, India"])
+  })
+
+  it("leaves other questions alone", () => {
+    expect(plausibleOptionsFor("Are you authorized?", ["Yes", "No"])).toEqual(["Yes", "No"])
   })
 })

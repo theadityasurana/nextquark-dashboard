@@ -1,5 +1,8 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createClient } from "@/lib/supabase/server"
 import { skillDomain } from "@/lib/domain-skills"
+import { summarizeRunLogs } from "@/lib/run-health"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +21,7 @@ export const dynamic = "force-dynamic"
  * point: a "learning" page that carries hand-written prose is a changelog
  * wearing a disguise.
  */
-export async function GET() {
+async function load(request: Request) {
   try {
     const supabase = await createClient()
 
@@ -102,7 +105,7 @@ export async function GET() {
     // `status` is not trustworthy on its own: the queue marks a run "completed"
     // even when the portal refused it, with the reason in error_message. A
     // submission is only real when nothing came back as an error.
-    const submitted = (r: { error_message: string | null }) => !r.error_message
+    const submitted = (r: { status?: string | null }) => r.status === "completed"
 
     // ─── A row that never ran is not a success ───
     //
@@ -111,7 +114,7 @@ export async function GET() {
     // scored those as wins: stripe.com read 3/3 (100%) with no recorded time at
     // all. A run has evidence of having happened when it recorded a duration or
     // a failure; anything else is not an attempt yet.
-    const executed = runs.filter((r) => r.processing_time_ms != null || r.error_message != null)
+    const executed = runs.filter((r) => r.status === "completed" || r.processing_time_ms != null || r.error_message != null)
 
     const outcomeMap = new Map<string, { domain: string; attempts: number; submitted: number; totalMs: number; timed: number; reasons: Map<string, number> }>()
     for (const r of executed) {
@@ -149,9 +152,33 @@ export async function GET() {
       at: r.created_at,
     }))
 
+    // ─── What is going wrong, across runs ───
+    const admin = createAdminClient()
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const [{ data: healthLogs }, { data: queueRows }, { data: removed }] = await Promise.all([
+      admin
+        .from("application_logs")
+        .select("application_id, message")
+        .gte("timestamp", since)
+        .or("message.ilike.%[Result]%,message.ilike.%NOT FILLED%,message.ilike.%Post-submit validation%,message.ilike.%last-resort answer%,message.ilike.%[Refill] summary%")
+        .order("timestamp", { ascending: false })
+        .limit(5000),
+      admin.from("live_application_queue").select("status"),
+      admin.from("removed_applications").select("reason"),
+    ])
+    const queue: Record<string, number> = {}
+    for (const row of queueRows ?? []) queue[row.status] = (queue[row.status] ?? 0) + 1
+    const removedReasons: Record<string, number> = {}
+    for (const row of removed ?? []) {
+      const reason = String(row.reason).replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 70)
+      removedReasons[reason] = (removedReasons[reason] ?? 0) + 1
+    }
+    const health = { ...summarizeRunLogs(healthLogs ?? []), queue, removedReasons }
+
     return Response.json({
       domains,
       answerStats,
+      health,
       outcomes,
       recentRuns,
       unavailable: Object.keys(unavailable).length ? unavailable : null,
@@ -162,4 +189,8 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+export function GET(request: Request) {
+  return cachedRoute(request, 120_000, () => load(request))
 }

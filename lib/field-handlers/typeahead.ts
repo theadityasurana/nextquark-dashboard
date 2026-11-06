@@ -27,12 +27,13 @@ export const typeaheadHandler: FieldHandler = {
 
   vmCode(ctx: HandlerContext): string {
     return `
-const el = document.querySelector('[${ctx.targetAttr}="1"]');
+const el = nqDeepOne('[${ctx.targetAttr}="1"]');
 if (!el) return { handled: true, filled: false, reason: 'element-vanished' };
 
 const WANT = ${JSON.stringify(ctx.value)};
 const OPT_ATTR = 'data-nq-opt';
-const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+// Each element type has its own setter; the wrong one throws Illegal invocation.
+const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
 
 // Type, then wait for the widget to actually react rather than for a fixed
 // 1400ms. Returns whether anything moved: a false here means the listbox never
@@ -50,10 +51,17 @@ const typeInto = async (text) => {
 };
 
 const readOptions = () => {
-  document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+  nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
   const seen = new Set();
   const out = [];
-  Array.from(document.querySelectorAll(${JSON.stringify(ctx.optionSelector)})).forEach((n) => {
+  // The widget's own list when it names one. Ashby's selector also matches the
+  // form's Yes/No and Male/Female controls, which were offered as places to live.
+  const popupId = el.getAttribute('aria-controls');
+  const popup = popupId ? nqDeepOne('#' + CSS.escape(popupId)) : null;
+  const candidates = popup
+    ? nqDeepAll(${JSON.stringify(ctx.optionSelector)}, popup)
+    : nqDeepAll(${JSON.stringify(ctx.optionSelector)}).filter((n) => n.tagName !== 'BUTTON' && !n.querySelector('input') && !n.closest('label'));
+  candidates.forEach((n) => {
     const r = n.getBoundingClientRect();
     const s = getComputedStyle(n);
     if (!(r.width > 0 && r.height > 0) || s.display === 'none' || s.visibility === 'hidden') return;
@@ -65,6 +73,16 @@ const readOptions = () => {
     out.push(text);
   });
   return out.slice(0, 60);
+};
+
+// Suggestions come from a request, so they can arrive after the first DOM change.
+const readOptionsWhenReady = async () => {
+  let found = readOptions();
+  for (let i = 0; i < 16 && !found.length; i++) {
+    await sleep(250);
+    found = readOptions();
+  }
+  return found;
 };
 
 // ─── react-select, which mostly cannot be typed into at all ───
@@ -117,9 +135,9 @@ if (looksReactSelect) {
     : '';
 
   const readScoped = () => {
-    document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
-    const nodes = scoped ? Array.from(document.querySelectorAll(scoped)) : [];
-    const list = nodes.length ? nodes : Array.from(document.querySelectorAll(${JSON.stringify(ctx.optionSelector)}));
+    nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+    const nodes = scoped ? Array.from(nqDeepAll(scoped)) : [];
+    const list = nodes.length ? nodes : Array.from(nqDeepAll(${JSON.stringify(ctx.optionSelector)}));
     const seen = new Set(); const out = [];
     list.forEach((n) => {
       const r = n.getBoundingClientRect();
@@ -170,17 +188,17 @@ if (looksReactSelect) {
     if (idx < 0) {
       // Close the menu so the page is left as we found it.
       fire(opener, 'mousedown'); fire(opener, 'mouseup');
-      document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+      nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
       return { handled: true, filled: false, reason: 'no-matching-option', options: opts, needsModelChoice: true };
     }
-    const node = document.querySelector('[' + OPT_ATTR + '="' + idx + '"]');
+    const node = nqDeepOne('[' + OPT_ATTR + '="' + idx + '"]');
     if (node) {
       node.scrollIntoView({ block: 'nearest' });
       // mousedown is the one react-select acts on; the rest are for widgets that
       // want a full, ordinary click.
       fire(node, 'mousedown'); fire(node, 'mouseup'); fire(node, 'click');
       await waitForMutation(1500, 200);
-      document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+      nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
 
       // ─── Confirm from the committed value, never from the click ───
       //
@@ -246,7 +264,7 @@ for (let qi = 0; qi < queries.length; qi++) {
   const reacted = await typeInto(queries[qi]);
   if (reacted) everReacted = true;
 
-  const options = readOptions();
+  const options = await readOptionsWhenReady();
   lastOptions = options;
   if (!options.length) continue;   // too narrow — widening may help
 
@@ -270,12 +288,12 @@ for (let qi = 0; qi < queries.length; qi++) {
     return { handled: true, filled: false, reason: 'no-matching-option', options, needsModelChoice: true };
   }
 
-  const node = document.querySelector('[' + OPT_ATTR + '="' + idx + '"]');
+  const node = nqDeepOne('[' + OPT_ATTR + '="' + idx + '"]');
   if (node) {
     node.click();
     // The listbox collapsing is itself the confirmation the click landed.
     await waitForMutation(1500, 200);
-    document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+    nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
 
     // ─── Did the selection actually commit? ───
     //
@@ -301,7 +319,7 @@ for (let qi = 0; qi < queries.length; qi++) {
   }
 }
 
-document.querySelectorAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
+nqDeepAll('[' + OPT_ATTR + ']').forEach(n => n.removeAttribute(OPT_ATTR));
 
 // ─── Never leave typed text behind in a picker ───
 //

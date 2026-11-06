@@ -94,6 +94,20 @@ function containsAllWords(haystack: string, needle: string): boolean {
   return false
 }
 
+/**
+ * The fields a form's error text names. Ashby runs them together in one banner:
+ * "Your form needs correctionsMissing entry for required field: Where are you currently located?"
+ */
+export function fieldsNamedInErrors(errors: string[]): string[] {
+  const out = new Set<string>()
+  for (const raw of errors) {
+    const named = [...raw.matchAll(/(?:missing entry for required field|required field(?: is)? missing|please (?:fill(?: in| out)?|complete|enter))\s*:?\s*(.+?)(?=(?:missing entry for required field|$))/gi)]
+    if (named.length) for (const m of named) out.add(m[1].trim())
+    else out.add(raw)
+  }
+  return [...out].filter(Boolean)
+}
+
 export class AnswerLedger {
   /** fieldKey → the answer chosen for it. */
   private readonly entries = new Map<string, Entry>()
@@ -185,6 +199,16 @@ export class AnswerLedger {
    * reopen "Phone type" unless the portal actually named it. Returns the keys
    * that were reopened, for logging.
    */
+  private reopen(key: string, entry: Entry): void {
+    this.settled.delete(key)
+    this.attempts.delete(key)
+    // The form refused the model's pick, so it must not be reused on the retry.
+    if (entry.method === "model-choice") {
+      this.entries.delete(key)
+      this.byQuestion.delete(normalizeQuestion(entry.label))
+    }
+  }
+
   unsettleFromErrors(errors: string[]): string[] {
     const reopened: string[] = []
     for (const raw of errors) {
@@ -199,8 +223,7 @@ export class AnswerLedger {
         // Short labels must match the error exactly.
         if (!lbl) continue
         if (lbl === err) {
-          this.settled.delete(key)
-          this.attempts.delete(key)
+          this.reopen(key, entry)
           reopened.push(key)
           continue
         }
@@ -209,11 +232,8 @@ export class AnswerLedger {
         // error about one field reopened another and the loop refilled work that
         // was already correct. Require the label to appear as WHOLE WORDS.
         if (!containsAllWords(err, lbl) && !containsAllWords(lbl, err)) continue
-        {
-          this.settled.delete(key)
-          this.attempts.delete(key)
-          reopened.push(key)
-        }
+        this.reopen(key, entry)
+        reopened.push(key)
       }
     }
     return reopened

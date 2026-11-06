@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
+import { useApi } from "@/lib/api-cache"
+import { heardAboutLabel, percentOf } from "@/lib/marketing"
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList,
@@ -111,55 +113,21 @@ interface AuthUser {
   profile_started?: boolean
   onboarding_complete?: boolean
   has_applied?: boolean
-  user_metadata: Record<string, unknown>
-}
-
-// Derive "where did you hear about us" from user_metadata
-function getReferralSource(meta: Record<string, unknown>): string {
-  const raw = (meta?.referral_source || meta?.heard_about || meta?.source || "") as string
-  if (!raw) return "Organic"
-  const lower = raw.toLowerCase()
-  if (lower.includes("twitter") || lower.includes("x.com")) return "Twitter / X"
-  if (lower.includes("linkedin")) return "LinkedIn"
-  if (lower.includes("friend") || lower.includes("referral") || lower.includes("word")) return "Word of Mouth"
-  if (lower.includes("google") || lower.includes("search")) return "Google Search"
-  if (lower.includes("product hunt")) return "Product Hunt"
-  if (lower.includes("reddit")) return "Reddit"
-  if (lower.includes("instagram")) return "Instagram"
-  if (lower.includes("youtube")) return "YouTube"
-  return raw.length > 20 ? raw.slice(0, 20) + "…" : raw
+  heard_about_us?: string | null
 }
 
 type TimeRange = "30d" | "all"
 
 export function MarketingScreen() {
-  const [users, setUsers] = useState<AuthUser[]>([])
-  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [qrRefreshKey, setQrRefreshKey] = useState(0)
   const [timeRange, setTimeRange] = useState<TimeRange>("30d")
 
-  const [loadError, setLoadError] = useState<string | null>(null)
-
   // No demo fallbacks anywhere below: on failure the page says so instead of
   // showing invented numbers.
-  const load = async () => {
-    try {
-      const res = await fetch("/api/users?funnel=1")
-      const text = await res.text()
-      let data: unknown = null
-      try { data = JSON.parse(text) } catch { /* non-JSON, e.g. a gateway timeout page */ }
-      if (res.ok && Array.isArray(data)) {
-        setUsers(data as AuthUser[])
-        setLoadError(null)
-      } else {
-        const msg = (data as { error?: string } | null)?.error
-        setLoadError(msg || `HTTP ${res.status}${res.status === 504 ? " (timed out — database not responding)" : ""}`)
-      }
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Network error")
-    }
-  }
+  const { data: loadedUsers, error: usersError, isLoading: loading, refresh: reloadUsers } = useApi<AuthUser[]>("/api/users?funnel=1")
+  const users = useMemo(() => loadedUsers ?? [], [loadedUsers])
+  const loadError = !loadedUsers && usersError ? usersError.message : null
 
   const filteredUsers = useMemo(() => {
     if (timeRange === "all") return users
@@ -168,24 +136,19 @@ export function MarketingScreen() {
     return users.filter(u => new Date(u.created_at) >= cutoff)
   }, [users, timeRange])
 
-  useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [])
-
   const handleRefresh = async () => {
     setRefreshing(true)
-    await load()
     setQrRefreshKey((k) => k + 1)
+    await reloadUsers()
     setRefreshing(false)
   }
 
   // ── Referral source breakdown ──────────────────────────────────────────────
   const referralData = useMemo(() => {
-    if (!filteredUsers.length) return []
     const map = new Map<string, number>()
     for (const u of filteredUsers) {
-      const src = getReferralSource(u.user_metadata || {})
-      map.set(src, (map.get(src) || 0) + 1)
+      const src = heardAboutLabel(u.heard_about_us)
+      if (src) map.set(src, (map.get(src) || 0) + 1)
     }
     const entries = [...map.entries()].sort((a, b) => b[1] - a[1])
     return entries.map(([name, value]) => ({ name, value }))
@@ -198,7 +161,7 @@ export function MarketingScreen() {
       count: 0,
     }))
     for (const u of filteredUsers) {
-      hours[new Date(u.created_at).getHours()].count++
+      hours[new Date(u.created_at).getUTCHours()].count++
     }
     return hours
   }, [filteredUsers])
@@ -207,7 +170,7 @@ export function MarketingScreen() {
   const signupsByDay = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => ({ day: d, count: 0 }))
     for (const u of filteredUsers) {
-      days[new Date(u.created_at).getDay()].count++
+      days[new Date(u.created_at).getUTCDay()].count++
     }
     return days
   }, [filteredUsers])
@@ -231,13 +194,12 @@ export function MarketingScreen() {
         weeks.push({ week: label, signups: count })
       }
     } else {
-      for (let i = 7; i >= 0; i--) {
-        const start = new Date(now)
-        start.setDate(now.getDate() - i * 7 - 6)
-        const end = new Date(now)
-        end.setDate(now.getDate() - i * 7)
-        const count = filteredUsers.filter(u => { const d = new Date(u.created_at); return d >= start && d <= end }).length
-        weeks.push({ week: `W${8 - i}`, signups: count })
+      for (let i = 4; i >= 0; i--) {
+        const end = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000)
+        const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const label = start.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        const count = filteredUsers.filter(u => { const d = new Date(u.created_at); return d > start && d <= end }).length
+        weeks.push({ week: label, signups: count })
       }
     }
     return weeks
@@ -264,7 +226,7 @@ export function MarketingScreen() {
     { name: "First Job Applied", value: countWhere(u => u.has_applied), fill: COLORS[4] },
   ]
 
-  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0)
+  const pct = (n: number) => percentOf(n, total)
   const confirmedPct = pct(funnelData[1].value)
 
   return (
@@ -299,7 +261,7 @@ export function MarketingScreen() {
       {/* Bangalore QR / download.nextquark.in — loads independently of user stats */}
       <div>
         <SectionLabel>Link &amp; QR visits</SectionLabel>
-        <BangaloreQrAnalytics refreshKey={qrRefreshKey} />
+        <BangaloreQrAnalytics refreshKey={qrRefreshKey} range={timeRange} />
       </div>
 
       {loading ? (
@@ -436,7 +398,7 @@ export function MarketingScreen() {
       {/* Growth */}
       <div>
         <SectionLabel>Growth</SectionLabel>
-        <ChartCard title="Weekly new signups" sub={timeRange === "all" ? "all time — new users per week" : "last 8 weeks — new users per week"}>
+        <ChartCard title="Weekly new signups" sub={timeRange === "all" ? "all time — new users per week" : "last 5 weeks — new users per week"}>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weeklyGrowth} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
@@ -465,8 +427,8 @@ export function MarketingScreen() {
           <ChartCard title="Completion steps" sub="drop-off at each onboarding stage">
             <div className="flex flex-col gap-3 py-1">
               {funnelData.map((step, i) => {
-                const pct = Math.round((step.value / funnelData[0].value) * 100)
-                const dropPct = i > 0 ? Math.round(((funnelData[i - 1].value - step.value) / funnelData[i - 1].value) * 100) : null
+                const pct = percentOf(step.value, funnelData[0].value)
+                const dropPct = i > 0 ? percentOf(funnelData[i - 1].value - step.value, funnelData[i - 1].value) : null
                 return (
                   <div key={step.name}>
                     <div className="flex items-center justify-between mb-1">
@@ -500,7 +462,7 @@ export function MarketingScreen() {
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null
                       const d = payload[0].payload
-                      const pct = Math.round((d.value / funnelData[0].value) * 100)
+                      const pct = percentOf(d.value, funnelData[0].value)
                       return (
                         <div style={TT_STYLE}>
                           <p className="font-semibold mb-1" style={{ color: d.fill }}>{d.name}</p>

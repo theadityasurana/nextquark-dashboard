@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("live_application_queue")
       .select(
-        `id, user_id, job_id, company_id, company_name, job_title, status, first_name, last_name, email, phone, location, started_at, completed_at, created_at`,
+        `id, user_id, job_id, company_name, job_title, status, first_name, last_name, email, phone, location, started_at, completed_at, created_at`,
         { count: "exact" }
       )
 
@@ -41,7 +41,6 @@ export async function GET(request: Request) {
       id: app.id,
       userId: app.user_id,
       jobId: app.job_id,
-      companyId: app.company_id,
       status: app.status,
       startedAt: app.started_at,
       completedAt: app.completed_at,

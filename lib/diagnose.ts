@@ -238,6 +238,16 @@ export function diagnose(s: RunSignals): Diagnosis {
     }
   }
 
+  if (s.unfilledRequired?.some((f) => /no form on this page/i.test(f))) {
+    return {
+      failureClass: "not_application",
+      rootCause: "No application form was found on this page.",
+      suggestedAction: "Remove this posting from the queue.",
+      permanent: true,
+      portalFault: false,
+    }
+  }
+
   if ((s.unfilledRequired?.length ?? 0) > 0) {
     return {
       failureClass: "form_incomplete",

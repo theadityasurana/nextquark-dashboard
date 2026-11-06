@@ -145,3 +145,42 @@ export function resolvePhoneCountry(userData: {
 
   return DEFAULT_COUNTRY
 }
+
+/** National number length, for dial codes where it is fixed. */
+const NATIONAL_LENGTH: Record<string, number> = { "91": 10, "1": 10, "65": 8, "971": 9 }
+
+/**
+ * The number without its dial code, for a phone box beside a country dropdown.
+ *
+ * A number may begin with its own dial digits: 9131852613 is an Indian mobile,
+ * not +91 31852613. So digits come off only when the number is written with a "+",
+ * or when what remains is the right length to be a national number.
+ */
+export function nationalNumber(rawPhone: string | null | undefined, dial: string): string {
+  const raw = (rawPhone || "").trim()
+  const digits = raw.replace(/\D/g, "")
+  const code = dial.replace(/\D/g, "")
+  if (!code || !digits.startsWith(code)) return digits
+  const rest = digits.slice(code.length)
+  if (/^(\+|00)/.test(raw)) return rest
+  const expected = NATIONAL_LENGTH[code]
+  if (expected) return rest.length === expected ? rest : digits
+  return digits.length > 10 ? rest : digits
+}
+
+/** Numbers a form will reject, or that are obviously not real. */
+function isUnusablePhone(digits: string): boolean {
+  return digits.length < 10 || /^(\d)\1+$/.test(digits) || /^0?123456789\d?$/.test(digits)
+}
+
+/**
+ * The candidate's phone, or a made-up number in the right format when theirs is
+ * missing or invalid. Test runs aim for a completed submit, which a form will
+ * refuse without a valid number.
+ */
+export function usablePhone(rawPhone: string | null | undefined, dial: string): string {
+  const raw = (rawPhone || "").trim()
+  const national = nationalNumber(raw, dial)
+  if (!isUnusablePhone(national)) return raw
+  return dial === "+91" ? "9000000001" : "2025550123"
+}

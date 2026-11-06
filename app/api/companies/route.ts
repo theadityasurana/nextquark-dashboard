@@ -1,12 +1,8 @@
-import { createClient } from "@supabase/supabase-js"
+import { cachedValue } from "@/lib/server-cache"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
 
-function getAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
+const getAdminClient = createAdminClient
 
 export async function GET(request: NextRequest) {
   const supabase = getAdminClient()
@@ -30,23 +26,23 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.log("[v0] GET /api/companies error:", error.message)
-    return NextResponse.json({ data: [], total: 0 })
+    return NextResponse.json({ data: [], total: 0, error: error.message }, { status: 500 })
   }
 
   if (!data || data.length === 0) {
     return NextResponse.json({ data: [], total: count || 0 })
   }
 
-  // Get job counts for all companies using individual count queries (avoids 1000 row limit)
-  const countMap = new Map<string, number>()
-  await Promise.all(
-    data.map(async (company) => {
-      const { count: jobCount } = await supabase
-        .from("jobs")
-        .select("*", { count: "exact", head: true })
-        .eq("company_id", company.id)
-      countMap.set(company.id, jobCount || 0)
-    })
+  const jobCounts = await cachedValue("company-job-counts", 60_000, async () => {
+    const { data, error } = await supabase.rpc("company_job_counts")
+    if (error) throw new Error(error.message)
+    return data as { company_id: string; job_count: number }[]
+  }).catch((err) => {
+    console.error("[companies] job counts failed:", err.message)
+    return []
+  })
+  const countMap = new Map<string, number>(
+    jobCounts.map((row) => [row.company_id, Number(row.job_count)])
   )
 
   const companiesWithJobCounts = data.map(company => ({

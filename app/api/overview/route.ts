@@ -1,3 +1,4 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_cache } from 'next/cache'
 
@@ -36,7 +37,7 @@ const getCachedStats = unstable_cache(
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('created_at', today),
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).eq('status', 'failed'),
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).eq('status', 'failed').gte('created_at', today),
-      supabase.from('jobs').select('*', { count: 'exact', head: true }),
+      supabase.from('jobs').select('*', { count: 'estimated', head: true }),
     ])
 
     const t = totalAll || 0
@@ -57,7 +58,7 @@ const getCachedStats = unstable_cache(
   { revalidate: 30 }
 )
 
-export async function GET(request: Request) {
+async function load(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const chartRange   = searchParams.get('chartRange')   || '24h'
@@ -132,7 +133,10 @@ export async function GET(request: Request) {
       // Right-swipe counts for job insights
       supabase
         .from('jobs')
-        .select('id, right_swipes'),
+        .select('id, right_swipes')
+        .gt('right_swipes', 0)
+        .order('right_swipes', { ascending: false })
+        .limit(1000),
 
       // Sync results
       supabase
@@ -382,4 +386,8 @@ export async function GET(request: Request) {
     console.error('Overview fetch error:', err)
     return Response.json({ error: 'Failed to fetch overview data' }, { status: 500 })
   }
+}
+
+export function GET(request: Request) {
+  return cachedRoute(request, 30_000, () => load(request))
 }
