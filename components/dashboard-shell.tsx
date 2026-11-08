@@ -9,7 +9,7 @@ import { useTheme } from "@/components/theme-provider"
 import {
   LayoutDashboard, Zap, Users, Building2, Briefcase, Bot,
   ScrollText, Settings, ChevronLeft, LogOut, Menu,
-  Mail, DollarSign, Globe, Sun, Moon, BellRing, Brain, TrendingUp, SlidersHorizontal,
+  Mail, DollarSign, Globe, Sun, Moon, BellRing, Brain, TrendingUp, SlidersHorizontal, MessageCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +35,7 @@ const navItems = [
   // Sits beside Logs on purpose: Logs is what happened, Learning is what the
   // system kept from it.
   { label: "Marketing",     href: "/marketing",  icon: TrendingUp },
+  { label: "Sales & Outreach", href: "/outreach",  icon: MessageCircle },
   { label: "Learning",      href: "/learning",    icon: Brain },
   { label: "Logs",          href: "/logs",        icon: ScrollText },
 ]
