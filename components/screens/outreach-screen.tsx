@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Search } from "lucide-react"
+import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Search } from "lucide-react"
+import { ReplyPlaybook } from "@/components/outreach-playbook"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
@@ -38,8 +39,9 @@ function CopyButton({ text, label, title }: { text: string; label?: string; titl
   )
 }
 
-function OutreachCard({ row, onToggle, onSave, onRegenerate, busy }: {
+function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }: {
   row: OutreachRow
+  onPlaybook: () => void
   onToggle: (contacted: boolean) => void
   onSave: (message: string) => void
   onRegenerate: () => void
@@ -121,6 +123,9 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, busy }: {
                   {words}/{MAX_WORDS} words
                 </span>
                 <div className="flex-1" />
+                <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1" onClick={onPlaybook} title="They replied? Open the reply playbook with their name filled in">
+                  <BookOpen className="h-3 w-3" /> They replied
+                </Button>
                 <CopyButton text={draft} label="Copy message" />
                 <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1" onClick={onRegenerate} disabled={busy}>
                   <Sparkles className={`h-3 w-3 ${busy ? "animate-pulse" : ""}`} /> Regenerate
@@ -153,6 +158,8 @@ export function OutreachScreen() {
   const [query, setQuery] = useState("")
   const [drafting, setDrafting] = useState<Set<string>>(new Set())
   const [draftingAll, setDraftingAll] = useState(false)
+  const [view, setView] = useState<"contacts" | "playbook">("contacts")
+  const [playbookName, setPlaybookName] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -248,6 +255,22 @@ export function OutreachScreen() {
         </div>
       </div>
 
+      <div className="flex items-center rounded-md border border-border/60 overflow-hidden self-start">
+        {([["contacts", "Contacts"], ["playbook", "Reply playbook"]] as const).map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-4 h-8 text-xs font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "playbook" ? (
+        <ReplyPlaybook key={playbookName} initialName={playbookName} />
+      ) : (
+      <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Signups", value: stats.total },
@@ -311,9 +334,12 @@ export function OutreachScreen() {
               onToggle={(contacted) => patch(row.userId, { contacted })}
               onSave={(message) => patch(row.userId, { message })}
               onRegenerate={() => draft([row.userId])}
+              onPlaybook={() => { setPlaybookName(row.firstName); setView("playbook"); window.scrollTo({ top: 0 }) }}
             />
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   )
