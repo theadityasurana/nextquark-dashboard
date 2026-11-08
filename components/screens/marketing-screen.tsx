@@ -212,11 +212,17 @@ export function MarketingScreen() {
       const day = u.created_at.slice(0, 10)
       map.set(day, (map.get(day) || 0) + 1)
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({
-      date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      count,
-      raw: date,
-    }))
+    const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([raw, count]) => {
+      const d = new Date(raw)
+      return {
+        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        fullDate: d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        dow: DAYS[d.getUTCDay()],
+        count,
+        raw,
+      }
+    })
   }, [filteredUsers])
 
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -421,21 +427,46 @@ export function MarketingScreen() {
           <StatCard label="Today" value={loadError ? "—" : todaySignups} sub="signups so far today" />
           <StatCard label="This Month" value={loadError ? "—" : monthSignups} sub={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })} />
         </div>
-        <ChartCard title="Daily new signups" sub={timeRange === "all" ? "all time — one point per day" : "last 30 days — one point per day"}>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailySignups} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+        <ChartCard title="Daily new signups" sub={timeRange === "all" ? "all time — scroll to see every day" : "last 30 days — scroll to see every day"}>
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div style={{ width: Math.max(dailySignups.length * 52, 400), height: 220 }}>
+              <BarChart
+                width={Math.max(dailySignups.length * 52, 400)}
+                height={220}
+                data={dailySignups}
+                margin={{ top: 8, right: 16, left: 0, bottom: 32 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(dailySignups.length / 10) - 1)} />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
-                <Tooltip content={<LineTooltip />} cursor={{ stroke: "oklch(0.7 0.18 270 / 0.2)", strokeWidth: 1 }} />
-                <Line
-                  type="monotone" dataKey="count" stroke={COLORS[2]} strokeWidth={2}
-                  dot={dailySignups.length <= 30 ? { r: 3, fill: COLORS[2], strokeWidth: 2, stroke: "oklch(0.13 0.006 265)" } : false}
-                  activeDot={{ r: 5, fill: COLORS[2], stroke: "oklch(0.13 0.006 265)", strokeWidth: 2 }}
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={48}
                 />
-              </LineChart>
-            </ResponsiveContainer>
+                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0].payload
+                    return (
+                      <div style={TT_STYLE}>
+                        <p className="font-semibold mb-0.5" style={{ color: COLORS[2] }}>{d.fullDate}</p>
+                        <p className="text-[11px] text-muted-foreground mb-1">{d.dow}</p>
+                        <p className="text-sm">{d.count} <span className="text-xs text-muted-foreground">signups</span></p>
+                      </div>
+                    )
+                  }}
+                  cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
+                />
+                <Bar dataKey="count" fill={COLORS[2]} radius={[3, 3, 0, 0]}
+                  label={{ position: "top", fontSize: 10, fill: "oklch(0.6 0.01 265)", formatter: (v: number) => v > 0 ? v : "" }}
+                />
+              </BarChart>
+            </div>
           </div>
         </ChartCard>
       </div>
