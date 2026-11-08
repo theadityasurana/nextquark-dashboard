@@ -72,6 +72,7 @@ export const PLAYBOOK: PlaybookStage[] = [
         examples: ["Looking for a switch", "Want a better package", "Working currently, exploring better roles"],
         message: `Makes sense [Name]. The hardest part of switching while working is finding time to apply, and that's the whole point of Iris. You swipe on roles in 2 minutes during a break, and our AI fills and submits every application in the background. Hundreds of new jobs land every day, and you can apply for as low as ${P.lowestPerApp} per application. Most people switching go for Pro: ${P.pro.apps} applications a month, so you can go after every good role without spending your evenings on forms.`,
         next: [{ label: "Interested", to: "how-to-upgrade" }, { label: "How much?", to: "price" }, { label: "Let me think", to: "think-about-it" }],
+        tip: "Only for people who are currently employed. Contract ended or between jobs? Use that card instead.",
       },
       {
         id: "between-jobs",
