@@ -17,7 +17,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
  * finish or the function hits maxDuration. A run cut off there stops renewing
  * its lease, and reclaim_expired_leases puts the row back for a later tick.
  */
-export const maxDuration = 800
+// The Vercel plan caps functions at 300s (a deploy with 800 was rejected).
+export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 const SESSION_STAGGER_MS = 2_000
