@@ -205,6 +205,25 @@ export function MarketingScreen() {
     return weeks
   }, [filteredUsers, users, timeRange])
 
+  // ── Daily signups ──────────────────────────────────────────────────────────
+  const dailySignups = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const u of filteredUsers) {
+      const day = u.created_at.slice(0, 10)
+      map.set(day, (map.get(day) || 0) + 1)
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({
+      date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      count,
+      raw: date,
+    }))
+  }, [filteredUsers])
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const thisMonthStr = new Date().toISOString().slice(0, 7)
+  const todaySignups = useMemo(() => filteredUsers.filter(u => u.created_at.slice(0, 10) === todayStr).length, [filteredUsers, todayStr])
+  const monthSignups = useMemo(() => filteredUsers.filter(u => u.created_at.slice(0, 7) === thisMonthStr).length, [filteredUsers, thisMonthStr])
+
   // ── Auth provider breakdown ────────────────────────────────────────────────
   const providerData = useMemo(() => {
     const map = new Map<string, number>()
@@ -393,6 +412,32 @@ export function MarketingScreen() {
             </div>
           </ChartCard>
         </div>
+      </div>
+
+      {/* Daily Signups */}
+      <div>
+        <SectionLabel>Daily Signups</SectionLabel>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <StatCard label="Today" value={loadError ? "—" : todaySignups} sub="signups so far today" />
+          <StatCard label="This Month" value={loadError ? "—" : monthSignups} sub={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })} />
+        </div>
+        <ChartCard title="Daily new signups" sub={timeRange === "all" ? "all time — one point per day" : "last 30 days — one point per day"}>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailySignups} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(dailySignups.length / 10) - 1)} />
+                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+                <Tooltip content={<LineTooltip />} cursor={{ stroke: "oklch(0.7 0.18 270 / 0.2)", strokeWidth: 1 }} />
+                <Line
+                  type="monotone" dataKey="count" stroke={COLORS[2]} strokeWidth={2}
+                  dot={dailySignups.length <= 30 ? { r: 3, fill: COLORS[2], strokeWidth: 2, stroke: "oklch(0.13 0.006 265)" } : false}
+                  activeDot={{ r: 5, fill: COLORS[2], stroke: "oklch(0.13 0.006 265)", strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
       </div>
 
       {/* Growth */}
