@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fillName, NO_PITCH_STAGES, PLAYBOOK, PRICES } from "./outreach-playbook"
+import { fillName, PLAYBOOK, PRICES } from "./outreach-playbook"
 
 describe("reply playbook", () => {
   const steps = PLAYBOOK.flatMap((s) => s.steps)
@@ -21,12 +21,6 @@ describe("reply playbook", () => {
       expect(s.message.split(/\s+/).length, s.id).toBeLessThanOrEqual(110)
       expect(s.message, s.id).toContain("[Name]")
       expect(s.message, s.id).not.toMatch(/—/)
-    }
-  })
-
-  it("the first stages stay conversational: no premium, plans, or price", () => {
-    for (const stage of PLAYBOOK.slice(0, NO_PITCH_STAGES)) {
-      for (const s of stage.steps) expect(s.message, s.id).not.toMatch(/premium|plan|price|₹|\$|upgrade|pay/i)
     }
   })
 

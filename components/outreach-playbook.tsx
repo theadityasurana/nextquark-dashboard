@@ -39,7 +39,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
     <div className="flex flex-col gap-6">
       <div className="rounded-lg border border-border/60 bg-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
-          <p className="text-sm font-medium">Find what they replied, copy the follow-up, then follow the arrow to the next step. Stages 1 and 2 are pure conversation; premium only comes up in stage 3, once they&apos;re warm.</p>
+          <p className="text-sm font-medium">Find what they replied, copy the follow-up, then follow the arrow to the next step.</p>
           <p className="text-xs text-muted-foreground mt-1">
             Goal is premium, but it stays helpful and honest. Prices come from the live plan catalog: Starter {PRICES.starter.monthly},
             Pro {PRICES.pro.monthly}, Ultra {PRICES.ultra.monthly}/month, as low as {PRICES.lowestPerApp} per application on quarterly.
