@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Maximize2, Minimize2 } from "lucide-react"
 import type { DownloadCluster, DownloadVisitPin, PosterMarker } from "@/lib/download-analytics-types"
 import { formatIst } from "@/lib/ist"
 import { placeLine } from "@/lib/geo-display"
@@ -46,6 +47,8 @@ export function BangaloreQrMap({
   const mapRef = useRef<import("leaflet").Map | null>(null)
   const layersRef = useRef<import("leaflet").LayerGroup | null>(null)
   const drawPinsRef = useRef<(() => void) | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const onPickRef = useRef(onPick)
   onPickRef.current = onPick
 
@@ -208,10 +211,57 @@ export function BangaloreQrMap({
     }
   }, [])
 
+  // Full screen: the browser's real full-screen mode where supported, and a
+  // fixed overlay covering the window either way (so it also works on iOS).
+  const toggleFullscreen = async () => {
+    const next = !fullscreen
+    setFullscreen(next)
+    try {
+      if (next && wrapRef.current?.requestFullscreen && !document.fullscreenElement) await wrapRef.current.requestFullscreen()
+      if (!next && document.fullscreenElement) await document.exitFullscreen()
+    } catch {
+      /* overlay alone is fine */
+    }
+  }
+
+  useEffect(() => {
+    // Leaving native full screen with Esc should also leave the overlay.
+    const onChange = () => { if (!document.fullscreenElement) setFullscreen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false) }
+    document.addEventListener("fullscreenchange", onChange)
+    window.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Leaflet must re-measure after its container changes size.
+    const t = setTimeout(() => mapRef.current?.invalidateSize(), 60)
+    document.body.style.overflow = fullscreen ? "hidden" : ""
+    return () => { clearTimeout(t); document.body.style.overflow = "" }
+  }, [fullscreen])
+
   return (
     <div
-      ref={elRef}
-      className={`h-[420px] w-full rounded-lg bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
-    />
+      ref={wrapRef}
+      className={fullscreen ? "fixed inset-0 z-[2000] bg-background" : "relative"}
+    >
+      <div
+        ref={elRef}
+        className={`${fullscreen ? "h-full w-full" : "h-[420px] w-full rounded-lg"} bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
+      />
+      <button
+        type="button"
+        onClick={toggleFullscreen}
+        title={fullscreen ? "Exit full screen (Esc)" : "Full screen"}
+        aria-label={fullscreen ? "Exit full screen" : "Full screen"}
+        className="absolute top-3 right-3 z-[1000] inline-flex items-center gap-1.5 rounded-md border border-border bg-background/90 px-2.5 h-8 text-xs font-medium shadow-sm backdrop-blur hover:bg-background"
+      >
+        {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+        {fullscreen ? "Exit" : "Full screen"}
+      </button>
+    </div>
   )
 }
