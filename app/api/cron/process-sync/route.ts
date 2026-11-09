@@ -3,10 +3,16 @@ import { syncCompanyJobs } from '@/lib/ats-sync'
 import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 
-// How many companies to process per cron tick.
-// Each sync hits an external ATS API — keep this low enough that the total
-// wall-clock time stays well under Vercel's 300s function timeout.
-const BATCH_SIZE = 5
+export const maxDuration = 300
+
+// How many companies to process per cron tick (every 30 min). With ~1,600
+// ATS companies scheduled once a day, 48 ticks x 40 = 1,920 syncs/day keeps
+// every company on a daily refresh.
+const BATCH_SIZE = 40
+
+// How many of those run at once. Each is capped by COMPANY_TIMEOUT_MS, so a
+// batch takes at most (BATCH_SIZE / CONCURRENCY) x 45s = 180s, under the 300s limit.
+const CONCURRENCY = 10
 
 // Per-company timeout: if one ATS API hangs, it shouldn't block the whole batch.
 const COMPANY_TIMEOUT_MS = 45_000 // 45 seconds per company
@@ -41,7 +47,7 @@ async function runSyncBatch(entries: Array<{ id: string; company_id: string }>) 
 
   // Run all companies in parallel — each has its own timeout so one slow ATS
   // can't block the others or cause the whole batch to time out on Vercel.
-  await Promise.allSettled(entries.map(async (entry) => {
+  const syncEntry = async (entry: { id: string; company_id: string }) => {
     const company = companyMap.get(entry.company_id)
 
     if (!company?.ats_type || !company?.ats_company_id) {
@@ -74,6 +80,13 @@ async function runSyncBatch(entries: Array<{ id: string; company_id: string }>) 
         .from('companies')
         .update({ sync_status: 'failed', last_synced_at: new Date().toISOString() })
         .eq('id', company.id)
+    }
+  }
+
+  const pending = [...entries]
+  await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, async () => {
+    for (let entry = pending.shift(); entry; entry = pending.shift()) {
+      try { await syncEntry(entry) } catch (err) { console.error('[process-sync] entry crashed:', err) }
     }
   }))
 }
