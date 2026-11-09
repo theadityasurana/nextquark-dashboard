@@ -237,10 +237,15 @@ export function BangaloreQrMap({
   }, [])
 
   useEffect(() => {
-    // Leaflet must re-measure after its container changes size.
-    const t = setTimeout(() => mapRef.current?.invalidateSize(), 60)
     document.body.style.overflow = fullscreen ? "hidden" : ""
-    return () => { clearTimeout(t); document.body.style.overflow = "" }
+    // Leaflet must re-measure after the container finishes resizing.
+    // Fire at 0 ms (next tick), 150 ms (CSS transition done), and 400 ms
+    // (native fullscreen animation done) so tiles always load.
+    const invalidate = () => mapRef.current?.invalidateSize({ animate: false })
+    invalidate()
+    const t1 = setTimeout(invalidate, 150)
+    const t2 = setTimeout(invalidate, 400)
+    return () => { clearTimeout(t1); clearTimeout(t2); document.body.style.overflow = "" }
   }, [fullscreen])
 
   return (
