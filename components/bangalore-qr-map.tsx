@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import type { DownloadCluster, DownloadVisitPin, PosterMarker } from "@/lib/download-analytics-types"
 import { formatIst } from "@/lib/ist"
 import { placeLine } from "@/lib/geo-display"
+import { spreadPins } from "@/lib/pin-spread"
 import "leaflet/dist/leaflet.css"
 
 export type QrMapMode = "posters" | "pins" | "clusters"
@@ -44,6 +45,7 @@ export function BangaloreQrMap({
   const elRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import("leaflet").Map | null>(null)
   const layersRef = useRef<import("leaflet").LayerGroup | null>(null)
+  const drawPinsRef = useRef<(() => void) | null>(null)
   const onPickRef = useRef(onPick)
   onPickRef.current = onPick
 
@@ -85,6 +87,10 @@ export function BangaloreQrMap({
 
       const layers = layersRef.current
       if (!layers) return
+      if (drawPinsRef.current) {
+        mapRef.current.off("zoomend", drawPinsRef.current)
+        drawPinsRef.current = null
+      }
       layers.clearLayers()
 
       if (mode === "clusters") {
@@ -124,7 +130,21 @@ export function BangaloreQrMap({
             .addTo(layers)
         }
       } else {
-        for (const pin of pins) {
+        // Every pin is drawn as its own tiny dot. Pins that share a spot on
+        // screen (same city or IP location) fan out in a small spiral so all
+        // of them are visible even fully zoomed out; redrawn on each zoom.
+        const map = mapRef.current!
+        const drawPins = () => {
+          layers.clearLayers()
+          const zoom = map.getZoom()
+          const screen = pins.map((p) => map.project([p.lat, p.lng], zoom))
+          const spread = spreadPins(screen.map((pt) => ({ x: pt.x, y: pt.y })), 8, 5)
+          pins.forEach((pin, i) => {
+            const at = map.unproject([spread[i].x, spread[i].y], zoom)
+            addPin(pin, at)
+          })
+        }
+        const addPin = (pin: DownloadVisitPin, at: import("leaflet").LatLng) => {
           const loc =
             pin.place_source === "gps_geocode"
               ? "GPS+address"
@@ -140,12 +160,12 @@ export function BangaloreQrMap({
             pin.place_source === "ip" || (!pin.place_source && pin.location_source !== "gps")
               ? `<br/><span style="opacity:.85">Approximate (network)</span>`
               : ""
-          L.circleMarker([pin.lat, pin.lng], {
-            radius: pin.location_source === "gps" ? 6 : 5,
-            color: pin.location_source === "gps" ? "#34d399" : "#c4b5fd",
-            weight: 1,
+          L.circleMarker(at, {
+            radius: 2.5,
+            color: pin.location_source === "gps" ? "#065f46" : "#4c1d95",
+            weight: 0.6,
             fillColor: pin.location_source === "gps" ? "#10b981" : "#8b5cf6",
-            fillOpacity: 0.85,
+            fillOpacity: 0.95,
           })
             .bindTooltip(
               `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${placeLineHtml}${approx}${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
@@ -153,6 +173,8 @@ export function BangaloreQrMap({
             )
             .addTo(layers)
         }
+        drawPinsRef.current = drawPins
+        map.on("zoomend", drawPins)
       }
 
       if (mapRef.current && (mode === "pins" || mode === "clusters")) {
@@ -170,6 +192,7 @@ export function BangaloreQrMap({
       }
 
       mapRef.current.invalidateSize()
+      drawPinsRef.current?.()
     })()
 
     return () => {
