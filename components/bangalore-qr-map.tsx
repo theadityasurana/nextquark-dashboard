@@ -241,11 +241,15 @@ export function BangaloreQrMap({
     // Leaflet must re-measure after the container finishes resizing.
     // Fire at 0 ms (next tick), 150 ms (CSS transition done), and 400 ms
     // (native fullscreen animation done) so tiles always load.
-    const invalidate = () => mapRef.current?.invalidateSize({ animate: false })
+    const invalidate = () => {
+      mapRef.current?.invalidateSize({ animate: false })
+      drawPinsRef.current?.()
+    }
     invalidate()
     const t1 = setTimeout(invalidate, 150)
     const t2 = setTimeout(invalidate, 400)
-    return () => { clearTimeout(t1); clearTimeout(t2); document.body.style.overflow = "" }
+    const t3 = setTimeout(invalidate, 800)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); document.body.style.overflow = "" }
   }, [fullscreen])
 
   return (
