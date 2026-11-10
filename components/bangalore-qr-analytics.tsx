@@ -117,7 +117,9 @@ const EMPTY: DownloadAnalyticsPayload = {
 
 export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number; range: "30d" | "all" }) {
   const { data: loaded, error: loadError, isLoading: loading, isUpdating, refresh: reload } = useApi<DownloadAnalyticsPayload>(`/api/download-analytics?range=${range}`)
-  const data: DownloadAnalyticsPayload | null = loaded ?? (loadError ? { ...EMPTY, error: `Failed to load download analytics (${loadError.message})` } : null)
+  const [stableData, setStableData] = useState<DownloadAnalyticsPayload | null>(null)
+  useEffect(() => { if (loaded) setStableData(loaded) }, [loaded])
+  const data: DownloadAnalyticsPayload | null = loaded ?? stableData ?? (loadError ? { ...EMPTY, error: `Failed to load download analytics (${loadError.message})` } : null)
   const rangeLabel = range === "all" ? "all time" : "last 30 days"
   const [mapMode, setMapMode] = useState<QrMapMode>("clusters")
   const [picking, setPicking] = useState(false)
@@ -211,7 +213,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
     reload()
   }
 
-  if (loading && !data) {
+  if (loading && !data && !isUpdating) {
     return (
       <div className="flex items-center justify-center h-40">
         <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
