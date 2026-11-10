@@ -125,13 +125,16 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
   const [spotSaving, setSpotSaving] = useState(false)
   const [spotMsg, setSpotMsg] = useState<string | null>(null)
 
-  // The parent's Refresh button. Not on first render: the hook above already loads.
+  // Reload when range changes or parent hits Refresh.
   const lastRefreshKey = useRef(refreshKey)
+  const lastRange = useRef(range)
   useEffect(() => {
-    if (refreshKey === lastRefreshKey.current) return
+    const rangeChanged = range !== lastRange.current
+    const refreshed = refreshKey !== lastRefreshKey.current
     lastRefreshKey.current = refreshKey
-    void reload()
-  }, [refreshKey, reload])
+    lastRange.current = range
+    if (rangeChanged || refreshed) void reload()
+  }, [refreshKey, range, reload])
 
   const hourData = useMemo(
     () => (data?.byHour ?? []).map((d) => ({ ...d, label: hourLabel(d.hour) })),
