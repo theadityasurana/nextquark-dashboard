@@ -52,6 +52,25 @@ export async function DELETE(request: Request) {
   }
 }
 
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    if (body.completeFreePending) {
+      const supabase = createAdminClient()
+      const { error } = await supabase
+        .from('live_application_queue')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('status', 'pending')
+        .eq('is_premium', false)
+      if (error) return Response.json({ error: error.message }, { status: 500 })
+      return Response.json({ success: true })
+    }
+    return Response.json({ error: 'Unknown action' }, { status: 400 })
+  } catch {
+    return Response.json({ error: 'Failed to process' }, { status: 500 })
+  }
+}
+
 export async function PATCH(request: Request) {
   try {
     const body = await request.json()

@@ -240,6 +240,18 @@ export function QueueScreen() {
     } catch (err) { console.error('Failed to delete all pending:', err) }
   }
 
+  const [completingFreePending, setCompletingFreePending] = useState(false)
+  const handleCompleteFreePending = async () => {
+    setCompletingFreePending(true)
+    try {
+      await fetch('/api/live-queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completeFreePending: true }) })
+      setApplications(prev => prev.map(a =>
+        a.status === 'pending' && !a.is_premium ? { ...a, status: 'completed' as const } : a
+      ))
+    } catch (err) { console.error('Failed to complete free pending:', err) }
+    finally { setCompletingFreePending(false) }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       // Fix #15: abort any in-flight SSE stream before deleting
@@ -315,6 +327,18 @@ export function QueueScreen() {
         </div>
         {/* Header actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {pending.filter(a => !a.is_premium).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5 text-green-600 border-green-600/30 hover:bg-green-600/10"
+              disabled={completingFreePending}
+              onClick={handleCompleteFreePending}
+            >
+              {completingFreePending ? <Loader className="h-3 w-3 animate-spin" /> : <Crown className="h-3 w-3" />}
+              Complete Free Pending ({pending.filter(a => !a.is_premium).length})
+            </Button>
+          )}
           {pending.length > 0 && (
             <Button
               variant="outline"
