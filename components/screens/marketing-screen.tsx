@@ -255,7 +255,7 @@ export function MarketingScreen() {
   const confirmedPct = pct(funnelData[1].value)
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 min-w-0 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -428,8 +428,8 @@ export function MarketingScreen() {
           <StatCard label="This Month" value={loadError ? "—" : monthSignups} sub={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })} />
         </div>
         <ChartCard title="Daily new signups" sub={timeRange === "all" ? "all time — scroll to see every day" : "last 30 days — scroll to see every day"}>
-          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-            <div style={{ width: Math.max(dailySignups.length * 52, 400), height: 220 }}>
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
+            <div style={{ width: Math.max(dailySignups.length * 52, 400), height: 220, minWidth: 0 }}>
               <BarChart
                 width={Math.max(dailySignups.length * 52, 400)}
                 height={220}
