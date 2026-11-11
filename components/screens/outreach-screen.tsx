@@ -11,7 +11,7 @@ import { countWords, MAX_WORDS } from "@/lib/outreach"
 import type { OutreachRow } from "@/lib/outreach-data"
 
 type Filter = "todo" | "done" | "all"
-const RANGES = [7, 14, 30] as const
+const RANGES = [7, 14, 30, 0] as const
 
 function daysAgo(iso: string): string {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
@@ -150,7 +150,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
 }
 
 export function OutreachScreen() {
-  const [days, setDays] = useState<number>(7)
+  const [days, setDays] = useState<number>(0)
   const [rows, setRows] = useState<OutreachRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -165,7 +165,7 @@ export function OutreachScreen() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/outreach?days=${days}`, { cache: "no-store" })
+      const res = await fetch(`/api/outreach?days=${days || 99999}`, { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || res.statusText)
       setRows(json.rows)
@@ -239,7 +239,7 @@ export function OutreachScreen() {
                 onClick={() => setDays(d)}
                 className={`px-3 h-7 text-xs transition-colors ${days === d ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
               >
-                {d}d
+                {d === 0 ? "All" : `${d}d`}
               </button>
             ))}
           </div>

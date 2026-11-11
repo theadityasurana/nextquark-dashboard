@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-const clampDays = (v: unknown) => Math.min(90, Math.max(1, Number(v) || 7))
+const clampDays = (v: unknown) => Math.min(99999, Math.max(1, Number(v) || 7))
 
 export async function GET(request: Request) {
   try {
