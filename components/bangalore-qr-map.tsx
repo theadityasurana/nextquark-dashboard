@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Maximize2, Minimize2 } from "lucide-react"
 import type { DownloadCluster, DownloadVisitPin, PosterMarker } from "@/lib/download-analytics-types"
 import { formatIst } from "@/lib/ist"
@@ -28,28 +29,32 @@ const OSM: TileCfg = {
   maxZoom: 19,
 }
 
-export function BangaloreQrMap({
-  pins,
-  clusters,
-  posterMarkers,
-  mode,
-  picking,
-  onPick,
-}: {
+type MapProps = {
   pins: DownloadVisitPin[]
   clusters: DownloadCluster[]
   posterMarkers: PosterMarker[]
   mode: QrMapMode
   picking?: boolean
   onPick?: (lat: number, lng: number) => void
-}) {
+}
+
+/** One Leaflet map. Full screen mounts a second, fresh instance at full size
+ *  rather than stretching this one (resizing in place kept leaving the tile
+ *  layer blank, with only the vector dots drawn). */
+function MapCanvas({
+  pins,
+  clusters,
+  posterMarkers,
+  mode,
+  picking,
+  onPick,
+  className,
+}: MapProps & { className: string }) {
   const elRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import("leaflet").Map | null>(null)
   const layersRef = useRef<import("leaflet").LayerGroup | null>(null)
   const tilesRef = useRef<import("leaflet").TileLayer | null>(null)
   const drawPinsRef = useRef<(() => void) | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const [fullscreen, setFullscreen] = useState(false)
   const onPickRef = useRef(onPick)
   onPickRef.current = onPick
 
@@ -218,31 +223,6 @@ export function BangaloreQrMap({
     }
   }, [])
 
-  // Full screen: the browser's real full-screen mode where supported, and a
-  // fixed overlay covering the window either way (so it also works on iOS).
-  const toggleFullscreen = async () => {
-    const next = !fullscreen
-    setFullscreen(next)
-    try {
-      if (next && wrapRef.current?.requestFullscreen && !document.fullscreenElement) await wrapRef.current.requestFullscreen()
-      if (!next && document.fullscreenElement) await document.exitFullscreen()
-    } catch {
-      /* overlay alone is fine */
-    }
-  }
-
-  useEffect(() => {
-    // Leaving native full screen with Esc should also leave the overlay.
-    const onChange = () => { if (!document.fullscreenElement) setFullscreen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false) }
-    document.addEventListener("fullscreenchange", onChange)
-    window.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("fullscreenchange", onChange)
-      window.removeEventListener("keydown", onKey)
-    }
-  }, [])
-
   // Whenever the map box changes size (entering/leaving full screen, window
   // resize, sidebar collapse) Leaflet has to re-measure and fetch tiles for the
   // new area, otherwise only the vector dots show on a blank background.
@@ -255,8 +235,9 @@ export function BangaloreQrMap({
       frame = requestAnimationFrame(() => {
         const map = mapRef.current
         if (!map || el.clientWidth === 0 || el.clientHeight === 0) return
+        // invalidateSize alone loads tiles for the new area. Don't redraw():
+        // it throws away every loaded tile on each resize event.
         map.invalidateSize({ animate: false })
-        tilesRef.current?.redraw()
         drawPinsRef.current?.()
       })
     })
@@ -264,42 +245,63 @@ export function BangaloreQrMap({
     return () => { cancelAnimationFrame(frame); ro.disconnect() }
   }, [])
 
-  useEffect(() => {
-    document.body.style.overflow = fullscreen ? "hidden" : ""
-    // Leaflet must re-measure after the container finishes resizing.
-    // Fire at 0 ms (next tick), 150 ms (CSS transition done), and 400 ms
-    // (native fullscreen animation done) so tiles always load.
-    const invalidate = () => {
-      mapRef.current?.invalidateSize({ animate: false })
-      tilesRef.current?.redraw()
-      drawPinsRef.current?.()
-    }
-    invalidate()
-    const t1 = setTimeout(invalidate, 150)
-    const t2 = setTimeout(invalidate, 400)
-    const t3 = setTimeout(invalidate, 800)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); document.body.style.overflow = "" }
-  }, [fullscreen])
-
   return (
     <div
-      ref={wrapRef}
-      className={fullscreen ? "fixed inset-0 z-[2000] h-[100dvh] w-screen bg-background" : "relative"}
-    >
-      <div
-        ref={elRef}
-        className={`${fullscreen ? "h-full w-full" : "h-[300px] sm:h-[420px] w-full rounded-lg"} bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
-      />
-      <button
-        type="button"
-        onClick={toggleFullscreen}
-        title={fullscreen ? "Exit full screen (Esc)" : "Full screen"}
-        aria-label={fullscreen ? "Exit full screen" : "Full screen"}
-        className="absolute top-3 right-3 z-[1000] inline-flex items-center gap-1.5 rounded-md border border-border bg-background/90 px-2.5 h-8 text-xs font-medium shadow-sm backdrop-blur hover:bg-background"
-      >
-        {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        {fullscreen ? "Exit" : "Full screen"}
+      ref={elRef}
+      className={`${className} bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
+    />
+  )
+}
+
+export function BangaloreQrMap(props: MapProps) {
+  const [fullscreen, setFullscreen] = useState(false)
+
+  const close = useCallback(() => {
+    setFullscreen(false)
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  }, [])
+
+  const open = () => {
+    setFullscreen(true)
+    // Whole-page native full screen (hides browser chrome). The map itself is
+    // a body-level overlay, so it never depends on how the page lays out.
+    document.documentElement.requestFullscreen?.().catch(() => { /* overlay alone is fine */ })
+  }
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close() }
+    // Leaving native full screen (Esc, browser UI) also closes the overlay.
+    const onChange = () => { if (!document.fullscreenElement) setFullscreen(false) }
+    window.addEventListener("keydown", onKey)
+    document.addEventListener("fullscreenchange", onChange)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.removeEventListener("fullscreenchange", onChange)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [fullscreen, close])
+
+  const btn = "absolute top-3 right-3 z-[1000] inline-flex items-center gap-1.5 rounded-md border border-border bg-background/90 px-2.5 h-8 text-xs font-medium shadow-sm backdrop-blur hover:bg-background"
+
+  return (
+    <div className="relative">
+      <MapCanvas {...props} className="h-[300px] sm:h-[420px] w-full rounded-lg" />
+      <button type="button" onClick={open} title="Full screen" aria-label="Full screen" className={btn}>
+        <Maximize2 className="h-3.5 w-3.5" /> Full screen
       </button>
+
+      {fullscreen && createPortal(
+        <div className="fixed inset-0 z-[2000] bg-background">
+          <MapCanvas {...props} className="absolute inset-0 h-full w-full" />
+          <button type="button" onClick={close} title="Exit full screen (Esc)" aria-label="Exit full screen" className={btn}>
+            <Minimize2 className="h-3.5 w-3.5" /> Exit
+          </button>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
