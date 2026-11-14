@@ -42,9 +42,9 @@ export function FilledPreview({ text, section, path, ctx, charCount }: { text: s
   const isWhatsApp = section === "copy.share" && path[0] === "whatsapp"
   const xLen = charCount === "x" ? xLength(filled) : null
   return (
-    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+    <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Preview with sample values</span>
+        <span className="text-xs text-muted-foreground">Preview with sample values</span>
         {xLen !== null ? (
           <span className={cn("text-[10px] font-mono", xLen > 250 ? "text-warning font-semibold" : "text-muted-foreground")}>
             {xLen}/250 on X{xLen > 250 ? ": too long" : ""}

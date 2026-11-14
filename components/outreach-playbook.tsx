@@ -17,7 +17,7 @@ function CopyMessage({ text }: { text: string }) {
           setTimeout(() => setDone(false), 1200)
         } catch {}
       }}
-      className="inline-flex items-center gap-1 rounded border border-border/60 px-2 h-7 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+      className="inline-flex items-center gap-1 rounded border border-border px-2 h-7 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
     >
       {done ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
       {done ? "Copied" : "Copy"}
@@ -37,7 +37,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-lg border border-border/60 bg-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="rounded-lg border border-border bg-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <p className="text-sm font-medium">Find what they replied, copy the follow-up, then follow the arrow to the next step.</p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -46,7 +46,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
           </p>
         </div>
         <div className="sm:w-56">
-          <label className="text-[11px] uppercase tracking-wide text-muted-foreground">Their name</label>
+          <label className="text-xs text-muted-foreground">Their name</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Riya" className="h-8 text-sm mt-1" />
         </div>
       </div>
@@ -64,10 +64,10 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
                 <div
                   key={step.id}
                   id={`step-${step.id}`}
-                  className={`rounded-lg border p-4 flex flex-col gap-3 transition-colors ${highlight === step.id ? "border-primary ring-2 ring-primary/30" : "border-border/60 bg-card"}`}
+                  className={`rounded-lg border p-4 flex flex-col gap-3 transition-colors ${highlight === step.id ? "border-primary ring-2 ring-primary/30" : "border-border bg-card"}`}
                 >
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">If they say</p>
+                    <p className="text-xs text-muted-foreground">If they say</p>
                     <p className="text-sm font-medium mt-0.5">{step.trigger}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {step.examples.map((ex) => (
@@ -76,7 +76,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
                     </div>
                   </div>
                   <div className="rounded-md bg-emerald-500/[0.06] border border-emerald-500/20 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-1">You send</p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-1">You send</p>
                     <p className="text-sm leading-relaxed whitespace-pre-line">{text}</p>
                   </div>
                   {step.tip && (
@@ -91,7 +91,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
                         key={n.to}
                         type="button"
                         onClick={() => jump(n.to)}
-                        className="inline-flex items-center gap-1 rounded-full border border-border/60 px-2 h-7 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-full border border-border px-2 h-7 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
                       >
                         {n.label} <ArrowRight className="h-3 w-3" />
                       </button>

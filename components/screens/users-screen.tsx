@@ -79,7 +79,7 @@ export function UsersScreen() {
     <div className="flex flex-col gap-4 sm:gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Users</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Users</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage registered users from Supabase Authentication and app data</p>
         </div>
         <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export function UsersScreen() {
       {activeTab === "auth" && (
         <Card className="bg-card border-border">
           <CardContent className="p-0">
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
               <span>Email</span>
               <span>Provider</span>
               <span>Confirmed</span>
@@ -215,7 +215,7 @@ export function UsersScreen() {
       {activeTab === "app" && (
         <Card className="bg-card border-border">
           <CardContent className="p-0">
-            <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+            <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
               <span>Name</span>
               <span>Email</span>
               <span>Applications</span>
@@ -261,7 +261,7 @@ export function UsersScreen() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary shrink-0">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary shrink-0">
                     {selectedAuthUser.email.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -287,18 +287,18 @@ export function UsersScreen() {
                     </p>
                   </div>
                   <div className="rounded-lg bg-accent/50 p-3 text-center">
-                    <p className="text-sm font-bold capitalize">{selectedAuthUser.provider}</p>
+                    <p className="text-sm font-semibold capitalize">{selectedAuthUser.provider}</p>
                     <p className="text-[10px] text-muted-foreground">Provider</p>
                   </div>
                   <div className="rounded-lg bg-accent/50 p-3 text-center">
-                    <p className="text-sm font-bold capitalize">{selectedAuthUser.role || "user"}</p>
+                    <p className="text-sm font-semibold capitalize">{selectedAuthUser.role || "user"}</p>
                     <p className="text-[10px] text-muted-foreground">Role</p>
                   </div>
                 </div>
 
                 {/* Details */}
                 <div className="rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Account Details</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-3">Account Details</h4>
                   <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm">
                     <span className="text-muted-foreground">User ID</span>
                     <span className="font-mono text-xs break-all">{selectedAuthUser.id}</span>
@@ -324,7 +324,7 @@ export function UsersScreen() {
                 {/* User Metadata */}
                 {selectedAuthUser.user_metadata && Object.keys(selectedAuthUser.user_metadata).length > 0 && (
                   <div className="rounded-lg border border-border p-4">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">User Metadata</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-3">User Metadata</h4>
                     <pre className="text-xs bg-accent/30 p-3 rounded-md overflow-x-auto">
                       {JSON.stringify(selectedAuthUser.user_metadata, null, 2)}
                     </pre>
@@ -334,7 +334,7 @@ export function UsersScreen() {
                 {/* App Metadata */}
                 {selectedAuthUser.app_metadata && Object.keys(selectedAuthUser.app_metadata).length > 0 && (
                   <div className="rounded-lg border border-border p-4">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">App Metadata</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-3">App Metadata</h4>
                     <pre className="text-xs bg-accent/30 p-3 rounded-md overflow-x-auto">
                       {JSON.stringify(selectedAuthUser.app_metadata, null, 2)}
                     </pre>
@@ -364,7 +364,7 @@ function UserProfileModal({ user }: { user: User }) {
       {/* Header */}
       <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4 border-b border-border">
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary shrink-0">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary shrink-0">
             {user.name.split(" ").map(n => n[0]).join("")}
           </div>
           <div className="flex-1 min-w-0">
@@ -390,7 +390,7 @@ function UserProfileModal({ user }: { user: User }) {
             { label: "In Progress", value: user.inProgressApps, color: "text-chart-2" },
           ].map((s) => (
             <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
-              <p className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</p>
+              <p className={`text-2xl font-semibold tabular-nums ${s.color}`}>{s.value}</p>
               <p className="text-[10px] text-muted-foreground">{s.label}</p>
             </div>
           ))}
@@ -434,7 +434,7 @@ function UserProfileModal({ user }: { user: User }) {
                   {i < user.workExperience.length - 1 && (
                     <div className="absolute left-[15px] top-8 bottom-0 w-px bg-border" />
                   )}
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground shrink-0 z-10">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground shrink-0 z-10">
                     {exp.company[0]}
                   </div>
                   <div className="flex-1">
@@ -539,18 +539,18 @@ function UserProfileModal({ user }: { user: User }) {
                 <h3 className="text-sm font-semibold mb-3">Resume Preview</h3>
                 <div className="rounded-lg border border-border p-5 bg-foreground/5">
                   <div className="text-center mb-4 pb-3 border-b border-border">
-                    <h4 className="text-base font-bold">{user.name}</h4>
+                    <h4 className="text-base font-semibold">{user.name}</h4>
                     <p className="text-xs text-muted-foreground">{user.email} | {user.phone} | {user.location}</p>
                     <p className="text-xs text-muted-foreground">{user.linkedinUrl}</p>
                   </div>
 
                   <div className="mb-3">
-                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1">Summary</h5>
+                    <h5 className="text-xs font-semibold mb-1">Summary</h5>
                     <p className="text-xs text-muted-foreground leading-relaxed">{user.resumeSummary}</p>
                   </div>
 
                   <div className="mb-3">
-                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1">Experience</h5>
+                    <h5 className="text-xs font-semibold mb-1">Experience</h5>
                     {user.workExperience.map((exp, i) => (
                       <div key={i} className="mb-2">
                         <div className="flex justify-between">
@@ -563,7 +563,7 @@ function UserProfileModal({ user }: { user: User }) {
                   </div>
 
                   <div className="mb-3">
-                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1">Education</h5>
+                    <h5 className="text-xs font-semibold mb-1">Education</h5>
                     {user.education.map((edu, i) => (
                       <div key={i} className="mb-1">
                         <div className="flex justify-between">
@@ -576,7 +576,7 @@ function UserProfileModal({ user }: { user: User }) {
                   </div>
 
                   <div className="mb-3">
-                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1">Projects</h5>
+                    <h5 className="text-xs font-semibold mb-1">Projects</h5>
                     {user.projects.map((project, i) => (
                       <div key={i} className="mb-2">
                         <span className="text-xs font-semibold">{project.title}</span>
@@ -591,7 +591,7 @@ function UserProfileModal({ user }: { user: User }) {
                   </div>
 
                   <div>
-                    <h5 className="text-xs font-bold uppercase tracking-wider mb-1">Skills</h5>
+                    <h5 className="text-xs font-semibold mb-1">Skills</h5>
                     <p className="text-xs text-muted-foreground">{user.skills.join(" | ")}</p>
                   </div>
                 </div>
@@ -615,7 +615,7 @@ function UserProfileModal({ user }: { user: User }) {
             <h3 className="text-sm font-semibold mb-3">Personal Information</h3>
             <div className="flex flex-col gap-4">
               <div className="rounded-lg border border-border p-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Contact Details</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground mb-3">Contact Details</h4>
                 <div className="grid grid-cols-2 gap-y-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Mail className="h-3.5 w-3.5" /> Email
@@ -637,7 +637,7 @@ function UserProfileModal({ user }: { user: User }) {
               </div>
 
               <div className="rounded-lg border border-border p-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Demographic Information</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground mb-3">Demographic Information</h4>
                 <div className="grid grid-cols-2 gap-y-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <UserIcon className="h-3.5 w-3.5" /> Gender
@@ -655,7 +655,7 @@ function UserProfileModal({ user }: { user: User }) {
               </div>
 
               <div className="rounded-lg border border-border p-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Account Details</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground mb-3">Account Details</h4>
                 <div className="grid grid-cols-2 gap-y-3 text-sm">
                   <span className="text-muted-foreground">User ID</span>
                   <span className="font-mono text-xs">{user.id}</span>
@@ -692,7 +692,7 @@ function UserProfileModal({ user }: { user: User }) {
               {/* Full Biodata Header */}
               <div className="rounded-lg border border-border p-5 bg-foreground/5">
                 <div className="text-center mb-4 pb-3 border-b border-border">
-                  <h3 className="text-lg font-bold">{user.name}</h3>
+                  <h3 className="text-lg font-semibold">{user.name}</h3>
                   <p className="text-sm text-muted-foreground">{user.headline}</p>
                   <p className="text-xs text-muted-foreground mt-1">{user.email} | {user.phone} | {user.location}</p>
                   <p className="text-xs text-primary mt-0.5">{user.linkedinUrl}</p>
@@ -700,7 +700,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Summary */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-1.5">Professional Summary</h4>
+                  <h4 className="text-xs font-semibold mb-1.5">Professional Summary</h4>
                   <p className="text-xs text-muted-foreground leading-relaxed">{user.resumeSummary}</p>
                 </div>
 
@@ -708,7 +708,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Personal Information */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
+                  <h4 className="text-xs font-semibold mb-2">Personal Information</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
                     <span className="text-muted-foreground">Gender</span><span className="font-medium sm:col-span-2">{user.gender}</span>
                     <span className="text-muted-foreground">Ethnicity</span><span className="font-medium col-span-2">{user.ethnicity}</span>
@@ -722,7 +722,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Work Experience */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
+                  <h4 className="text-xs font-semibold mb-2">Work Experience</h4>
                   {user.workExperience.map((exp, i) => (
                     <div key={i} className="mb-3">
                       <div className="flex justify-between">
@@ -738,7 +738,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Education */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Education</h4>
+                  <h4 className="text-xs font-semibold mb-2">Education</h4>
                   {user.education.map((edu, i) => (
                     <div key={i} className="mb-2">
                       <div className="flex justify-between">
@@ -754,7 +754,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Projects */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Projects</h4>
+                  <h4 className="text-xs font-semibold mb-2">Projects</h4>
                   {user.projects.map((project, i) => (
                     <div key={i} className="mb-3">
                       <span className="text-xs font-semibold">{project.title}</span>
@@ -772,7 +772,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Skills */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Skills</h4>
+                  <h4 className="text-xs font-semibold mb-2">Skills</h4>
                   <div className="flex flex-wrap gap-1.5">
                     {user.skills.map((skill) => (
                       <Badge key={skill} variant="secondary" className="text-[10px] bg-accent text-accent-foreground">{skill}</Badge>
@@ -785,7 +785,7 @@ function UserProfileModal({ user }: { user: User }) {
                 {/* Resume */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider">Resume</h4>
+                    <h4 className="text-xs font-semibold">Resume</h4>
                     <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7">
                       <Download className="h-3 w-3" /> Download PDF
                     </Button>
@@ -799,7 +799,7 @@ function UserProfileModal({ user }: { user: User }) {
 
                 {/* Cover Letter */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Cover Letter</h4>
+                  <h4 className="text-xs font-semibold mb-2">Cover Letter</h4>
                   <div className="rounded-lg border border-border p-4 bg-accent/30">
                     {user.coverLetter.split('\n').map((line, i) => (
                       <p key={i} className={`text-sm leading-relaxed text-muted-foreground ${line === '' ? 'h-3' : ''}`}>

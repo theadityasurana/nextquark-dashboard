@@ -138,7 +138,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Maximum number of job applications that can be processed at the same time. Set to 5 = 5 applications running simultaneously. Higher = faster but more resources. <span className="font-semibold">Status: ✅ Active</span> (saves to database). Recommendation: Start with 3-5.</p>
+                    <p className="text-xs">Maximum number of job applications that can be processed at the same time. Set to 5 = 5 applications running simultaneously. Higher = faster but more resources. <span className="font-semibold">Status: Active</span> (saves to database). Recommendation: Start with 3-5.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -157,7 +157,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">How many times to retry a failed application before giving up. Set to 3 = retry 3 more times after initial failure. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 2-3 retries is optimal.</p>
+                    <p className="text-xs">How many times to retry a failed application before giving up. Set to 3 = retry 3 more times after initial failure. <span className="font-semibold">Status: Active</span>. Recommendation: 2-3 retries is optimal.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -176,7 +176,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">How long to wait before retrying a failed application. 300 seconds = 5 minutes wait before retry. Prevents rate limiting. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 300-600 seconds.</p>
+                    <p className="text-xs">How long to wait before retrying a failed application. 300 seconds = 5 minutes wait before retry. Prevents rate limiting. <span className="font-semibold">Status: Active</span>. Recommendation: 300-600 seconds.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -195,7 +195,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Only process applications during specific hours (e.g., 9 AM - 6 PM). Some companies detect bot activity at odd hours. Applying during business hours looks more human. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: Enable to avoid detection.</p>
+                    <p className="text-xs">Only process applications during specific hours (e.g., 9 AM - 6 PM). Some companies detect bot activity at odd hours. Applying during business hours looks more human. <span className="font-semibold">Status: Active</span>. Recommendation: Enable to avoid detection.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -254,7 +254,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Add delays between applications to the same company. Prevents getting flagged for submitting too many applications too quickly. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: Always keep ON.</p>
+                    <p className="text-xs">Add delays between applications to the same company. Prevents getting flagged for submitting too many applications too quickly. <span className="font-semibold">Status: Active</span>. Recommendation: Always keep ON.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -313,7 +313,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Automatically stop all agents if too many applications are failing. If 50% of applications fail, something is wrong (portal down, credentials expired). <span className="font-semibold">Status: ✅ Active</span>. Recommendation: Keep ON with 0.5 threshold.</p>
+                    <p className="text-xs">Automatically stop all agents if too many applications are failing. If 50% of applications fail, something is wrong (portal down, credentials expired). <span className="font-semibold">Status: Active</span>. Recommendation: Keep ON with 0.5 threshold.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -357,7 +357,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">How long to wait for a job portal page to load before giving up. 30 seconds = if page doesn't load in 30s, mark as failed. Prevents agents from getting stuck waiting forever on slow/broken portals. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 30-60 seconds (some portals are slow).</p>
+                    <p className="text-xs">How long to wait for a job portal page to load before giving up. 30 seconds = if page doesn't load in 30s, mark as failed. Prevents agents from getting stuck waiting forever on slow/broken portals. <span className="font-semibold">Status: Active</span>. Recommendation: 30-60 seconds (some portals are slow).</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -376,7 +376,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">How long to wait after clicking "Submit" before considering it failed. 60 seconds = wait 1 minute for form submission to complete. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 60-90 seconds.</p>
+                    <p className="text-xs">How long to wait after clicking "Submit" before considering it failed. 60 seconds = wait 1 minute for form submission to complete. <span className="font-semibold">Status: Active</span>. Recommendation: 60-90 seconds.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -395,7 +395,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Maximum time to wait for any response from the job portal. 120 seconds = if portal doesn't respond in 2 minutes, timeout. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 120-180 seconds.</p>
+                    <p className="text-xs">Maximum time to wait for any response from the job portal. 120 seconds = if portal doesn't respond in 2 minutes, timeout. <span className="font-semibold">Status: Active</span>. Recommendation: 120-180 seconds.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -416,7 +416,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">The browser identity string sent to websites. Makes your bot look like a real Chrome browser on Windows. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: Use latest Chrome user agent, update monthly.</p>
+                    <p className="text-xs">The browser identity string sent to websites. Makes your bot look like a real Chrome browser on Windows. <span className="font-semibold">Status: Active</span>. Recommendation: Use latest Chrome user agent, update monthly.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -453,7 +453,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                       <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p className="text-xs">Browser window height. 1080 = Full HD. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: 1920x1080 or 1366x768.</p>
+                      <p className="text-xs">Browser window height. 1080 = Full HD. <span className="font-semibold">Status: Active</span>. Recommendation: 1920x1080 or 1366x768.</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -473,7 +473,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Run browser without visible window (background mode). ON = faster, no UI. OFF = you can see what's happening. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: ON for production, OFF for debugging.</p>
+                    <p className="text-xs">Run browser without visible window (background mode). ON = faster, no UI. OFF = you can see what's happening. <span className="font-semibold">Status: Active</span>. Recommendation: ON for production, OFF for debugging.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -491,7 +491,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Route traffic through proxy servers to hide your real IP. Avoid IP bans, appear from different locations. <span className="font-semibold">Status: ⚠️ Partially Active</span> (saves to database, needs proxy service integration). Recommendation: Enable if applying to 100+ jobs/day.</p>
+                    <p className="text-xs">Route traffic through proxy servers to hide your real IP. Avoid IP bans, appear from different locations. <span className="font-semibold">Status: Partially Active</span> (saves to database, needs proxy service integration). Recommendation: Enable if applying to 100+ jobs/day.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -510,7 +510,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                       <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p className="text-xs">Change proxy IP for each application. Makes each application appear from different location. <span className="font-semibold">Status: ⚠️ Partially Active</span>. Recommendation: Enable if using proxies.</p>
+                      <p className="text-xs">Change proxy IP for each application. Makes each application appear from different location. <span className="font-semibold">Status: Partially Active</span>. Recommendation: Enable if using proxies.</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -531,7 +531,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Automatically generate custom cover letters using AI. ON = AI writes cover letter for each job. OFF = use default. <span className="font-semibold">Status: ⚠️ Partially Active</span> (needs AI integration like OpenAI/Claude). Recommendation: ON if you have AI API key.</p>
+                    <p className="text-xs">Automatically generate custom cover letters using AI. ON = AI writes cover letter for each job. OFF = use default. <span className="font-semibold">Status: Partially Active</span> (needs AI integration like OpenAI/Claude). Recommendation: ON if you have AI API key.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -549,7 +549,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Which resume to use for each application. Default = same resume for all jobs. Tailored = different resume for "Software Engineer" vs "Data Scientist". AI Optimized = AI modifies resume for each job. <span className="font-semibold">Status: ⚠️ Partially Active</span>. Recommendation: Start with "Default".</p>
+                    <p className="text-xs">Which resume to use for each application. Default = same resume for all jobs. Tailored = different resume for "Software Engineer" vs "Data Scientist". AI Optimized = AI modifies resume for each job. <span className="font-semibold">Status: Partially Active</span>. Recommendation: Start with "Default".</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -576,7 +576,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">How to answer "Are you authorized to work?" type questions. Conservative = only answer if 100% sure (fewer applications, higher quality). Moderate = answer most questions with reasonable guesses. Aggressive = answer all questions optimistically (more applications, may lie). <span className="font-semibold">Status: ⚠️ Partially Active</span>. Recommendation: Start with "Conservative".</p>
+                    <p className="text-xs">How to answer "Are you authorized to work?" type questions. Conservative = only answer if 100% sure (fewer applications, higher quality). Moderate = answer most questions with reasonable guesses. Aggressive = answer all questions optimistically (more applications, may lie). <span className="font-semibold">Status: Partially Active</span>. Recommendation: Start with "Conservative".</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -603,7 +603,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Automatically upload resume, cover letter, portfolio. ON = uploads files automatically. OFF = skip file uploads. <span className="font-semibold">Status: ✅ Active</span>. Recommendation: Keep ON.</p>
+                    <p className="text-xs">Automatically upload resume, cover letter, portfolio. ON = uploads files automatically. OFF = skip file uploads. <span className="font-semibold">Status: Active</span>. Recommendation: Keep ON.</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -621,7 +621,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Send thank you email after application submission. ON = sends "Thank you for considering my application" email. <span className="font-semibold">Status: ❌ Not Active</span> (needs email service integration). Recommendation: OFF (can seem spammy).</p>
+                    <p className="text-xs">Send thank you email after application submission. ON = sends "Thank you for considering my application" email. <span className="font-semibold">Status: Not Active</span> (needs email service integration). Recommendation: OFF (can seem spammy).</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -639,7 +639,7 @@ export function ConfigureDialog({ open, onOpenChange }: ConfigureDialogProps) {
                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p className="text-xs">Send LinkedIn connection request to recruiter. ON = automatically connects with hiring manager on LinkedIn. <span className="font-semibold">Status: ❌ Not Active</span> (needs LinkedIn API integration). Recommendation: OFF (LinkedIn may ban you).</p>
+                    <p className="text-xs">Send LinkedIn connection request to recruiter. ON = automatically connects with hiring manager on LinkedIn. <span className="font-semibold">Status: Not Active</span> (needs LinkedIn API integration). Recommendation: OFF (LinkedIn may ban you).</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

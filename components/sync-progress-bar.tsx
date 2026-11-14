@@ -134,7 +134,7 @@ export function SyncProgressBar({ sessionId, mode = "sync", onComplete, onDismis
                   body: JSON.stringify({ sessionId: session.id }),
                 })
               }}
-              className="text-[11px] text-muted-foreground hover:text-destructive border border-border/60 rounded px-2 py-0.5 transition-colors"
+              className="text-[11px] text-muted-foreground hover:text-destructive border border-border rounded px-2 py-0.5 transition-colors"
             >
               Cancel
             </button>

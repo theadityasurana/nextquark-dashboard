@@ -138,7 +138,7 @@ export function AnswerBankPanel({
         <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
           <div className="mb-2 flex items-center gap-2">
             <MessageSquarePlus className="h-3.5 w-3.5 shrink-0 text-orange-600" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-orange-600">
+            <span className="text-xs font-semibold text-orange-600">
               Unanswered on this run
             </span>
           </div>
@@ -187,7 +187,7 @@ export function AnswerBankPanel({
       {/* The bank itself. */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             Stored answers
           </span>
           <Badge variant="outline" className="text-[10px]">

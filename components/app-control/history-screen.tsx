@@ -60,7 +60,7 @@ export function SectionHistory({ sectionKey }: { sectionKey: string }) {
         <Link href="/app-control" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"><ArrowLeft className="h-3 w-3" />App Control</Link>
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gradient">History · {def.name}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">History · {def.name}</h1>
             <p className="text-[11px] text-muted-foreground mt-1">
               <code className="font-mono">{sectionKey}</code>{row && <> · now <span className="font-mono text-foreground">v{row.version}</span></>}
             </p>
@@ -111,7 +111,7 @@ export function SectionHistory({ sectionKey }: { sectionKey: string }) {
                   <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
                 </button>
                 {open && (
-                  <div className="border-t border-border/60 px-4 py-3 flex flex-col gap-3">
+                  <div className="border-t border-border px-4 py-3 flex flex-col gap-3">
                     {h.old_value === null
                       ? <p className="text-xs text-muted-foreground">First recorded value (seeded by the migration).</p>
                       : <DiffView before={h.old_value} after={h.new_value} />}

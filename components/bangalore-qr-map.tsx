@@ -107,9 +107,9 @@ function MapCanvas({
           const radius = Math.min(28, 8 + Math.sqrt(c.scans) * 4)
           L.circleMarker([c.lat, c.lng], {
             radius,
-            color: "#a78bfa",
+            color: "#60a5fa",
             weight: 1,
-            fillColor: "#8b5cf6",
+            fillColor: "#3b82f6",
             fillOpacity: 0.45,
           })
             .bindTooltip(
@@ -174,9 +174,9 @@ function MapCanvas({
               : ""
           L.circleMarker(at, {
             radius: 2,
-            color: pin.location_source === "gps" ? "#065f46" : "#4c1d95",
+            color: pin.location_source === "gps" ? "#065f46" : "#1e3a8a",
             weight: 0.4,
-            fillColor: pin.location_source === "gps" ? "#10b981" : "#8b5cf6",
+            fillColor: pin.location_source === "gps" ? "#10b981" : "#3b82f6",
             // Slightly translucent so overlapping dots build up colour: denser
             // spots look darker instead of every blob looking the same.
             fillOpacity: 0.7,

@@ -131,7 +131,7 @@ export function SettingsScreen() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-gradient">Settings</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage automation provider and API credentials</p>
       </div>
 
@@ -200,7 +200,7 @@ export function SettingsScreen() {
               className={`flex-1 p-4 rounded-lg border transition-all text-left ${
                 automationProvider === "browser_use"
                   ? "border-primary bg-primary/5"
-                  : "border-border hover:border-border/80 hover:bg-accent/30"
+                  : "border-border hover:border-border hover:bg-accent/30"
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">
@@ -216,7 +216,7 @@ export function SettingsScreen() {
               className={`flex-1 p-4 rounded-lg border transition-all text-left ${
                 automationProvider === "browserbase"
                   ? "border-primary bg-primary/5"
-                  : "border-border hover:border-border/80 hover:bg-accent/30"
+                  : "border-border hover:border-border hover:bg-accent/30"
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">
@@ -232,7 +232,7 @@ export function SettingsScreen() {
               className={`flex-1 p-4 rounded-lg border transition-all text-left ${
                 automationProvider === "kernel"
                   ? "border-primary bg-primary/5"
-                  : "border-border hover:border-border/80 hover:bg-accent/30"
+                  : "border-border hover:border-border hover:bg-accent/30"
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">

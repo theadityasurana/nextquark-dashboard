@@ -63,7 +63,7 @@ function DialogContent({
           // Animation
           'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           // Surface
-          'bg-background border shadow-lg',
+          'bg-background border shadow-xl shadow-black/10',
           // Position — centered, with safe-area aware constraints
           'fixed top-[50%] left-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
           // Sizing — fill phone viewport with margin, cap height with scroll

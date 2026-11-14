@@ -37,7 +37,7 @@ export function FieldShell({ def, value, defaultValue, onChange, issues, childre
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium" htmlFor={`${id}-input`}>{def.label}</label>
-            {modified && <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]" title="Differs from the default" aria-label="Modified" />}
+            {modified && <span className="h-1.5 w-1.5 rounded-full bg-primary" title="Differs from the default" aria-label="Modified" />}
             <code className="hidden sm:inline text-[10px] text-muted-foreground/70 font-mono">{def.path.join(".")}</code>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{def.help}</p>
@@ -217,7 +217,7 @@ function SortableRows<T>({ items, onReorder, render, rowClass }: {
           onDrop={e => { e.preventDefault(); if (dragFrom !== null) onReorder(move(items, dragFrom, i)); setDragFrom(null); setOver(null) }}
           onDragEnd={() => { setDragFrom(null); setOver(null) }}
           className={cn(
-            "flex items-center gap-1.5 rounded-md border border-border/60 bg-card/60 px-1.5 py-1",
+            "flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-1.5 py-1",
             over === i && dragFrom !== null && dragFrom !== i && "border-primary/60 bg-primary/5",
             dragFrom === i && "opacity-50",
             rowClass?.(item, i),
@@ -260,8 +260,8 @@ function TextListControl({ value, onChange, def, section, ctx }: FieldProps) {
         <span className="text-[11px] text-muted-foreground">{items.length} {d.itemLabel}{items.length === 1 ? "" : "s"}</span>
       </div>
       {items.some(t => findPlaceholders(t).length > 0) && (
-        <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Placeholders</span>
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+          <span className="text-xs text-muted-foreground">Placeholders</span>
           <ol className="mt-1 list-decimal pl-4 space-y-0.5">
             {items.map((t, i) => <li key={i}><HighlightedText text={t} section={section} path={[...def.path, String(i)]} /></li>)}
           </ol>
@@ -295,10 +295,10 @@ function OrderedSetControl({ value, onChange, options }: FieldProps & { options:
         />
       )}
       {excluded.map(v => (
-        <label key={v} className="flex items-center gap-2 rounded-md border border-dashed border-border/60 px-1.5 py-1.5 pl-7 text-sm text-muted-foreground cursor-pointer hover:bg-muted/30">
+        <label key={v} className="flex items-center gap-2 rounded-md border border-dashed border-border px-1.5 py-1.5 pl-7 text-sm text-muted-foreground cursor-pointer hover:bg-muted/30">
           <Checkbox checked={false} onCheckedChange={() => onChange([...included, v])} />
           <span className="truncate">{labelOf(v)}</span>
-          <span className="ml-auto text-[10px] uppercase tracking-wider pr-2">not shown</span>
+          <span className="ml-auto text-xs pr-2">not shown</span>
         </label>
       ))}
     </div>
@@ -313,10 +313,10 @@ function HiddenSetControl({ value, onChange, options }: FieldProps & { options: 
       {options.map(o => {
         const on = hidden.includes(o.value)
         return (
-          <label key={o.value} className={cn("flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm cursor-pointer", on ? "border-warning/40 bg-warning/5" : "border-border/60 hover:bg-muted/30")}>
+          <label key={o.value} className={cn("flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm cursor-pointer", on ? "border-warning/40 bg-warning/5" : "border-border hover:bg-muted/30")}>
             <Checkbox checked={on} onCheckedChange={c => onChange(c ? [...hidden, o.value] : hidden.filter(h => h !== o.value))} />
             <span className="truncate">{o.label}</span>
-            {on && <span className="ml-auto text-[10px] uppercase tracking-wider text-warning">hidden</span>}
+            {on && <span className="ml-auto text-xs text-warning">hidden</span>}
           </label>
         )
       })}
@@ -378,7 +378,7 @@ function ObjectList({ items, columns, itemLabel, onChange, template }: {
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="hidden md:flex items-center gap-2 pl-7 pr-[76px] text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="hidden md:flex items-center gap-2 pl-7 pr-[76px] text-xs text-muted-foreground">
         {columns.map(c => <span key={c.key} className={cn(c.width ?? "flex-1")}>{c.label}</span>)}
         <span className="w-7" />
       </div>
@@ -389,7 +389,7 @@ function ObjectList({ items, columns, itemLabel, onChange, template }: {
           <div className="flex flex-col md:flex-row md:items-center gap-1.5">
             {columns.map(c => (
               <div key={c.key} className={cn("min-w-0", c.width ?? "flex-1")}>
-                <span className="md:hidden text-[10px] uppercase tracking-wider text-muted-foreground">{c.label}</span>
+                <span className="md:hidden text-xs text-muted-foreground">{c.label}</span>
                 <Cell col={c} value={item[c.key]} onChange={v => onChange(items.map((x, j) => (j === i ? { ...x, [c.key]: v } : x)))} />
               </div>
             ))}
@@ -480,7 +480,7 @@ function LevelsControl({ value, onChange, defaultValue }: FieldProps) {
           onChange({ ...obj, [k]: next })
         }
         return (
-          <div key={k} className={cn("flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5", bad ? "border-destructive/60" : "border-border/60")}>
+          <div key={k} className={cn("flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5", bad ? "border-destructive/60" : "border-border")}>
             <code className="w-28 text-xs font-mono">{k}</code>
             <span className="text-xs text-muted-foreground">from</span>
             <RungSelect value={rung(range[0])} onChange={v => setRange(0, v)} />

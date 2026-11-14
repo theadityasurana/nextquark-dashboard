@@ -138,14 +138,14 @@ function CharCount({ value, max }: { value: string; max: number }) {
 
 function IOSPreview({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 p-3 shadow-lg">
+    <div className="rounded-lg bg-white/10 backdrop-blur-sm border border-white/20 p-3 shadow-lg">
       <div className="flex items-start gap-2.5">
-        <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center shrink-0">
+        <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
           <Bell className="h-4 w-4 text-primary-foreground" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
-            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wide">NextQuark</span>
+            <span className="text-xs font-semibold text-white/70">NextQuark</span>
             <span className="text-[10px] text-white/50">now</span>
           </div>
           <p className="text-xs font-semibold text-white leading-tight truncate">
@@ -169,10 +169,10 @@ function AndroidPreview({ title, body }: { title: string; body: string }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">NextQuark</span>
+            <span className="text-xs font-semibold text-white/60">NextQuark</span>
             <span className="text-[10px] text-white/40">Just now</span>
           </div>
-          <p className="text-xs font-bold text-white leading-tight mt-0.5 truncate">
+          <p className="text-xs font-semibold text-white leading-tight mt-0.5 truncate">
             {title || "Notification title"}
           </p>
           <p className="text-[11px] text-white/60 leading-snug mt-0.5 line-clamp-2">
@@ -374,10 +374,10 @@ export function NotificationsScreen() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Notification Manager</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Notification Manager</h1>
           <p className="text-sm text-muted-foreground">Compose and broadcast push notifications to your users</p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-3 py-1.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 self-start sm:self-auto">
           <Users className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">
             {tokenCount === null ? "Loading..." : <><span className="font-semibold text-foreground">{tokenCount}</span> registered devices</>}
@@ -418,7 +418,7 @@ export function NotificationsScreen() {
               <CardContent className="space-y-5 pt-0">
                 {TEMPLATES.map((cat) => (
                   <div key={cat.category}>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">{cat.category}</p>
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">{cat.category}</p>
                     <div className="flex flex-col gap-1.5">
                       {cat.items.map((tpl) => (
                         <button
@@ -451,7 +451,7 @@ export function NotificationsScreen() {
                     className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors text-left ${
                       notifType === t.id
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground hover:border-border/80 hover:text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:border-border hover:text-foreground"
                     }`}
                   >
                     {t.label}
@@ -502,7 +502,7 @@ export function NotificationsScreen() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-col gap-2">
-                <label className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${audience === "all" ? "border-primary bg-primary/5" : "border-border hover:border-border/80"}`}>
+                <label className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${audience === "all" ? "border-primary bg-primary/5" : "border-border hover:border-border"}`}>
                   <input type="radio" className="accent-primary" checked={audience === "all"} onChange={() => setAudience("all")} />
                   <div className="flex-1">
                     <p className="text-sm font-medium">All Users</p>
@@ -511,7 +511,7 @@ export function NotificationsScreen() {
                     </p>
                   </div>
                 </label>
-                <label className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${audience === "specific" ? "border-primary bg-primary/5" : "border-border hover:border-border/80"}`}>
+                <label className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${audience === "specific" ? "border-primary bg-primary/5" : "border-border hover:border-border"}`}>
                   <input type="radio" className="accent-primary" checked={audience === "specific"} onChange={() => setAudience("specific")} />
                   <div className="flex-1">
                     <p className="text-sm font-medium">Specific User</p>
@@ -555,7 +555,7 @@ export function NotificationsScreen() {
                               onMouseDown={() => handleUserSelect(u)}
                               className="flex items-center gap-3 w-full px-3 py-2.5 text-left hover:bg-accent transition-colors"
                             >
-                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
+                              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[11px] font-semibold text-primary shrink-0">
                                 {(u.full_name || u.email).charAt(0).toUpperCase()}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -652,7 +652,7 @@ export function NotificationsScreen() {
 
           {/* Debug Log */}
           {debugLog.length > 0 && (
-            <Card className="border-border/60">
+            <Card className="border-border">
               <CardHeader className="pb-2">
                 <button
                   className="flex items-center justify-between w-full text-left"
@@ -672,7 +672,7 @@ export function NotificationsScreen() {
               </CardHeader>
               {debugOpen && (
                 <CardContent className="pt-0">
-                  <div className="rounded-lg bg-black/40 border border-border/40 p-3 font-mono text-[11px] space-y-1 max-h-64 overflow-y-auto">
+                  <div className="rounded-lg bg-black/40 border border-border p-3 font-mono text-[11px] space-y-1 max-h-64 overflow-y-auto">
                     {debugLog.map((entry, i) => (
                       <div key={i} className="flex gap-2">
                         <span className="text-muted-foreground shrink-0">{entry.ts}</span>
@@ -707,16 +707,16 @@ export function NotificationsScreen() {
             <CardContent className="space-y-4">
               {/* iOS */}
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">iOS</p>
-                <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 p-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">iOS</p>
+                <div className="rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 p-4">
                   <IOSPreview title={title} body={body} />
                 </div>
               </div>
 
               {/* Android */}
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Android</p>
-                <div className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 p-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Android</p>
+                <div className="rounded-lg bg-gradient-to-br from-slate-800 to-slate-950 p-4">
                   <AndroidPreview title={title} body={body} />
                 </div>
               </div>
@@ -752,7 +752,7 @@ export function NotificationsScreen() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-border text-xs text-muted-foreground font-medium">
             <span>Title</span>
             <span>Audience</span>
             <span>Sent At</span>

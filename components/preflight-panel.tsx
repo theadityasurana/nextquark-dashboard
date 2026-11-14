@@ -71,7 +71,7 @@ export function PreflightPanel({
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
           <div className="mb-1 flex items-center gap-2">
             <CircleSlash className="h-3.5 w-3.5 shrink-0 text-destructive" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+            <span className="text-xs font-semibold text-destructive">
               Won&apos;t apply
             </span>
           </div>
@@ -83,7 +83,7 @@ export function PreflightPanel({
       {coveragePercent != null && (
         <div className="rounded-lg border border-border p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-semibold text-muted-foreground">
               Form coverage
             </span>
             <span className="text-xs font-semibold tabular-nums">{coveragePercent}%</span>
@@ -122,7 +122,7 @@ export function PreflightPanel({
       {/* Individual knockout checks. */}
       {checks && checks.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             Screening checks
           </span>
           {checks.map((c) => {

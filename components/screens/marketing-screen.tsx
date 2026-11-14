@@ -13,24 +13,24 @@ import { Button } from "@/components/ui/button"
 import { BangaloreQrAnalytics } from "@/components/bangalore-qr-analytics"
 
 const TT_STYLE = {
-  backgroundColor: "oklch(0.13 0.006 265)",
-  border: "1px solid oklch(0.22 0.008 265)",
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: "8px",
   fontSize: 12,
-  color: "oklch(0.92 0.003 265)",
+  color: "var(--popover-foreground)",
   padding: "8px 12px",
-  boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
 }
 
 const COLORS = [
-  "oklch(0.7 0.18 270)",
-  "oklch(0.7 0.16 220)",
-  "oklch(0.72 0.18 155)",
-  "oklch(0.78 0.16 70)",
-  "oklch(0.65 0.22 0)",
-  "oklch(0.72 0.18 320)",
-  "oklch(0.68 0.18 190)",
-  "oklch(0.75 0.14 40)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--muted-foreground)",
+  "color-mix(in oklch, var(--chart-1) 55%, var(--background))",
+  "color-mix(in oklch, var(--chart-3) 55%, var(--background))",
 ]
 
 // Custom tooltip for referral / day-of-week / provider bar charts
@@ -77,7 +77,7 @@ function PieTooltip({ active, payload, total }: { active?: boolean; payload?: an
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">
+    <p className="text-xs font-medium text-muted-foreground/60 mb-3">
       {children}
     </p>
   )
@@ -85,8 +85,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-      <div className="px-5 pt-4 pb-3 border-b border-border/40">
+    <div className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-border">
         <p className="text-sm font-medium">{title}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
       </div>
@@ -97,9 +97,9 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-3">{label}</p>
-      <p className="text-[28px] font-bold tracking-tight leading-none">{value}</p>
+    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">{label}</p>
+      <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
     </div>
   )
@@ -259,11 +259,11 @@ export function MarketingScreen() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Marketing</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Marketing</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, global download QR, signup trends & onboarding funnel</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
             <button
               onClick={() => setTimeRange("30d")}
               className={`px-3 h-7 text-xs transition-colors ${timeRange === "30d" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
@@ -277,7 +277,7 @@ export function MarketingScreen() {
               All Time
             </button>
           </div>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={handleRefresh} disabled={refreshing}>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
@@ -321,10 +321,10 @@ export function MarketingScreen() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={referralData} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={90} />
-                  <Tooltip content={<BarTooltip total={referralData.reduce((s, d) => s + d.value, 0)} />} cursor={{ fill: "oklch(1 0 0 / 0.04)" }} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 11, fill: "oklch(0.6 0.01 265)", formatter: (v: number) => v.toLocaleString() }}>
+                  <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip content={<BarTooltip total={referralData.reduce((s, d) => s + d.value, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 11, fill: "var(--muted-foreground)", formatter: (v: number) => v.toLocaleString() }}>
                     {referralData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
@@ -390,11 +390,11 @@ export function MarketingScreen() {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={signupsByDay} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<BarTooltip total={signupsByDay.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "oklch(1 0 0 / 0.04)" }} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: "top", fontSize: 10, fill: "oklch(0.6 0.01 265)" }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip content={<BarTooltip total={signupsByDay.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)" }}>
                     {signupsByDay.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
@@ -407,11 +407,11 @@ export function MarketingScreen() {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={signupsByHour} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="hour" tick={{ fontSize: 8, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} interval={3} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip content={<BarTooltip total={signupsByHour.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "oklch(1 0 0 / 0.04)" }} />
-                  <ReferenceLine y={Math.max(...signupsByHour.map(h => h.count))} stroke="oklch(0.7 0.18 270 / 0.3)" strokeDasharray="4 4" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="hour" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} interval={3} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip content={<BarTooltip total={signupsByHour.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
+                  <ReferenceLine y={Math.max(...signupsByHour.map(h => h.count))} stroke="color-mix(in oklch, var(--chart-1) 30%, transparent)" strokeDasharray="4 4" />
                   <Bar dataKey="count" fill="oklch(0.65 0.15 250)" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -436,10 +436,10 @@ export function MarketingScreen() {
                 data={dailySignups}
                 margin={{ top: 8, right: 16, left: 0, bottom: 32 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }}
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
                   interval={0}
@@ -447,7 +447,7 @@ export function MarketingScreen() {
                   textAnchor="end"
                   height={48}
                 />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
@@ -460,10 +460,10 @@ export function MarketingScreen() {
                       </div>
                     )
                   }}
-                  cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
+                  cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
                 />
                 <Bar dataKey="count" fill={COLORS[2]} radius={[3, 3, 0, 0]}
-                  label={{ position: "top", fontSize: 10, fill: "oklch(0.6 0.01 265)", formatter: (v: number) => v > 0 ? v : "" }}
+                  label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)", formatter: (v: number) => v > 0 ? v : "" }}
                 />
               </BarChart>
             </div>
@@ -478,15 +478,15 @@ export function MarketingScreen() {
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weeklyGrowth} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip content={<LineTooltip />} cursor={{ stroke: "oklch(0.7 0.18 270 / 0.2)", strokeWidth: 1 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="week" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                <Tooltip content={<LineTooltip />} cursor={{ stroke: "color-mix(in oklch, var(--chart-1) 20%, transparent)", strokeWidth: 1 }} />
                 <Line
                   type="monotone" dataKey="signups" stroke={COLORS[0]} strokeWidth={2.5}
-                  dot={{ r: 4, fill: COLORS[0], strokeWidth: 2, stroke: "oklch(0.13 0.006 265)" }}
-                  activeDot={{ r: 6, fill: COLORS[0], stroke: "oklch(0.13 0.006 265)", strokeWidth: 2 }}
-                  label={{ position: "top", fontSize: 10, fill: "oklch(0.6 0.01 265)", dy: -4 }}
+                  dot={{ r: 4, fill: COLORS[0], strokeWidth: 2, stroke: "var(--popover)" }}
+                  activeDot={{ r: 6, fill: COLORS[0], stroke: "var(--popover)", strokeWidth: 2 }}
+                  label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)", dy: -4 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -549,7 +549,7 @@ export function MarketingScreen() {
                     }}
                   />
                   <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                    <LabelList position="right" fill="oklch(0.7 0.01 265)" style={{ fontSize: 10 }} dataKey="name" />
+                    <LabelList position="right" fill="var(--muted-foreground)" style={{ fontSize: 10 }} dataKey="name" />
                   </Funnel>
                 </FunnelChart>
               </ResponsiveContainer>

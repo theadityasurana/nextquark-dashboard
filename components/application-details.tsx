@@ -203,7 +203,7 @@ export function ApplicationDetails({
       {/* Job link — context for every tab, so it sits outside the panels. */}
       <div className="px-4 sm:px-6 py-4 border-b border-border">
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Job Application Link</h4>
+          <h4 className="text-xs font-semibold text-primary mb-2">Job Application Link</h4>
           <div className="flex flex-col gap-3">
             <p className="text-sm font-semibold break-words">{application.job_title} at {application.company_name}</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -238,7 +238,7 @@ export function ApplicationDetails({
         <div className="px-6 py-5 border-b border-border">
           <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-green-600">Task Recording</h4>
+              <h4 className="text-xs font-semibold text-green-600">Task Recording</h4>
               <Badge variant="outline" className="text-[10px]">● SAVED</Badge>
             </div>
             <p className="text-xs text-muted-foreground mb-2">Recording URL: {recordingUrl || application.recording_url}</p>
@@ -273,7 +273,7 @@ export function ApplicationDetails({
               : 'border-orange-500/30 bg-orange-500/5'
           }`}>
             <div className="flex items-center justify-between mb-2">
-              <h4 className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+              <h4 className={`text-xs font-semibold flex items-center gap-1.5 ${
                 application.status === 'failed' ? 'text-destructive' : 'text-orange-600'
               }`}>
                 <RotateCcw className="h-3 w-3" />
@@ -325,7 +325,7 @@ export function ApplicationDetails({
         <div className="px-4 sm:px-6 py-4 sm:py-5">
           {uniqueLogs.length > 0 ? (
             <div className="rounded-lg border border-border bg-background p-4">
-              <h4 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
+              <h4 className="text-xs font-semibold mb-3 flex items-center gap-2">
                 <Terminal className="h-3 w-3" /> Application Logs
               </h4>
               {/* Taller than the old inline box — this tab is now the only thing on screen. */}
@@ -360,10 +360,10 @@ export function ApplicationDetails({
         {/* User Header */}
         <div className="rounded-lg border border-border p-5 bg-foreground/5">
           <div className="text-center mb-4 pb-3 border-b border-border">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary mx-auto mb-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-semibold text-primary mx-auto mb-2">
               {application.first_name?.[0]}{application.last_name?.[0]}
             </div>
-            <h3 className="text-lg font-bold">{fullName}</h3>
+            <h3 className="text-lg font-semibold">{fullName}</h3>
             <p className="text-sm text-muted-foreground">{app.headline}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {[app.phone, app.location].filter(Boolean).join(' | ')}
@@ -384,7 +384,7 @@ export function ApplicationDetails({
 
           {/* Professional Summary */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-1.5">Professional Summary</h4>
+            <h4 className="text-xs font-semibold mb-1.5">Professional Summary</h4>
             <p className="text-xs text-muted-foreground leading-relaxed">{app.bio}</p>
           </div>
 
@@ -392,7 +392,7 @@ export function ApplicationDetails({
 
           {/* Personal Information */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
+            <h4 className="text-xs font-semibold mb-2">Personal Information</h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
               <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" /> Gender</span>
               <span className="font-medium sm:col-span-2">{app.gender || 'Not specified'}</span>
@@ -415,7 +415,7 @@ export function ApplicationDetails({
 
           {/* Work Experience */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
+            <h4 className="text-xs font-semibold mb-2">Work Experience</h4>
             {(app.experience ?? []).map((exp) => (
               <div key={exp.id} className="mb-3">
                 <div className="flex flex-wrap justify-between gap-x-2">
@@ -443,7 +443,7 @@ export function ApplicationDetails({
 
           {/* Education */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Education</h4>
+            <h4 className="text-xs font-semibold mb-2">Education</h4>
             {(app.education ?? []).map((edu) => (
               <div key={edu.id} className="mb-2">
                 <div className="flex justify-between">
@@ -460,7 +460,7 @@ export function ApplicationDetails({
           {(app.certifications ?? []).length > 0 && (
             <>
               <div className="mb-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Certifications</h4>
+                <h4 className="text-xs font-semibold mb-2">Certifications</h4>
                 {(app.certifications ?? []).map((cert) => (
                   <div key={cert.id} className="mb-3 rounded-lg bg-accent/30 p-3">
                     <div className="flex items-start justify-between">
@@ -494,7 +494,7 @@ export function ApplicationDetails({
           {(app.achievements ?? []).length > 0 && (
             <>
               <div className="mb-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Achievements</h4>
+                <h4 className="text-xs font-semibold mb-2">Achievements</h4>
                 {(app.achievements ?? []).map((ach) => (
                   <div key={ach.id} className="mb-3 rounded-lg bg-accent/30 p-3">
                     <div className="flex items-start justify-between">
@@ -512,7 +512,7 @@ export function ApplicationDetails({
 
           {/* Job Preferences */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Job Preferences</h4>
+            <h4 className="text-xs font-semibold mb-2">Job Preferences</h4>
             <div className="space-y-2">
               <div>
                 <span className="text-[10px] text-muted-foreground">Job Types:</span>
@@ -537,7 +537,7 @@ export function ApplicationDetails({
 
           {/* Salary Expectations */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Salary Expectations</h4>
+            <h4 className="text-xs font-semibold mb-2">Salary Expectations</h4>
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">
@@ -551,7 +551,7 @@ export function ApplicationDetails({
 
           {/* Skills */}
           <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Skills</h4>
+            <h4 className="text-xs font-semibold mb-2">Skills</h4>
             <div className="flex flex-wrap gap-1.5">
               {((app.top_skills?.length > 0 ? app.top_skills : app.skills) ?? []).map((skill) => (
                 <Badge key={skill} variant="secondary" className="text-[10px] bg-accent text-accent-foreground">{skill}</Badge>
@@ -562,7 +562,7 @@ export function ApplicationDetails({
           <Separator className="my-3" />
 
           {/* Candidate's application stats */}
-          <h4 className="text-xs font-bold uppercase tracking-wider mb-2">This Candidate&apos;s Applications</h4>
+          <h4 className="text-xs font-semibold mb-2">This Candidate&apos;s Applications</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             {[
               { label: "Total Apps", value: profileStats?.totalApps ?? "—" },
@@ -571,7 +571,7 @@ export function ApplicationDetails({
               { label: "In Progress", value: profileStats?.inProgress ?? "—" },
             ].map((s) => (
               <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
-                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-lg font-semibold">{s.value}</p>
                 <p className="text-[10px] text-muted-foreground">{s.label}</p>
               </div>
             ))}

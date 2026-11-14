@@ -200,7 +200,7 @@ export function AgentsScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gradient">AI Agents</h1>
+          <h1 className="text-xl font-semibold tracking-tight">AI Agents</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Monitor and manage all AI browser agents</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -385,7 +385,7 @@ export function AgentsScreen() {
 
                 {/* Agent Details */}
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Application Details</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Application Details</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">User</span>
                     <span className="font-medium">{selectedAgent.firstName} {selectedAgent.lastName}</span>
@@ -413,7 +413,7 @@ export function AgentsScreen() {
                 {/* Skills */}
                 {selectedAgent.skills && selectedAgent.skills.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Skills</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3">Skills</h3>
                     <div className="flex flex-wrap gap-2">
                       {selectedAgent.skills.slice(0, 10).map((skill, idx) => (
                         <Badge key={idx} variant="secondary" className="text-xs">{skill}</Badge>
@@ -425,7 +425,7 @@ export function AgentsScreen() {
                 {/* Simulated Logs */}
                 {selectedAgent.status === "processing" && logsOpen && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Real-time Logs</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3">Real-time Logs</h3>
                     <div className="rounded-lg border border-border bg-background p-3 font-mono text-xs flex flex-col gap-1 max-h-[200px] overflow-y-auto">
                       {logs.length > 0 ? (
                         logs.map((log, idx) => (

@@ -47,7 +47,7 @@ export async function fetchAdminEvents(supabase: SupabaseClient, sinceIso: strin
  *  notification arriving both ways replaces itself instead of doubling up. */
 export function signupNotification(s: SignupEvent) {
   return {
-    title: 'New signup 🎉',
+    title: 'New signup',
     body: `${s.name}${s.location ? ` · ${s.location}` : ''} just joined Iris`,
     tag: `signup-${s.id}`,
     url: '/users',
@@ -56,17 +56,17 @@ export function signupNotification(s: SignupEvent) {
 
 export function upgradeNotification(u: UpgradeEvent) {
   const plan = [u.plan, u.period].filter(Boolean).join(' · ')
-  return { title: 'New paid user 💰', body: `${u.name} upgraded to ${plan}`, tag: `paid-${u.id}`, url: '/pricing' }
+  return { title: 'New paid user', body: `${u.name} upgraded to ${plan}`, tag: `paid-${u.id}`, url: '/pricing' }
 }
 
 export type Health = 'healthy' | 'degraded' | 'down'
 
 export function healthNotification(status: Health, detail: string) {
   if (status === 'healthy') {
-    return { title: 'Supabase recovered ✅', body: 'All services are healthy again', tag: 'supabase-health', url: '/settings', urgent: false }
+    return { title: 'Supabase recovered', body: 'All services are healthy again', tag: 'supabase-health', url: '/settings', urgent: false }
   }
   return {
-    title: status === 'down' ? '🔴 Supabase is DOWN' : '🟠 Supabase degraded',
+    title: status === 'down' ? 'Supabase is DOWN' : 'Supabase degraded',
     body: detail || `Overall status: ${status}`,
     tag: 'supabase-health',
     url: '/settings',

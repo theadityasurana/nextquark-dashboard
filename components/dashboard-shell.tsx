@@ -12,7 +12,6 @@ import {
   Mail, DollarSign, Globe, Sun, Moon, BellRing, Brain, TrendingUp, SlidersHorizontal, MessageCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DesktopNotifier } from "@/components/desktop-notifier"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
@@ -22,24 +21,47 @@ function NQLogo({ className }: { className?: string }) {
   return <img src="/applogo.png" alt="Iris" className={className} />
 }
 
-const navItems = [
-  { label: "Overview",      href: "/",           icon: LayoutDashboard },
-  { label: "Live Queue",    href: "/queue",       icon: Zap },
-  { label: "Users",         href: "/users",       icon: Users },
-  { label: "Companies",     href: "/companies",   icon: Building2 },
-  { label: "Jobs",          href: "/jobs",        icon: Briefcase },
-  { label: "AI Agents",     href: "/agents",      icon: Bot },
-  { label: "Email Manager",        href: "/emails",        icon: Mail },
-  { label: "Notification Manager", href: "/notifications",  icon: BellRing },
-  { label: "App Control",          href: "/app-control",    icon: SlidersHorizontal },
-  { label: "Revenue",              href: "/pricing",        icon: DollarSign },
-  // Sits beside Logs on purpose: Logs is what happened, Learning is what the
-  // system kept from it.
-  { label: "Marketing",     href: "/marketing",  icon: TrendingUp },
-  { label: "Sales & Outreach", href: "/outreach",  icon: MessageCircle },
-  { label: "Learning",      href: "/learning",    icon: Brain },
-  { label: "Logs",          href: "/logs",        icon: ScrollText },
+type NavItem = { label: string; href: string; icon: React.ElementType }
+
+// Grouped so the sidebar reads as sections, not one long list.
+const navGroups: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Operations",
+    items: [
+      { label: "Overview",   href: "/",          icon: LayoutDashboard },
+      { label: "Live Queue", href: "/queue",     icon: Zap },
+      { label: "AI Agents",  href: "/agents",    icon: Bot },
+      { label: "Jobs",       href: "/jobs",      icon: Briefcase },
+      { label: "Companies",  href: "/companies", icon: Building2 },
+      { label: "Users",      href: "/users",     icon: Users },
+    ],
+  },
+  {
+    title: "Growth",
+    items: [
+      { label: "Revenue",          href: "/pricing",   icon: DollarSign },
+      { label: "Marketing",        href: "/marketing", icon: TrendingUp },
+      { label: "Sales & Outreach", href: "/outreach",  icon: MessageCircle },
+      { label: "Email",            href: "/emails",        icon: Mail },
+      { label: "Notifications",    href: "/notifications", icon: BellRing },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { label: "App Control", href: "/app-control", icon: SlidersHorizontal },
+      // Logs is what happened, Learning is what the system kept from it.
+      { label: "Learning",    href: "/learning",    icon: Brain },
+      { label: "Logs",        href: "/logs",        icon: ScrollText },
+    ],
+  },
 ]
+
+const allNavItems = [...navGroups.flatMap((g) => g.items), { label: "Settings", href: "/settings", icon: Settings }]
+
+function isActivePath(pathname: string, href: string) {
+  return pathname === href || (href !== "/" && pathname.startsWith(href + "/"))
+}
 
 function ProviderToggle({ collapsed }: { collapsed: boolean }) {
   const [provider, setProvider] = useState<string>("browser_use")
@@ -69,12 +91,7 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
   }
 
   const label = provider === "browser_use" ? "Browser Use" : provider === "browserbase" ? "Browserbase" : "Kernel"
-  const pill = cn(
-    "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
-    provider === "browser_use" ? "bg-blue-500/15 text-blue-500" :
-    provider === "browserbase" ? "bg-emerald-500/15 text-emerald-500" :
-    "bg-violet-500/15 text-violet-500"
-  )
+  const pill = "text-[10px] text-muted-foreground tabular-nums"
 
   if (collapsed) {
     return (
@@ -82,7 +99,7 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
         onClick={handleToggle}
         disabled={switching}
         title={`Provider: ${label} (click to switch)`}
-        className="flex items-center justify-center w-full px-2 py-2 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        className="flex items-center justify-center w-full h-8 rounded-md text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
       >
         <Globe className="h-4 w-4" />
       </button>
@@ -93,11 +110,11 @@ function ProviderToggle({ collapsed }: { collapsed: boolean }) {
     <button
       onClick={handleToggle}
       disabled={switching}
-      className="flex items-center gap-3 w-full rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+      className="flex items-center gap-2.5 w-full rounded-md px-2.5 h-8 text-[13px] text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
     >
       <Globe className="h-4 w-4 shrink-0" />
       <span className="flex-1 text-left truncate">{label}</span>
-      <span className={pill}>{switching ? "..." : "ON"}</span>
+      <span className={pill}>{switching ? "Switching…" : "Provider"}</span>
     </button>
   )
 }
@@ -111,7 +128,7 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
       <button
         onClick={toggle}
         title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        className="flex items-center justify-center w-full px-2 py-2 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        className="flex items-center justify-center w-full h-8 rounded-md text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
       >
         {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
@@ -121,11 +138,33 @@ function ThemeToggle({ collapsed }: { collapsed: boolean }) {
   return (
     <button
       onClick={toggle}
-      className="flex items-center gap-3 w-full rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+      className="flex items-center gap-2.5 w-full rounded-md px-2.5 h-8 text-[13px] text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
     >
       {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
       <span className="flex-1 text-left">{isDark ? "Light mode" : "Dark mode"}</span>
     </button>
+  )
+}
+
+function NavLink({ item, collapsed, active, badge }: { item: NavItem; collapsed: boolean; active: boolean; badge?: number }) {
+  return (
+    <Link
+      href={item.href}
+      title={collapsed ? item.label : undefined}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-2.5 h-8 text-[13px] transition-colors",
+        active
+          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+        collapsed && "justify-center px-0",
+      )}
+    >
+      <item.icon className={cn("h-4 w-4 shrink-0", active ? "text-foreground" : "text-muted-foreground")} />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && badge !== undefined && badge > 0 && (
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">{badge}</span>
+      )}
+    </Link>
   )
 }
 
@@ -134,94 +173,60 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
   const pendingCount = useQueueCount()
 
   return (
-    <div className="relative flex h-full flex-col bg-sidebar text-sidebar-foreground overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
-
-      <div className={cn("relative flex items-center border-b border-sidebar-border/60 px-4 py-5", collapsed ? "justify-center" : "justify-between")}>
-        {!collapsed && (
-          <div className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.08),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.3)] ring-1 ring-border/40">
-              <NQLogo className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold tracking-tight text-gradient">Iris</h1>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Admin</p>
-            </div>
-          </div>
-        )}
-        {collapsed && (
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.08),0_4px_12px_-2px_oklch(0.7_0.18_270_/_0.3)] ring-1 ring-border/40">
-            <NQLogo className="h-5 w-5" />
-          </div>
-        )}
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground overflow-hidden">
+      <div className={cn("flex h-14 items-center border-b border-sidebar-border px-3", collapsed ? "justify-center" : "justify-between")}>
+        <div className="flex items-center gap-2 min-w-0">
+          <NQLogo className="h-6 w-6 rounded-md shrink-0" />
+          {!collapsed && (
+            <span className="text-sm font-semibold tracking-tight truncate">
+              Iris <span className="font-normal text-muted-foreground">Admin</span>
+            </span>
+          )}
+        </div>
         {onToggle && !collapsed && (
-          <Button variant="ghost" size="icon" onClick={onToggle} className="h-7 w-7 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="icon" onClick={onToggle} className="h-7 w-7 text-muted-foreground hover:text-foreground" aria-label="Collapse sidebar">
             <ChevronLeft className="h-4 w-4" />
           </Button>
         )}
       </div>
 
-      <ScrollArea className="relative flex-1 px-3 py-4">
-        <nav className="flex flex-col gap-0.5">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/"))
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150",
-                  isActive
-                    ? "bg-gradient-to-r from-sidebar-accent to-sidebar-accent/40 text-foreground shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]"
-                    : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                  collapsed && "justify-center px-2"
-                )}
-              >
-                {isActive && (
-                  <span aria-hidden className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-primary shadow-[0_0_8px_oklch(0.7_0.18_270_/_0.6)]" />
-                )}
-                <item.icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-primary" : "group-hover:text-foreground")} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-                {!collapsed && item.label === "Live Queue" && pendingCount > 0 && (
-                  <Badge variant="secondary" className="ml-auto bg-primary/15 text-primary text-[10px] px-1.5 py-0 border border-primary/20">
-                    {pendingCount}
-                  </Badge>
-                )}
-              </Link>
-            )
-          })}
+      <ScrollArea className="flex-1 px-2 py-3">
+        <nav className="flex flex-col gap-4">
+          {navGroups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-px">
+              {!collapsed && (
+                <p className="px-2.5 pb-1 text-[11px] font-medium text-muted-foreground/80">{group.title}</p>
+              )}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  active={isActivePath(pathname, item.href)}
+                  badge={item.href === "/queue" ? pendingCount : undefined}
+                />
+              ))}
+            </div>
+          ))}
         </nav>
       </ScrollArea>
 
-      <div className="relative border-t border-sidebar-border/60 p-3 flex flex-col gap-0.5">
+      <div className="border-t border-sidebar-border p-2 flex flex-col gap-px">
         <ProviderToggle collapsed={collapsed} />
         <ThemeToggle collapsed={collapsed} />
-        <Link
-          href="/settings"
-          className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-all duration-150",
-            collapsed && "justify-center px-2",
-            pathname === "/settings" && "bg-gradient-to-r from-sidebar-accent to-sidebar-accent/40 text-foreground"
-          )}
-        >
-          <Settings className={cn("h-4 w-4 shrink-0", pathname === "/settings" && "text-primary")} />
-          {!collapsed && <span>Settings</span>}
-        </Link>
-        <div className={cn(
-          "flex items-center gap-3 px-3 py-2 mt-1 rounded-md border border-sidebar-border/40 bg-sidebar-accent/30",
-          collapsed && "justify-center px-2 border-0 bg-transparent"
-        )}>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-chart-2/20 text-xs font-semibold text-foreground ring-1 ring-border/60">
+        <NavLink item={{ label: "Settings", href: "/settings", icon: Settings }} collapsed={collapsed} active={pathname === "/settings"} />
+        <div className={cn("flex items-center gap-2.5 px-2.5 pt-2 mt-1 border-t border-sidebar-border", collapsed && "justify-center px-0")}>
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
             AS
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">Aditya Surana</p>
-              <p className="text-[10px] text-muted-foreground truncate">founders.nextquark@gmail.com</p>
+              <p className="text-[11px] text-muted-foreground truncate">founders.nextquark@gmail.com</p>
             </div>
           )}
           {!collapsed && (
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0">
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0" aria-label="Log out">
               <LogOut className="h-3.5 w-3.5" />
             </Button>
           )}
@@ -234,67 +239,46 @@ function SidebarContent({ collapsed, onToggle }: { collapsed: boolean; onToggle?
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const pathname = usePathname()
+  const current = allNavItems.find((i) => isActivePath(pathname, i.href))
 
   useEffect(() => setMounted(true), [])
 
   return (
-    <div className="relative flex h-[100dvh] overflow-hidden bg-background" suppressHydrationWarning>
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 left-1/3 h-[500px] w-[500px] rounded-full bg-primary/[0.07] blur-[120px]" />
-        <div className="absolute top-1/2 -right-40 h-[400px] w-[400px] rounded-full bg-chart-2/[0.06] blur-[120px]" />
-        <div className="absolute bottom-0 left-0 h-[300px] w-[300px] rounded-full bg-chart-5/[0.04] blur-[120px]" />
-      </div>
-
-      <aside className={cn("hidden md:flex flex-col border-r border-border/60 transition-all duration-200 shrink-0", collapsed ? "w-16" : "w-56")}>
+    <div className="flex h-[100dvh] overflow-hidden bg-background" suppressHydrationWarning>
+      <aside className={cn("hidden md:flex flex-col border-r border-border transition-[width] duration-200 shrink-0", collapsed ? "w-14" : "w-56")}>
         <SidebarContent collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        <header className="relative flex h-14 items-center justify-between border-b border-border/60 px-3 sm:px-4 shrink-0 glass safe-top">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-background px-3 sm:px-6 shrink-0 safe-top">
+          <div className="flex items-center gap-2 min-w-0">
             {mounted && (
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden h-9 w-9 -ml-1.5">
-                    <Menu className="h-5 w-5" />
+                  <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 -ml-1" aria-label="Open navigation">
+                    <Menu className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-72 max-w-[85vw] p-0">
+                <SheetContent side="left" className="w-64 max-w-[85vw] p-0">
                   <VisuallyHidden><SheetTitle>Navigation Menu</SheetTitle></VisuallyHidden>
                   <SidebarContent collapsed={false} />
                 </SheetContent>
               </Sheet>
             )}
-            <div className="flex items-center gap-2 md:hidden min-w-0">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-card ring-1 ring-border/40">
-                <NQLogo className="h-4 w-4" />
-              </div>
-              <span className="text-sm font-semibold tracking-tight truncate">Iris</span>
-            </div>
             {collapsed && (
-              <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="hidden md:flex h-8 w-8">
+              <Button variant="ghost" size="icon" onClick={() => setCollapsed(false)} className="hidden md:flex h-8 w-8 -ml-2" aria-label="Expand sidebar">
                 <Menu className="h-4 w-4" />
               </Button>
             )}
-            <div className="hidden md:flex items-center gap-2.5 min-w-0">
-              <div className="flex items-center gap-1.5 rounded-full border border-success/20 bg-success/10 px-2 py-0.5">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
-                </span>
-                <span className="text-[10px] font-medium text-success">System Online</span>
-              </div>
-            </div>
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm min-w-0">
+              <span className="text-muted-foreground hidden sm:inline">Iris</span>
+              <span className="text-muted-foreground/60 hidden sm:inline">/</span>
+              <span className="font-medium truncate">{current?.label ?? "Dashboard"}</span>
+            </nav>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2 safe-right">
+          <div className="flex items-center gap-1 safe-right">
             {mounted && <DesktopNotifier />}
-            <div className="md:hidden flex items-center gap-1.5 rounded-full border border-success/20 bg-success/10 px-2 py-1">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
-              </span>
-              <span className="text-[10px] font-medium text-success">Online</span>
-            </div>
           </div>
         </header>
 
@@ -302,7 +286,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             display:table, which grows to the widest child and pushes the whole
             page off-screen (marketing map, wide tables on mobile). */}
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
-          <div className="w-full max-w-full min-w-0 p-3 sm:p-4 md:p-6 animate-fade-in pb-safe">
+          <div className="mx-auto w-full max-w-[1400px] min-w-0 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 animate-fade-in pb-safe">
             {children}
           </div>
         </main>

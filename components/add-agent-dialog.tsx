@@ -69,7 +69,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add New Agent</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-2"><span className="font-semibold">⚠️ Current Implementation: SIMULATION MODE</span> - Creates agent metadata (configuration) and returns success message. Does NOT actually spin up infrastructure. <span className="font-semibold">❌ Not Fully Functional</span> - Saves configuration but doesn't provision real infrastructure. In production, this should: 1) Provision Docker container or VM, 2) Install browser automation software, 3) Configure with selected settings, 4) Register agent in system, 5) Start processing queue.</p>
+          <p className="text-sm text-muted-foreground mt-2"><span className="font-semibold">Current Implementation: SIMULATION MODE</span> - Creates agent metadata (configuration) and returns success message. Does NOT actually spin up infrastructure. <span className="font-semibold">Not Fully Functional</span> - Saves configuration but doesn't provision real infrastructure. In production, this should: 1) Provision Docker container or VM, 2) Install browser automation software, 3) Configure with selected settings, 4) Register agent in system, 5) Start processing queue.</p>
         </DialogHeader>
 
         <Tabs defaultValue="basic" className="w-full">
@@ -91,7 +91,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                       <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Create multiple agents at once (1-10). Set to 5 = creates 5 agents simultaneously. <span className="font-semibold">✅ Active</span> - Accepts input, loops creation. Use case: Quickly scale up when queue is large.</p>
+                      <p>Create multiple agents at once (1-10). Set to 5 = creates 5 agents simultaneously. <span className="font-semibold">Active</span> - Accepts input, loops creation. Use case: Quickly scale up when queue is large.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -114,7 +114,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                       <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Geographic location where agent runs. US West = West coast jobs, US East = East coast jobs, EU West = European jobs, Asia Pacific = Indian/Asian jobs. Why it matters: Lower latency to job portals, appear local to companies, compliance (EU data laws). <span className="font-semibold">✅ Active</span> - Saves to metadata.</p>
+                      <p>Geographic location where agent runs. US West = West coast jobs, US East = East coast jobs, EU West = European jobs, Asia Pacific = Indian/Asian jobs. Why it matters: Lower latency to job portals, appear local to companies, compliance (EU data laws). <span className="font-semibold">Active</span> - Saves to metadata.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -146,7 +146,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                         <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>How much processing power each agent gets. 1 core = basic (slow), 2 cores = standard (recommended), 4+ cores = heavy workload. <span className="font-semibold">✅ Active</span></p>
+                        <p>How much processing power each agent gets. 1 core = basic (slow), 2 cores = standard (recommended), 4+ cores = heavy workload. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -176,7 +176,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                         <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>RAM allocated to each agent. 2 GB = minimum, 4 GB = recommended, 8+ GB = if running multiple browsers. <span className="font-semibold">✅ Active</span></p>
+                        <p>RAM allocated to each agent. 2 GB = minimum, 4 GB = recommended, 8+ GB = if running multiple browsers. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -207,7 +207,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                       <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Which browser to use. <span className="font-semibold">✅ Active</span> - Saves to metadata. Recommendation: Latest Chrome (most compatible).</p>
+                      <p>Which browser to use. <span className="font-semibold">Active</span> - Saves to metadata. Recommendation: Latest Chrome (most compatible).</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -239,7 +239,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                       <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-sm">
-                      <p>How to assign applications to this agent. <span className="font-semibold">Auto (Load Balanced) ✅ RECOMMENDED</span>: Agent picks any application from queue (first-come, first-served). Default, most efficient. <span className="font-semibold">Specific User</span>: Agent only processes applications for one user (filters queue by user_id). Use case: Dedicated agent per user (premium feature). <span className="font-semibold">Specific Company</span>: Agent only applies to one company (filters queue by company_name). Use case: High-volume applications to one company. <span className="font-semibold">Specific Portal Type</span>: Agent specializes in one portal type (filters by Workday, Greenhouse, etc.). Use case: Portal-specific optimizations. All options <span className="font-semibold">✅ Active</span>.</p>
+                      <p>How to assign applications to this agent. <span className="font-semibold">Auto (Load Balanced) RECOMMENDED</span>: Agent picks any application from queue (first-come, first-served). Default, most efficient. <span className="font-semibold">Specific User</span>: Agent only processes applications for one user (filters queue by user_id). Use case: Dedicated agent per user (premium feature). <span className="font-semibold">Specific Company</span>: Agent only applies to one company (filters queue by company_name). Use case: High-volume applications to one company. <span className="font-semibold">Specific Portal Type</span>: Agent specializes in one portal type (filters by Workday, Greenhouse, etc.). Use case: Portal-specific optimizations. All options <span className="font-semibold">Active</span>.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -270,7 +270,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                         <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Agent will only process applications for this user. Example: User "john@example.com" gets dedicated agent. <span className="font-semibold">✅ Active</span> - Saves user_id.</p>
+                        <p>Agent will only process applications for this user. Example: User "john@example.com" gets dedicated agent. <span className="font-semibold">Active</span> - Saves user_id.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -293,7 +293,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                         <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Agent will only process applications for this company. Example: Dedicated agent for "Google" applications. <span className="font-semibold">✅ Active</span> - Saves company name.</p>
+                        <p>Agent will only process applications for this company. Example: Dedicated agent for "Google" applications. <span className="font-semibold">Active</span> - Saves company name.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -316,7 +316,7 @@ export function AddAgentDialog({ open, onOpenChange, onAgentAdded }: AddAgentDia
                         <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Agent will only process applications for this portal type. Example: One agent for Workday, another for Greenhouse. <span className="font-semibold">✅ Active</span> - Saves portal type.</p>
+                        <p>Agent will only process applications for this portal type. Example: One agent for Workday, another for Greenhouse. <span className="font-semibold">Active</span> - Saves portal type.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

@@ -9,44 +9,43 @@ import { RefreshCw, ChevronLeft, ChevronRight, Star, Smartphone, Package, Globe 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 
 const TT = {
-  backgroundColor: "oklch(0.13 0.006 265)",
-  border: "1px solid oklch(0.22 0.008 265)",
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: "6px",
   fontSize: 11,
-  color: "oklch(0.92 0.003 265)",
+  color: "var(--popover-foreground)",
   padding: "6px 10px",
 }
 
 const COLORS = [
-  "oklch(0.7 0.18 270)",
-  "oklch(0.7 0.16 220)",
-  "oklch(0.72 0.18 155)",
-  "oklch(0.78 0.16 70)",
-  "oklch(0.65 0.22 0)",
-  "oklch(0.72 0.18 320)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ]
 
-const STAR_COLOR = "oklch(0.78 0.16 70)"
+const STAR_COLOR = "var(--chart-3)"
 
 interface AApp { id: string; jobId: string; company_name: string; status: string; createdAt: string }
 
 const PER = 10
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">{children}</p>
+  return <p className="text-xs font-medium text-muted-foreground/60 mb-3">{children}</p>
 }
 
 function Pg({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   if (total <= 1) return null
   return (
-    <div className="flex items-center gap-1.5 px-5 py-2.5 border-t border-border/40">
+    <div className="flex items-center gap-1.5 px-5 py-2.5 border-t border-border">
       <span className="text-[10px] text-muted-foreground flex-1">Page {page} of {total}</span>
       <button disabled={page === 1} onClick={() => onChange(page - 1)}
-        className="flex h-6 w-6 items-center justify-center rounded border border-border/60 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
         <ChevronLeft className="h-3 w-3" />
       </button>
       <button disabled={page === total} onClick={() => onChange(page + 1)}
-        className="flex h-6 w-6 items-center justify-center rounded border border-border/60 text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        className="flex h-6 w-6 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground hover:border-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
         <ChevronRight className="h-3 w-3" />
       </button>
     </div>
@@ -127,7 +126,7 @@ export function AnalyticsScreen() {
           <TabsTrigger value="ios" className="rounded-none border-0 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-4 pb-3 pt-0 h-auto text-sm font-medium transition-colors flex items-center gap-1.5">
             <Smartphone className="h-3.5 w-3.5" /> iOS App
           </TabsTrigger>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 ml-auto border-border/60 mb-3" onClick={handleRefresh} disabled={refreshing}>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 ml-auto border-border mb-3" onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </TabsList>
@@ -139,7 +138,7 @@ export function AnalyticsScreen() {
         {/* Filter */}
         <div className="flex flex-wrap items-center gap-2">
           <Select value={filter} onValueChange={(v) => { setFilter(v); setSwipesPage(1) }}>
-            <SelectTrigger className="h-8 text-xs w-48 bg-card border-border/60">
+            <SelectTrigger className="h-8 text-xs w-48 bg-card border-border">
               <SelectValue placeholder="All companies" />
             </SelectTrigger>
             <SelectContent>
@@ -147,7 +146,7 @@ export function AnalyticsScreen() {
               {companyNames.map(n => (
                 <SelectItem key={n} value={n}>
                   <span className="flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center rounded bg-accent text-[8px] font-bold shrink-0">{n.charAt(0)}</span>
+                    <span className="flex h-4 w-4 items-center justify-center rounded bg-accent text-[8px] font-semibold shrink-0">{n.charAt(0)}</span>
                     {n}
                   </span>
                 </SelectItem>
@@ -169,9 +168,9 @@ export function AnalyticsScreen() {
               { label: "Jobs listed",  value: jobCount     },
               { label: "Applications", value: fApps.length },
             ].map((s) => (
-              <div key={s.label} className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-3">{s.label}</p>
-                <p className="text-[28px] font-bold tracking-tight leading-none">{s.value.toLocaleString()}</p>
+              <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-medium text-muted-foreground mb-3">{s.label}</p>
+                <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{s.value.toLocaleString()}</p>
                 {filter !== "all" && <p className="text-[10px] text-muted-foreground mt-1.5 truncate">{filter}</p>}
               </div>
             ))}
@@ -181,16 +180,16 @@ export function AnalyticsScreen() {
         {/* Peak hours chart */}
         <div>
           <SectionLabel>Trends</SectionLabel>
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
             <div className="px-5 pt-4 pb-0">
               <p className="text-sm font-medium">Peak application hours</p>
             </div>
             <div className="h-48 px-2 pb-3 pt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={peakHours} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="hour" tick={{ fontSize: 9, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} />
+                  <XAxis dataKey="hour" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} />
                   <Bar dataKey="count" fill="oklch(0.65 0.15 250)" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -203,8 +202,8 @@ export function AnalyticsScreen() {
           <div>
             <SectionLabel>By company</SectionLabel>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="px-5 pt-4 pb-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-medium">Applications by company</p>
                 </div>
                 <div className="px-5 py-4 flex flex-col gap-2.5">
@@ -227,16 +226,16 @@ export function AnalyticsScreen() {
                 <Pg page={swipesPage} total={totalSwipesPages} onChange={setSwipesPage} />
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="px-5 pt-4 pb-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-medium">Top 5 distribution</p>
                 </div>
                 <div className="h-52 px-3 pb-4 pt-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={breakdown.slice(0, 5)} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                      <XAxis type="number" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={80} />
-                      <Tooltip contentStyle={TT} formatter={(v: number) => [v.toLocaleString(), "Apps"]} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} />
+                      <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={80} />
+                      <Tooltip contentStyle={TT} formatter={(v: number) => [v.toLocaleString(), "Apps"]} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} />
                       <Bar dataKey="apps" radius={[0, 3, 3, 0]}>
                         {breakdown.slice(0, 5).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                       </Bar>
@@ -263,13 +262,13 @@ export function AnalyticsScreen() {
           <div className="flex flex-col gap-8">
 
             {/* App header */}
-            <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] p-5">
+            <div className="rounded-lg border border-border bg-card p-5">
               <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 shrink-0">
+                <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 shrink-0">
                   <Smartphone className="h-7 w-7 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold">{ios.appName}</h2>
+                  <h2 className="text-lg font-semibold">{ios.appName}</h2>
                   <p className="text-xs text-muted-foreground font-mono">{ios.bundleId}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">App ID: {ios.appId}</p>
                 </div>
@@ -289,9 +288,9 @@ export function AnalyticsScreen() {
                   { label: "Total Ratings",  value: ios.totalRatings?.toLocaleString() ?? "—",            sub: "all time" },
                   { label: "Total Releases", value: ios.totalVersions,                                    sub: "versions shipped" },
                 ].map(s => (
-                  <div key={s.label} className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-3">{s.label}</p>
-                    <p className="text-[28px] font-bold tracking-tight leading-none">{s.value}</p>
+                  <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-3">{s.label}</p>
+                    <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{s.value}</p>
                     <p className="text-[10px] text-muted-foreground mt-1.5">{s.sub}</p>
                   </div>
                 ))}
@@ -304,12 +303,12 @@ export function AnalyticsScreen() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                 {/* Star breakdown */}
-                <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                  <div className="px-5 pt-4 pb-3 border-b border-border/40 flex items-center justify-between">
+                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                  <div className="px-5 pt-4 pb-3 border-b border-border flex items-center justify-between">
                     <p className="text-sm font-medium">Rating breakdown</p>
                     <div className="flex items-center gap-1">
                       <Star className="h-3.5 w-3.5 text-yellow-400 fill-yellow-400" />
-                      <span className="text-sm font-bold">{ios.avgRating ?? "—"}</span>
+                      <span className="text-sm font-semibold">{ios.avgRating ?? "—"}</span>
                       <span className="text-xs text-muted-foreground">/ 5</span>
                     </div>
                   </div>
@@ -321,8 +320,8 @@ export function AnalyticsScreen() {
                 </div>
 
                 {/* Territory breakdown */}
-                <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                  <div className="px-5 pt-4 pb-3 border-b border-border/40 flex items-center gap-2">
+                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                  <div className="px-5 pt-4 pb-3 border-b border-border flex items-center gap-2">
                     <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                     <p className="text-sm font-medium">Reviews by territory</p>
                   </div>
@@ -350,8 +349,8 @@ export function AnalyticsScreen() {
             {/* Version history */}
             <div>
               <SectionLabel>Version History</SectionLabel>
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="hidden sm:grid grid-cols-[80px_1fr_120px] px-5 py-2.5 border-b border-border/40 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="hidden sm:grid grid-cols-[80px_1fr_120px] px-5 py-2.5 border-b border-border text-xs font-semibold text-muted-foreground/50">
                   <span>Version</span>
                   <span>Release Type</span>
                   <span className="text-right">Date</span>
@@ -376,7 +375,7 @@ export function AnalyticsScreen() {
             {/* Reviews */}
             <div>
               <SectionLabel>Customer Reviews</SectionLabel>
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
                 {ios.reviews?.length > 0 ? (
                   <div className="divide-y divide-border/30">
                     {ios.reviews.map((r: any, i: number) => (

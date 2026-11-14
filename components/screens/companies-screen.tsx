@@ -253,7 +253,7 @@ export function CompaniesScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Companies</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Companies</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -303,7 +303,7 @@ export function CompaniesScreen() {
                   {company.logoUrl ? (
                     <img src={company.logoUrl} alt={company.name} className="h-10 w-10 rounded-lg object-cover" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-foreground">
                       {company.logoInitial}
                     </div>
                   )}
@@ -317,15 +317,15 @@ export function CompaniesScreen() {
 
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-bold tabular-nums">{company.totalJobs}</p>
+                  <p className="text-xl font-semibold tabular-nums">{company.totalJobs}</p>
                   <p className="text-[10px] text-muted-foreground">Jobs</p>
                 </div>
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-bold tabular-nums">{company.appsToday}</p>
+                  <p className="text-xl font-semibold tabular-nums">{company.appsToday}</p>
                   <p className="text-[10px] text-muted-foreground">Today</p>
                 </div>
                 <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-bold tabular-nums">{company.successRate}%</p>
+                  <p className="text-xl font-semibold tabular-nums">{company.successRate}%</p>
                   <p className="text-[10px] text-muted-foreground">Success</p>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export function CompaniesScreen() {
               <Label className="text-sm font-medium">Company Logo</Label>
               <div className="flex items-center gap-4">
                 <div
-                  className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-accent/30 cursor-pointer hover:border-primary/40 transition-colors overflow-hidden"
+                  className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-border bg-accent/30 cursor-pointer hover:border-primary/40 transition-colors overflow-hidden"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {logoPreview ? (
@@ -765,7 +765,7 @@ export function CompaniesScreen() {
                     {selectedCompany.logoUrl ? (
                       <img src={selectedCompany.logoUrl} alt={selectedCompany.name} className="h-10 w-10 rounded-lg object-cover" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-foreground">
                         {selectedCompany.logoInitial}
                       </div>
                     )}
@@ -783,13 +783,13 @@ export function CompaniesScreen() {
               <div className="flex flex-col gap-5 mt-2">
                 {selectedCompany.description && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">About</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-2">About</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">{selectedCompany.description}</p>
                   </div>
                 )}
 
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Company Information</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Company Information</h3>
                   <div className="grid grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">Website</span>
                     <span className="font-medium flex items-center gap-1">{selectedCompany.website} <ExternalLink className="h-3 w-3" /></span>
@@ -815,7 +815,7 @@ export function CompaniesScreen() {
                 </div>
 
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Portal Configuration</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Portal Configuration</h3>
                   <div className="grid grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">Portal Type</span>
                     <span className="font-medium">{selectedCompany.portalType}</span>
@@ -830,20 +830,20 @@ export function CompaniesScreen() {
 
                 <div className="rounded-lg border border-border p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Portal Health Check</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground">Portal Health Check</h3>
                     <StatusBadge status={selectedCompany.portalStatus} />
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
-                      <p className="text-sm font-bold">245ms</p>
+                      <p className="text-sm font-semibold">245ms</p>
                       <p className="text-[10px] text-muted-foreground">Response Time</p>
                     </div>
                     <div>
-                      <p className="text-sm font-bold">99.8%</p>
+                      <p className="text-sm font-semibold">99.8%</p>
                       <p className="text-[10px] text-muted-foreground">Uptime (24h)</p>
                     </div>
                     <div>
-                      <p className="text-sm font-bold">2m ago</p>
+                      <p className="text-sm font-semibold">2m ago</p>
                       <p className="text-[10px] text-muted-foreground">Last Check</p>
                     </div>
                   </div>
@@ -851,7 +851,7 @@ export function CompaniesScreen() {
 
                 {(selectedCompany as any).atsType && (
                   <div className="rounded-lg border border-border p-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Auto Sync</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3">Auto Sync</h3>
                     <div className="grid grid-cols-2 gap-y-2 text-sm">
                       <span className="text-muted-foreground">Status</span>
                       <span className="font-medium flex items-center gap-1.5">
@@ -875,7 +875,7 @@ export function CompaniesScreen() {
 
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <h3 className="text-xs font-semibold text-muted-foreground">
                       Jobs at {selectedCompany.name}
                     </h3>
                     <Badge variant="secondary" className="bg-secondary text-secondary-foreground text-[10px]">

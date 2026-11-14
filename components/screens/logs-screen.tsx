@@ -82,7 +82,7 @@ export function LogsScreen() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-gradient">System Logs</h1>
+        <h1 className="text-xl font-semibold tracking-tight">System Logs</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">View all system logs for debugging</p>
       </div>
 
@@ -129,7 +129,6 @@ export function LogsScreen() {
             )}
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
               </span>
               <span className="text-xs text-muted-foreground">Live</span>
@@ -141,7 +140,7 @@ export function LogsScreen() {
       {/* Logs */}
       <Card className="bg-card border-border">
         <CardContent className="p-0">
-          <div className="hidden md:grid grid-cols-[80px_70px_200px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[80px_70px_200px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
             <span>Time</span>
             <span>Level</span>
             <span>Agent</span>

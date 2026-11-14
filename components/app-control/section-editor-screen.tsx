@@ -116,7 +116,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
 
   if (!rows || !draft) {
     if (rows && !row) return <p className="text-sm text-destructive">Section {sectionKey} is missing from the database.</p>
-    return <div className="flex flex-col gap-4 max-w-6xl"><Skeleton className="h-10 w-72" /><Skeleton className="h-96 rounded-xl" /></div>
+    return <div className="flex flex-col gap-4 max-w-6xl"><Skeleton className="h-10 w-72" /><Skeleton className="h-96 rounded-lg" /></div>
   }
 
   const r = row!
@@ -150,7 +150,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-gradient">{def.name}</h1>
+              <h1 className="text-xl font-semibold tracking-tight">{def.name}</h1>
               {!deepEqual(r.value, r.default_value) && <Badge className="text-[10px] bg-primary/15 text-primary border border-primary/25">Modified</Badge>}
               {def.highImpact && <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">high impact</Badge>}
             </div>
@@ -169,7 +169,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
       {/* Sticky save bar */}
       <div className={cn(
         "sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 glass",
-        dirty ? "border-primary/40" : "border-border/60",
+        dirty ? "border-primary/40" : "border-border",
       )}>
         <span className="text-xs text-muted-foreground flex items-center gap-1.5">
           {validating && <Loader2 className="h-3 w-3 animate-spin" />}

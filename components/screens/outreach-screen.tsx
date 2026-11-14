@@ -31,7 +31,7 @@ function CopyButton({ text, label, title }: { text: string; label?: string; titl
           setTimeout(() => setDone(false), 1200)
         } catch {}
       }}
-      className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 h-6 text-[11px] text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+      className="inline-flex items-center gap-1 rounded border border-border px-1.5 h-6 text-[11px] text-muted-foreground hover:text-foreground hover:border-border transition-colors"
     >
       {done ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
       {label}
@@ -53,7 +53,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
   const waUrl = row.phone?.countryCode ? `https://wa.me/${row.phone.waDigits}?text=${encodeURIComponent(draft)}` : null
 
   return (
-    <div className={`min-w-0 rounded-lg border p-3 sm:p-4 transition-colors ${row.contacted ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-border/60 bg-card"}`}>
+    <div className={`min-w-0 rounded-lg border p-3 sm:p-4 transition-colors ${row.contacted ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-border bg-card"}`}>
       <div className="flex items-start gap-3">
         <Checkbox
           checked={row.contacted}
@@ -226,13 +226,13 @@ export function OutreachScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Sales &amp; Outreach</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Sales &amp; Outreach</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Personal WhatsApp notes from you to recent signups: intro, their activity, a feedback ask, and what they&apos;re looking for.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-          <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
             {RANGES.map((d) => (
               <button
                 key={d}
@@ -249,13 +249,13 @@ export function OutreachScreen() {
               {draftingAll ? "Drafting…" : `Draft ${stats.missing} missing`}
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border/60" onClick={() => load()} disabled={loading}>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border" onClick={() => load()} disabled={loading}>
             <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
       </div>
 
-      <div className="flex items-center rounded-md border border-border/60 overflow-hidden self-start">
+      <div className="flex items-center rounded-md border border-border overflow-hidden self-start">
         {([["contacts", "Contacts"], ["playbook", "Reply playbook"]] as const).map(([v, label]) => (
           <button
             key={v}
@@ -278,8 +278,8 @@ export function OutreachScreen() {
           { label: "Contacted", value: stats.done },
           { label: "Have a phone", value: stats.withPhone },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-border/60 bg-card px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
+          <div key={s.label} className="rounded-lg border border-border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">{s.label}</p>
             <p className="text-2xl font-semibold tabular-nums mt-1">{s.value}</p>
           </div>
         ))}
@@ -295,7 +295,7 @@ export function OutreachScreen() {
       )}
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-        <div className="flex items-center rounded-md border border-border/60 overflow-x-auto max-w-full self-start">
+        <div className="flex items-center rounded-md border border-border overflow-x-auto max-w-full self-start">
           {([["todo", `To contact (${stats.total - stats.done})`], ["done", `Contacted (${stats.done})`], ["all", `All (${stats.total})`]] as const).map(([f, label]) => (
             <button
               key={f}

@@ -304,7 +304,7 @@ export function JobsScreen() {
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gradient">Jobs</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Jobs</h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
           </div>
           <Badge variant="secondary" className="shrink-0 mt-1">{totalJobs} total</Badge>
@@ -474,7 +474,7 @@ export function JobsScreen() {
       {/* Jobs Table */}
       <Card className="bg-card border-border">
         <CardContent className="p-0">
-          <div className="hidden md:grid grid-cols-[80px_1fr_2fr_80px_100px_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-medium">
+          <div className="hidden md:grid grid-cols-[80px_1fr_2fr_80px_100px_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
             <span>ID</span>
             <span>Company</span>
             <span>Title</span>
@@ -497,7 +497,7 @@ export function JobsScreen() {
                   {company?.logoUrl ? (
                     <img src={company.logoUrl} alt={job.companyName} className="h-6 w-6 rounded object-cover shrink-0" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                   ) : (
-                    <div className="flex h-6 w-6 items-center justify-center rounded bg-accent text-[10px] font-bold text-accent-foreground shrink-0">
+                    <div className="flex h-6 w-6 items-center justify-center rounded bg-accent text-[10px] font-semibold text-accent-foreground shrink-0">
                       {job.companyInitial}
                     </div>
                   )}
@@ -552,7 +552,7 @@ export function JobsScreen() {
                   {companies.map((company) => (
                     <SelectItem key={company.id} value={company.id}>
                       <span className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-accent text-[9px] font-bold text-accent-foreground shrink-0">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-accent text-[9px] font-semibold text-accent-foreground shrink-0">
                           {company.logoInitial}
                         </span>
                         {company.name}
@@ -941,7 +941,7 @@ export function JobsScreen() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-foreground">
                     {selectedJob.companyInitial}
                   </div>
                   <div>
@@ -954,7 +954,7 @@ export function JobsScreen() {
               <div className="flex flex-col gap-5 mt-2">
                 {/* Job Info */}
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Job Information</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Job Information</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
                     <span className="text-muted-foreground">Job ID</span>
                     <span className="font-mono text-xs">#{selectedJob.id}</span>
@@ -977,7 +977,7 @@ export function JobsScreen() {
 
                 {/* Links */}
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Links</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Links</h3>
                   <div className="flex flex-col gap-2">
                     {selectedJob.portalUrl && (
                       <div className="flex items-center gap-2 text-sm">
@@ -1018,18 +1018,18 @@ export function JobsScreen() {
 
                 {/* Application Stats */}
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Application Stats</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-3">Application Stats</h3>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold tabular-nums">{selectedJob.successRate}%</p>
+                      <p className="text-sm font-semibold tabular-nums">{selectedJob.successRate}%</p>
                       <p className="text-[10px] text-muted-foreground">Success Rate</p>
                     </div>
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold tabular-nums">{selectedJob.rightSwipes ?? 0}</p>
+                      <p className="text-sm font-semibold tabular-nums">{selectedJob.rightSwipes ?? 0}</p>
                       <p className="text-[10px] text-muted-foreground">Right Swipes</p>
                     </div>
                     <div className="rounded-md bg-accent/50 py-2">
-                      <p className="text-sm font-bold tabular-nums">{selectedJob.avgTime}</p>
+                      <p className="text-sm font-semibold tabular-nums">{selectedJob.avgTime}</p>
                       <p className="text-[10px] text-muted-foreground">Avg Time</p>
                     </div>
                   </div>
@@ -1038,7 +1038,7 @@ export function JobsScreen() {
                 {/* Description */}
                 {selectedJob.description && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Job Description</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3">Job Description</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">{selectedJob.description}</p>
                   </div>
                 )}
@@ -1046,7 +1046,7 @@ export function JobsScreen() {
                 {/* Requirements */}
                 {selectedJob.requirements && selectedJob.requirements.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
                       <ListChecks className="h-3.5 w-3.5" /> Requirements
                     </h3>
                     <ul className="flex flex-col gap-1.5">
@@ -1063,7 +1063,7 @@ export function JobsScreen() {
                 {/* Skills */}
                 {selectedJob.skills && selectedJob.skills.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5" /> Skills
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
@@ -1077,7 +1077,7 @@ export function JobsScreen() {
                 {/* Benefits */}
                 {selectedJob.benefits && selectedJob.benefits.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
                       <Gift className="h-3.5 w-3.5" /> Benefits
                     </h3>
                     <ul className="flex flex-col gap-1.5">
@@ -1094,7 +1094,7 @@ export function JobsScreen() {
                 {/* Detailed Requirements */}
                 {selectedJob.detailedRequirements && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
                       <FileText className="h-3.5 w-3.5" /> Detailed Requirements
                     </h3>
                     <div className="job-content">
@@ -1126,7 +1126,7 @@ export function JobsScreen() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
                     <Edit2 className="h-5 w-5" />
                   </div>
                   <div>

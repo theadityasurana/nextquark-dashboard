@@ -213,7 +213,7 @@ export function RunTimeline({
         <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3">
           <div className="flex items-center gap-2">
             <Receipt className="h-3.5 w-3.5 shrink-0 text-green-600" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-green-600">
+            <span className="text-xs font-semibold text-green-600">
               {confirmationLabel || "Confirmation"}
             </span>
           </div>
@@ -230,7 +230,7 @@ export function RunTimeline({
         <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
           <div className="mb-1.5 flex items-center gap-2">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-orange-600" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-orange-600">
+            <span className="text-xs font-semibold text-orange-600">
               The form rejected these fields
             </span>
           </div>

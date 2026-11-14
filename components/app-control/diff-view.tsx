@@ -8,7 +8,7 @@ export function DiffView({ before, after, empty = "No changes." }: { before: Jso
   const entries = diff(before, after)
   if (entries.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>
   return (
-    <ul className="flex flex-col divide-y divide-border/50 rounded-md border border-border/60 bg-muted/20 text-xs">
+    <ul className="flex flex-col divide-y divide-border/50 rounded-md border border-border bg-muted/20 text-xs">
       {entries.map(e => (
         <li key={e.path.join(".")} className="px-3 py-2">
           <code className="font-mono text-[11px] text-muted-foreground">{e.path.join(".") || "(whole value)"}</code>

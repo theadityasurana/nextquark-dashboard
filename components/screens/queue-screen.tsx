@@ -322,7 +322,7 @@ export function QueueScreen() {
       {/* ── Header + stats row ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
         {/* Header actions — wrap onto extra lines on narrow screens */}
@@ -355,7 +355,6 @@ export function QueueScreen() {
           {realtimeConnected ? (
             <>
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
               </span>
               <span className="text-xs text-muted-foreground">Live</span>
@@ -375,24 +374,27 @@ export function QueueScreen() {
       {/* ── Stats strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         {[
-          { label: 'Total',      value: applications.length,    color: 'text-foreground' },
-          { label: 'Premium',    value: premiumApps.length,     color: 'text-yellow-500' },
-          { label: 'Pending',    value: pending.length,         color: 'text-muted-foreground' },
-          { label: 'Processing', value: processing.length,      color: 'text-blue-500' },
-          { label: 'Done',       value: completed.length,       color: 'text-green-500' },
-          { label: 'Failed',     value: failed.length,          color: 'text-destructive' },
-          { label: 'Blocked',    value: blocked.length,         color: 'text-orange-500' },
+          { label: 'Total',      value: applications.length,    dot: '' },
+          { label: 'Premium',    value: premiumApps.length,     dot: 'bg-yellow-500' },
+          { label: 'Pending',    value: pending.length,         dot: 'bg-muted-foreground' },
+          { label: 'Processing', value: processing.length,      dot: 'bg-chart-1' },
+          { label: 'Done',       value: completed.length,       dot: 'bg-success' },
+          { label: 'Failed',     value: failed.length,          dot: 'bg-destructive' },
+          { label: 'Blocked',    value: blocked.length,         dot: 'bg-orange-500' },
         ].map(s => (
-          <div key={s.label} className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-2.5 px-2">
-            <span className={`text-lg font-bold leading-none ${s.color}`}>{s.value}</span>
-            <span className="text-[10px] text-muted-foreground mt-1">{s.label}</span>
+          <div key={s.label} className="flex flex-col gap-1 rounded-lg border border-border bg-card px-3 py-2.5">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}
+              {s.label}
+            </span>
+            <span className="text-lg font-semibold leading-none tabular-nums">{s.value.toLocaleString()}</span>
           </div>
         ))}
       </div>
 
       {/* ── Dispatch controls (toggles + start) ── */}
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Dispatch Controls</p>
+        <p className="text-xs font-medium text-muted-foreground">Dispatch Controls</p>
         <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
 
           {/* Premium Only */}
@@ -449,10 +451,9 @@ export function QueueScreen() {
 
         {/* Active mode pill — full width below the grid */}
         {(autoStart || premiumOnly) && (
-          <div className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium self-start
-            border-green-500/30 bg-green-500/5 text-green-600">
+          <div className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium self-start border-green-500/30 bg-green-500/5 text-green-600">
             {autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Auto · Premium only</>}
-            {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
+            {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
             {!autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Premium filter on</>}
           </div>
         )}
@@ -501,7 +502,6 @@ export function QueueScreen() {
                 <span className="flex items-center gap-1">
                   {liveApps.length > 0 && (
                     <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
                       <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
                     </span>
                   )}
@@ -553,7 +553,7 @@ export function QueueScreen() {
 
                 {/* Company + job */}
                 <div className="flex items-center gap-2 mb-2.5">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[10px] font-bold text-accent-foreground">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[10px] font-semibold text-accent-foreground">
                     {app.company_name[0]}
                   </div>
                   <div className="min-w-0">
@@ -755,7 +755,7 @@ export function QueueScreen() {
             return (
               <div
                 key={app.id}
-                className={`rounded-xl border shadow-lg bg-card transition-all duration-200 ${
+                className={`rounded-lg border shadow-lg bg-card transition-all duration-200 ${
                   app.status === 'completed' ? 'border-green-500/40' :
                   app.status === 'failed'    ? 'border-destructive/40' :
                   isRunning                  ? 'border-blue-500/40' :
@@ -771,7 +771,6 @@ export function QueueScreen() {
                   <div className="flex items-center gap-2 min-w-0">
                     {isRunning && (
                       <span className="relative flex h-2 w-2 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
                       </span>
                     )}

@@ -23,7 +23,7 @@ function Phone({ children, label }: { children: React.ReactNode; label: string }
       <div className="w-full max-w-[340px] rounded-[28px] border border-border/70 bg-[#0b0b10] p-2 shadow-xl">
         <div className="rounded-[22px] bg-[#111118] text-white overflow-hidden">{children}</div>
       </div>
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label} · mock preview</span>
+      <span className="text-xs text-muted-foreground">{label} · mock preview</span>
     </div>
   )
 }
@@ -49,23 +49,23 @@ export function FreeSwipesPreview({ rows, ctx }: { rows: Rows; ctx: SampleContex
       <div className="px-5 pt-3 pb-5 flex flex-col gap-4">
         <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
         <div className="text-center">
-          <h3 className="text-lg font-bold">{t("title")}</h3>
+          <h3 className="text-lg font-semibold">{t("title")}</h3>
           <p className="text-xs text-white/60 mt-1">{t("subtitle")}</p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center">
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
           <p className="text-[10px] tracking-widest text-white/50">{t("code_label")}</p>
-          <p className="text-xl font-mono font-bold tracking-[0.2em] my-1">ADIT4K2Q</p>
+          <p className="text-xl font-mono font-semibold tracking-[0.2em] my-1">ADIT4K2Q</p>
           <span className="inline-flex items-center gap-1 rounded-full bg-white text-black px-3 py-1 text-xs font-semibold"><Copy className="h-3 w-3" />{t("copy_button")}</span>
           <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-white/60">
-            <div><p className="text-base font-bold text-white">3</p>{t("stat_friends")}</div>
-            <div><p className="text-base font-bold text-white">{ctx.referral_reward * 3}</p>{t("stat_swipes")}</div>
+            <div><p className="text-base font-semibold text-white">3</p>{t("stat_friends")}</div>
+            <div><p className="text-base font-semibold text-white">{ctx.referral_reward * 3}</p>{t("stat_swipes")}</div>
           </div>
         </div>
         {targets.length > 0 && (
           <div className={cn("grid gap-2", targets.length === 1 ? "grid-cols-1" : targets.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
             {targets.map(k => {
               const Icon = shareIcon[k] ?? Share2
-              return <div key={k} className="flex flex-col items-center gap-1 rounded-xl bg-white/5 py-2 text-[10px]"><Icon className="h-4 w-4" />{shareLabel[k] ?? k}</div>
+              return <div key={k} className="flex flex-col items-center gap-1 rounded-lg bg-white/5 py-2 text-[10px]"><Icon className="h-4 w-4" />{shareLabel[k] ?? k}</div>
             })}
           </div>
         )}
@@ -92,7 +92,7 @@ export function FreeSwipesPreview({ rows, ctx }: { rows: Rows; ctx: SampleContex
               {items.filter(it => it.platform && PLATFORM_ICON[it.platform]).map((it, i) => {
                 const Icon = PLATFORM_ICON[it.platform!]
                 return (
-                  <div key={i} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs">
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs">
                     <Icon className="h-4 w-4" /> <span className="flex-1 truncate">{it.label}</span>
                     {i === 0
                       ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><Check className="h-3 w-3" />{t("follow_claimed")}</span>
@@ -119,15 +119,15 @@ export function OutOfSwipesPreview({ rows, ctx }: { rows: Rows; ctx: SampleConte
       <div className="px-5 pt-3 pb-5 flex flex-col gap-3.5">
         <div className="mx-auto h-1 w-10 rounded-full bg-white/20" />
         <div className="text-center">
-          <h3 className="text-lg font-bold">{t("title")}</h3>
+          <h3 className="text-lg font-semibold">{t("title")}</h3>
           <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[11px] text-white/80"><Clock className="h-3 w-3" />{t("reset_countdown")}</span>
           <p className="text-[10px] text-white/40 mt-1">(unknown reset time: {t("reset_soon")})</p>
           <p className="text-xs text-white/60 mt-2">{t("body")}</p>
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-zinc-900 to-black border border-white/10 p-4">
+        <div className="rounded-lg bg-gradient-to-br from-zinc-900 to-black border border-white/10 p-4">
           <div className="flex items-center justify-between">
             <p className="font-semibold flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-amber-300" />{t("premium_title")}</p>
-            {badge && <span className="rounded-full bg-amber-300 text-black text-[9px] font-bold px-2 py-0.5">{badge}</span>}
+            {badge && <span className="rounded-full bg-amber-300 text-black text-[9px] font-semibold px-2 py-0.5">{badge}</span>}
           </div>
           <ul className="mt-2 flex flex-col gap-1 text-xs text-white/80">
             {strs(c(["premium_benefits"])).map((b, i) => <li key={i} className="flex gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400 shrink-0" />{fillSample(b, ctx, "copy.out_of_swipes", ["premium_benefits", String(i)])}</li>)}
@@ -136,8 +136,8 @@ export function OutOfSwipesPreview({ rows, ctx }: { rows: Rows; ctx: SampleConte
         </div>
         <p className="text-[10px] tracking-widest text-white/50 uppercase">{t("free_title")}</p>
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><UserPlus className="h-4 w-4" /><div><p className="text-xs font-medium">{t("invite_title")}</p><p className="text-[10px] text-white/60">{t("invite_body")}</p></div></div>
-          {followOn && <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2"><Instagram className="h-4 w-4" /><div><p className="text-xs font-medium">{t("follow_title")}</p><p className="text-[10px] text-white/60">{t("follow_body")}</p></div></div>}
+          <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2"><UserPlus className="h-4 w-4" /><div><p className="text-xs font-medium">{t("invite_title")}</p><p className="text-[10px] text-white/60">{t("invite_body")}</p></div></div>
+          {followOn && <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2"><Instagram className="h-4 w-4" /><div><p className="text-xs font-medium">{t("follow_title")}</p><p className="text-[10px] text-white/60">{t("follow_body")}</p></div></div>}
         </div>
         <p className="text-center text-xs text-white/50">{t("later")}</p>
       </div>
@@ -174,7 +174,7 @@ export function JobCardPreview({ rows }: { rows: Rows }) {
     <Phone label="Job card">
       <div className="p-4 flex flex-col gap-3">
         <div className="flex items-start gap-3">
-          <div className="h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br from-violet-500 to-sky-500 flex items-center justify-center font-bold">A</div>
+          <div className="h-11 w-11 shrink-0 rounded-lg bg-gradient-to-br from-violet-500 to-sky-500 flex items-center justify-center font-semibold">A</div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold leading-tight">Product Designer</p>
             <p className="text-xs text-white/60 flex items-center gap-1">Acme {j(["header", "show_linkedin"]) !== false && <Linkedin className="h-3 w-3 text-sky-400" />}</p>
@@ -229,12 +229,12 @@ export function SharePreview({ rows, ctx }: { rows: Rows; ctx: SampleContext }) 
   return (
     <div className="flex flex-col gap-2.5">
       {MESSAGES.map(m => (
-        <div key={m.key} className="rounded-2xl rounded-bl-sm bg-emerald-950/40 border border-emerald-500/20 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wider text-emerald-300/80 mb-1">{m.label}</p>
+        <div key={m.key} className="rounded-lg rounded-bl-sm bg-emerald-950/40 border border-emerald-500/20 px-3 py-2">
+          <p className="text-xs text-emerald-300/80 mb-1">{m.label}</p>
           <p className="text-xs whitespace-pre-wrap break-words">{fillSample(str(c([m.key])), local, "copy.share", [m.key])}</p>
         </div>
       ))}
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground text-center">Messages as sent · sample code ADIT4K2Q</span>
+      <span className="text-xs text-muted-foreground text-center">Messages as sent · sample code ADIT4K2Q</span>
     </div>
   )
 }

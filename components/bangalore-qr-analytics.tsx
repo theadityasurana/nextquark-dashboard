@@ -24,30 +24,29 @@ const BangaloreQrMap = dynamic(
 )
 
 const TT_STYLE = {
-  backgroundColor: "oklch(0.13 0.006 265)",
-  border: "1px solid oklch(0.22 0.008 265)",
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: "8px",
   fontSize: 12,
-  color: "oklch(0.92 0.003 265)",
+  color: "var(--popover-foreground)",
   padding: "8px 12px",
-  boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
 }
 
 const COLORS = [
-  "oklch(0.7 0.18 270)",
-  "oklch(0.7 0.16 220)",
-  "oklch(0.72 0.18 155)",
-  "oklch(0.78 0.16 70)",
-  "oklch(0.65 0.22 0)",
-  "oklch(0.72 0.18 320)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
 ]
 
 const QR_URL = "https://download.nextquark.in/"
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-      <div className="px-5 pt-4 pb-3 border-b border-border/40">
+    <div className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-border">
         <p className="text-sm font-medium">{title}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
       </div>
@@ -58,9 +57,9 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-3">{label}</p>
-      <p className="text-[28px] font-bold tracking-tight leading-none">{value}</p>
+    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">{label}</p>
+      <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
     </div>
   )
@@ -242,8 +241,8 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         </p>
       </div>
 
-      <div className="min-w-0 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-2">QR URL</p>
+      <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+        <p className="text-xs font-medium text-muted-foreground mb-2">QR URL</p>
         <div className="flex items-center gap-3 min-w-0">
           <code className="text-sm sm:text-base font-mono truncate flex-1">{QR_URL}</code>
           <CopyBtn value={QR_URL} />
@@ -276,7 +275,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           <div className="overflow-x-auto max-h-56 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                <tr className="text-left text-xs text-muted-foreground border-b border-border">
                   <th className="py-2 pr-3 font-medium">Country</th>
                   <th className="py-2 font-medium text-right">Scans</th>
                 </tr>
@@ -307,7 +306,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
             <div className="overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card">
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
                     <th className="py-2 pr-3 font-medium">When (IST)</th>
                     <th className="py-2 pr-3 font-medium">Place</th>
                     <th className="py-2 pr-3 font-medium">Loc</th>
@@ -340,13 +339,13 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
 
       <ChartCard
         title="Global scan map"
-        sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, purple = IP."
+        sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, blue = IP."
       >
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs mb-3">
           Accurate place data requires users to tap Allow on location when opening the QR link.
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <div className="flex rounded-md border border-border/60 overflow-hidden">
+          <div className="flex rounded-md border border-border overflow-hidden">
             <Button size="sm" variant={mapMode === "clusters" ? "secondary" : "ghost"} className="h-7 text-xs rounded-none" onClick={() => setMapMode("clusters")}>
               Heat
             </Button>
@@ -366,7 +365,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           )}
         </div>
         <p className="text-[11px] text-muted-foreground mb-2">
-          Green = GPS pin, purple = IP. IP place names are approximate (network). Reverse geocode uses BigDataCloud when GPS is allowed. CARTO is the basemap only.
+          Green = GPS pin, blue = IP. IP place names are approximate (network). Reverse geocode uses BigDataCloud when GPS is allowed. CARTO is the basemap only.
         </p>
         <BangaloreQrMap
           pins={data?.pins ?? []}
@@ -387,9 +386,9 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 8, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} interval={3} />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} interval={3} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
@@ -401,7 +400,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
                       </div>
                     )
                   }}
-                  cursor={{ fill: "oklch(1 0 0 / 0.04)" }}
+                  cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
                 />
                 <Bar dataKey="scans" fill="oklch(0.65 0.15 250)" radius={[2, 2, 0, 0]} />
               </BarChart>
@@ -413,9 +412,9 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
@@ -433,7 +432,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
                   dataKey="scans"
                   stroke={COLORS[0]}
                   strokeWidth={2.5}
-                  dot={{ r: 3, fill: COLORS[0], strokeWidth: 2, stroke: "oklch(0.13 0.006 265)" }}
+                  dot={{ r: 3, fill: COLORS[0], strokeWidth: 2, stroke: "var(--popover)" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -474,18 +473,18 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
       </ChartCard>
 
       {showAdvanced && (
-        <details className="rounded-xl border border-border/60 bg-card">
+        <details className="rounded-lg border border-border bg-card">
           <summary className="px-5 py-3 text-sm font-medium cursor-pointer">
             Advanced: tagged campaigns (?c=)
           </summary>
-          <div className="px-5 pb-4 flex flex-col gap-4 border-t border-border/40 pt-3">
+          <div className="px-5 pb-4 flex flex-col gap-4 border-t border-border pt-3">
             <p className="text-[11px] text-muted-foreground">
               Only if you print different <code className="font-mono">?c=</code> slugs per poster. Single-QR ops can ignore this.
             </p>
             <div className="overflow-x-auto max-h-64 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
                     <th className="py-2 pr-3 font-medium">Poster / spot</th>
                     <th className="py-2 pr-3 font-medium text-right">Scans</th>
                     <th className="py-2 pr-3 font-medium">Last seen</th>

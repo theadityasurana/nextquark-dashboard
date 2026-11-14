@@ -95,12 +95,12 @@ export function DesktopNotifier() {
       if (!res.ok) return
       for (const s of data.signups ?? []) {
         if (!claim(`signup:${s.id}`)) continue
-        await show("New signup 🎉", `${s.name}${s.location ? ` · ${s.location}` : ""} just joined Iris`, { tag: `signup-${s.id}`, url: "/users" })
+        await show("New signup", `${s.name}${s.location ? ` · ${s.location}` : ""} just joined Iris`, { tag: `signup-${s.id}`, url: "/users" })
       }
       for (const u of data.upgrades ?? []) {
         if (!claim(`paid:${u.id}:${u.at}`)) continue
         const plan = [u.plan, u.period].filter(Boolean).join(" · ")
-        await show("New paid user 💰", `${u.name} upgraded to ${plan}`, { tag: `paid-${u.id}`, url: "/pricing" })
+        await show("New paid user", `${u.name} upgraded to ${plan}`, { tag: `paid-${u.id}`, url: "/pricing" })
       }
       if (data.now) lsSet(K_CURSOR, data.now)
     } catch { /* offline — retry next tick with same cursor */ }
@@ -128,10 +128,10 @@ export function DesktopNotifier() {
     if (status === prev) return
     lsSet(K_HEALTH, status)
     if (status === "healthy") {
-      await show("Supabase recovered ✅", "All services are healthy again", { tag: "supabase-health", url: "/settings" })
+      await show("Supabase recovered", "All services are healthy again", { tag: "supabase-health", url: "/settings" })
     } else {
       await show(
-        status === "down" ? "🔴 Supabase is DOWN" : "🟠 Supabase degraded",
+        status === "down" ? "Supabase is DOWN" : "Supabase degraded",
         detail || `Overall status: ${status}`,
         { tag: "supabase-health", url: "/settings", urgent: status === "down" },
       )

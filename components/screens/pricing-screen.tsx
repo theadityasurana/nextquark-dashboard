@@ -23,10 +23,10 @@ const PC: Record<string, string> = {
 }
 
 const TT = {
-  backgroundColor: "oklch(0.13 0.006 265)",
-  border: "1px solid oklch(0.22 0.008 265)",
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: "6px", fontSize: 11,
-  color: "oklch(0.92 0.003 265)", padding: "6px 10px",
+  color: "var(--popover-foreground)", padding: "6px 10px",
 }
 
 const APPLE_FEE   = 0.30
@@ -72,7 +72,7 @@ interface CostStats {
 // ── Small reusable components ─────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">
+    <p className="text-xs font-medium text-muted-foreground/60 mb-3">
       {children}
     </p>
   )
@@ -82,9 +82,9 @@ function KpiCard({ label, value, sub, accent }: {
   label: string; value: React.ReactNode; sub?: string; accent?: string
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-2">{label}</p>
-      <p className={`text-[24px] font-bold tracking-tight leading-none ${accent ?? ""}`}>{value}</p>
+    <div className="rounded-lg border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
+      <p className={`text-[24px] font-semibold tracking-tight leading-none ${accent ?? ""}`}>{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
     </div>
   )
@@ -98,7 +98,7 @@ function PlanTable({ plans, counts, fmt, free }: {
     <div className="overflow-x-auto">
     <table className="w-full min-w-[480px] text-sm">
       <thead>
-        <tr className="border-b border-border/40 text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+        <tr className="border-b border-border text-xs text-muted-foreground font-semibold">
           <th className="text-left px-5 py-3">Plan</th>
           <th className="text-right px-4 py-3">Monthly</th>
           <th className="text-right px-4 py-3">Quarterly</th>
@@ -215,7 +215,7 @@ export function PricingScreen() {
 
       {/* Header — no region toggle, page always shows both */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Revenue</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Revenue</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Subscription analytics across all regions and plans</p>
       </div>
 
@@ -247,17 +247,17 @@ export function PricingScreen() {
       <div>
         <SectionLabel>Plan breakdown · INTL (USD)</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Subscribers per plan</p>
             </div>
             <div className="h-52 px-2 pt-4 pb-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={intlSubBar} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} formatter={(v: number) => [v, "Subscribers"]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [v, "Subscribers"]} />
                   <Bar dataKey="users" radius={[4, 4, 0, 0]} maxBarSize={48}>
                     {intlSubBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
@@ -265,17 +265,17 @@ export function PricingScreen() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Monthly revenue per plan (USD)</p>
             </div>
             <div className="h-52 px-2 pt-4 pb-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={intlRevBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} formatter={(v: number) => [fmtUSD(v), "Revenue"]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [fmtUSD(v), "Revenue"]} />
                   <Bar dataKey="revenue" radius={[4, 4, 0, 0]} maxBarSize={48}>
                     {intlRevBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
@@ -290,17 +290,17 @@ export function PricingScreen() {
       <div>
         <SectionLabel>Plan breakdown · IN (INR)</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Subscribers per plan</p>
             </div>
             <div className="h-52 px-2 pt-4 pb-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={inSubBar} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} formatter={(v: number) => [v, "Subscribers"]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [v, "Subscribers"]} />
                   <Bar dataKey="users" radius={[4, 4, 0, 0]} maxBarSize={48}>
                     {inSubBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
@@ -308,17 +308,17 @@ export function PricingScreen() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Monthly revenue per plan (INR)</p>
             </div>
             <div className="h-52 px-2 pt-4 pb-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={inRevBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 265)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "oklch(1 0 0 / 0.03)" }} formatter={(v: number) => [fmtINR(v), "Revenue"]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => `₹${v}`} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [fmtINR(v), "Revenue"]} />
                   <Bar dataKey="revenue" radius={[4, 4, 0, 0]} maxBarSize={48}>
                     {inRevBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
@@ -334,8 +334,8 @@ export function PricingScreen() {
         <SectionLabel>Distribution</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Plan distribution (all regions)</p>
             </div>
             <div className="h-52 px-2 pt-2">
@@ -346,14 +346,14 @@ export function PricingScreen() {
                   </Pie>
                   <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${v} users`, n]} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8}
-                    formatter={(v) => <span style={{ fontSize: 11, color: "oklch(0.70 0.01 265)" }}>{v}</span>} />
+                    formatter={(v) => <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Platform split</p>
             </div>
             <div className="h-52 px-2 pt-2">
@@ -364,14 +364,14 @@ export function PricingScreen() {
                   </Pie>
                   <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${v} users`, n]} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8}
-                    formatter={(v) => <span style={{ fontSize: 11, color: "oklch(0.70 0.01 265)" }}>{v}</span>} />
+                    formatter={(v) => <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border/40">
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Billing period split</p>
             </div>
             <div className="h-52 px-4 pt-5 pb-3 flex flex-col gap-4 justify-center">
@@ -405,7 +405,7 @@ export function PricingScreen() {
       {/* ── Margin waterfall (USD only) ── */}
       <div>
         <SectionLabel>Margin waterfall · INTL (USD)</SectionLabel>
-        <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-border/40">
             {[
               { label: "Gross Revenue",  value: fmtUSD(mrrUSD),                         sub: "INTL MRR" },
@@ -415,13 +415,13 @@ export function PricingScreen() {
               { label: "Net Margin",     value: fmtUSD(netMargin),                      sub: "est. monthly", net: true },
             ].map(({ label, value, sub, neg, net }) => (
               <div key={label} className="px-5 py-4">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">{label}</p>
-                <p className={`text-xl font-bold tabular-nums ${neg ? "text-destructive" : net ? (netMargin >= 0 ? "text-emerald-400" : "text-destructive") : ""}`}>{value}</p>
+                <p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
+                <p className={`text-xl font-semibold tabular-nums ${neg ? "text-destructive" : net ? (netMargin >= 0 ? "text-emerald-400" : "text-destructive") : ""}`}>{value}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>
               </div>
             ))}
           </div>
-          <div className="px-4 pb-4 pt-2 border-t border-border/40">
+          <div className="px-4 pb-4 pt-2 border-t border-border">
             <div className="h-28">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={marginSteps} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -431,7 +431,7 @@ export function PricingScreen() {
                       <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "oklch(0.55 0.01 265)" }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                   <YAxis hide />
                   <Tooltip contentStyle={TT} formatter={(v: number) => [fmtUSD(v), "Revenue"]} />
                   <Area type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} fill="url(#mg)" dot={{ fill: "#34d399", r: 3 }} />
@@ -457,9 +457,9 @@ export function PricingScreen() {
       {/* ── Pricing reference — separate INTL / IN tabs ── */}
       <div>
         <SectionLabel>Pricing reference</SectionLabel>
-        <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
           <Tabs defaultValue="intl">
-            <div className="px-5 pt-3 pb-0 border-b border-border/40 flex items-center justify-between">
+            <div className="px-5 pt-3 pb-0 border-b border-border flex items-center justify-between">
               <p className="text-sm font-medium">Plan pricing</p>
               <TabsList className="h-7 mb-2">
                 <TabsTrigger value="intl" className="text-xs px-3 h-6">INTL · USD</TabsTrigger>
@@ -479,15 +479,15 @@ export function PricingScreen() {
       {/* ── Paid subscribers table ── */}
       <div>
         <SectionLabel>Paid subscribers</SectionLabel>
-        <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-          <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between">
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <p className="text-sm font-medium">All paid subscribers</p>
             <Badge variant="secondary" className="text-[10px]">{paid} total</Badge>
           </div>
           <div className="overflow-auto max-h-[480px]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
-                <tr className="border-b border-border/40 text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
+                <tr className="border-b border-border text-xs text-muted-foreground font-semibold">
                   <th className="text-left px-5 py-2.5">User</th>
                   <th className="text-left px-4 py-2.5 hidden md:table-cell">Email</th>
                   <th className="text-left px-4 py-2.5">Plan</th>
@@ -511,7 +511,7 @@ export function PricingScreen() {
                     <tr key={user.id} className="hover:bg-accent/20 transition-colors">
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[10px] font-bold shrink-0">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[10px] font-semibold shrink-0">
                             {(user.full_name || user.email).charAt(0).toUpperCase()}
                           </div>
                           <span className="font-medium truncate max-w-[120px]">{user.full_name || "—"}</span>

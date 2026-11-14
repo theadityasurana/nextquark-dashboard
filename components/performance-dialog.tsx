@@ -100,14 +100,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Total number of applications in selected time range. See overall volume. <span className="font-semibold">✅ Active</span></p>
+                      <p>Total number of applications in selected time range. See overall volume. <span className="font-semibold">Active</span></p>
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{metrics.totalApplications}</div>
+              <div className="text-2xl font-semibold">{metrics.totalApplications}</div>
             </CardContent>
           </Card>
           <Card>
@@ -120,14 +120,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Percentage of applications that completed successfully. Formula: (Successful / Total) × 100. Track quality. Below 80% = something is wrong. <span className="font-semibold">✅ Active</span></p>
+                      <p>Percentage of applications that completed successfully. Formula: (Successful / Total) × 100. Track quality. Below 80% = something is wrong. <span className="font-semibold">Active</span></p>
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">{successRate}%</div>
+              <div className="text-2xl font-semibold text-success">{successRate}%</div>
             </CardContent>
           </Card>
           <Card>
@@ -140,14 +140,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Count of applications with status = 'completed'. Track progress. <span className="font-semibold">✅ Active</span></p>
+                      <p>Count of applications with status = 'completed'. Track progress. <span className="font-semibold">Active</span></p>
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-chart-2">{metrics.successfulApplications}</div>
+              <div className="text-2xl font-semibold text-chart-2">{metrics.successfulApplications}</div>
             </CardContent>
           </Card>
           <Card>
@@ -160,14 +160,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      <p>Count of applications with status = 'failed'. Monitor errors. Spike = investigate. <span className="font-semibold">✅ Active</span></p>
+                      <p>Count of applications with status = 'failed'. Monitor errors. Spike = investigate. <span className="font-semibold">Active</span></p>
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-destructive">{metrics.failedApplications}</div>
+              <div className="text-2xl font-semibold text-destructive">{metrics.failedApplications}</div>
             </CardContent>
           </Card>
         </div>
@@ -194,7 +194,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Daily success rate over time (7/30/90 days). Upward trend = improving. Downward trend = portals changing, need updates. Flat line = stable. <span className="font-semibold">✅ Active</span></p>
+                        <p>Daily success rate over time (7/30/90 days). Upward trend = improving. Downward trend = portals changing, need updates. Flat line = stable. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -225,7 +225,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>How many applications submitted each hour (0-23). See peak hours. Identify if working hours setting is working. Optimize scheduling. <span className="font-semibold">✅ Active</span></p>
+                        <p>How many applications submitted each hour (0-23). See peak hours. Identify if working hours setting is working. Optimize scheduling. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -258,7 +258,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Average minutes to complete application per portal type (Workday, Greenhouse, Lever, Custom). Identify slow portals. Allocate more resources to slow portals. Workday typically slowest (5-10 min). <span className="font-semibold">✅ Active</span></p>
+                        <p>Average minutes to complete application per portal type (Workday, Greenhouse, Lever, Custom). Identify slow portals. Allocate more resources to slow portals. Workday typically slowest (5-10 min). <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -289,7 +289,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>Success rate for each portal type. Low success rate = portal detection failing. Focus debugging on low-performing portals. <span className="font-semibold">✅ Active</span></p>
+                          <p>Success rate for each portal type. Low success rate = portal detection failing. Focus debugging on low-performing portals. <span className="font-semibold">Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
@@ -320,7 +320,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>Top 5 companies by application volume + success rate. See which companies you're targeting most. Check if specific companies have low success rates. <span className="font-semibold">✅ Active</span></p>
+                          <p>Top 5 companies by application volume + success rate. See which companies you're targeting most. Check if specific companies have low success rates. <span className="font-semibold">Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
@@ -352,7 +352,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Success rate by hour of day. Find optimal application times. Adjust working hours to peak times. Example: 10 AM - 2 PM might have highest success. <span className="font-semibold">✅ Active</span></p>
+                        <p>Success rate by hour of day. Find optimal application times. Adjust working hours to peak times. Example: 10 AM - 2 PM might have highest success. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>
@@ -386,7 +386,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-sm">
-                          <p>Breakdown of error types: Timeout (portal too slow), Form Error (couldn't fill form fields), Portal Down (website unavailable), Auth Failed (login/credentials issue), Other (unknown errors). Identify most common failure reason. Fix root cause. <span className="font-semibold">⚠️ Partially Active</span> (shows placeholder data, needs error tracking implementation).</p>
+                          <p>Breakdown of error types: Timeout (portal too slow), Form Error (couldn't fill form fields), Portal Down (website unavailable), Auth Failed (login/credentials issue), Other (unknown errors). Identify most common failure reason. Fix root cause. <span className="font-semibold">Partially Active</span> (shows placeholder data, needs error tracking implementation).</p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
@@ -425,7 +425,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>Same data as pie chart, different view. See exact counts and percentages. <span className="font-semibold">⚠️ Partially Active</span></p>
+                          <p>Same data as pie chart, different view. See exact counts and percentages. <span className="font-semibold">Partially Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
@@ -465,14 +465,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>Number of applications currently processing. Monitor real-time activity. <span className="font-semibold">✅ Active</span></p>
+                          <p>Number of applications currently processing. Monitor real-time activity. <span className="font-semibold">Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-success">{metrics.agentUtilization.active || 0}</div>
+                  <div className="text-2xl font-semibold text-success">{metrics.agentUtilization.active || 0}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -485,14 +485,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>Number of applications waiting in queue. High number = need more agents. Low number = agents keeping up. <span className="font-semibold">✅ Active</span></p>
+                          <p>Number of applications waiting in queue. High number = need more agents. Low number = agents keeping up. <span className="font-semibold">Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-warning">{metrics.agentUtilization.idle || 0}</div>
+                  <div className="text-2xl font-semibold text-warning">{metrics.agentUtilization.idle || 0}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -505,14 +505,14 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          <p>(Active / Total) × 100. 80-100% = agents fully utilized (good). &lt;50% = agents idle (may need fewer agents). <span className="font-semibold">✅ Active</span></p>
+                          <p>(Active / Total) × 100. 80-100% = agents fully utilized (good). &lt;50% = agents idle (may need fewer agents). <span className="font-semibold">Active</span></p>
                         </TooltipContent>
                       </UITooltip>
                     </TooltipProvider>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{(metrics.agentUtilization.utilization || 0).toFixed(1)}%</div>
+                  <div className="text-2xl font-semibold">{(metrics.agentUtilization.utilization || 0).toFixed(1)}%</div>
                 </CardContent>
               </Card>
             </div>
@@ -527,7 +527,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
-                        <p>Monitor queue depth and processing speed. <span className="font-semibold">✅ Active</span></p>
+                        <p>Monitor queue depth and processing speed. <span className="font-semibold">Active</span></p>
                       </TooltipContent>
                     </UITooltip>
                   </TooltipProvider>

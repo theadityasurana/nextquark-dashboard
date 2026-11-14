@@ -18,28 +18,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AnalyticsScreen } from "@/components/screens/analytics-screen"
 
 const TT = {
-  backgroundColor: "oklch(0.13 0.006 265)",
-  border: "1px solid oklch(0.22 0.008 265)",
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: "6px",
   fontSize: 11,
-  color: "oklch(0.92 0.003 265)",
+  color: "var(--popover-foreground)",
   padding: "6px 10px",
 }
 
-function Kpi({ label, value, sub, icon: Icon, accent }: {
+function Kpi({ label, value, sub, icon: Icon }: {
   label: string; value: string | number; sub: string
-  icon: React.ElementType; accent: string
+  icon: React.ElementType; accent?: string
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest">{label}</span>
-        <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${accent}`}>
-          <Icon className="h-3.5 w-3.5" />
-        </div>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <div>
-        <p className="text-[28px] font-bold tracking-tight leading-none">
+        <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
         <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>
@@ -50,7 +48,7 @@ function Kpi({ label, value, sub, icon: Icon, accent }: {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">{children}</p>
+    <p className="text-xs font-medium text-muted-foreground/60 mb-3">{children}</p>
   )
 }
 
@@ -80,7 +78,7 @@ export function OverviewScreen() {
       {/* ── Page header ── */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Dashboard</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Real-time metrics and analytics</p>
         </div>
         <Button size="sm" variant="outline" className="gap-2 h-8 text-xs" onClick={handleRefresh} disabled={refreshing}>
@@ -126,11 +124,11 @@ export function OverviewScreen() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
               {/* Chart — 2/3 width */}
-              <div className="lg:col-span-2 rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+              <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-5 pt-4 pb-0">
                   <p className="text-sm font-medium">Applications over time</p>
                   <Select value={chartRange} onValueChange={(v) => setPrefs({ chartRange: v })}>
-                    <SelectTrigger className="h-7 w-28 text-xs border-border/60 bg-transparent"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-7 w-28 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1h">Last hour</SelectItem>
                       <SelectItem value="24h">Last 24h</SelectItem>
@@ -144,25 +142,25 @@ export function OverviewScreen() {
                     <AreaChart data={applicationsChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="oklch(0.7 0.18 270)" stopOpacity={0} />
+                          <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
+                          <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="time" tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: "oklch(0.5 0.01 265)" }} axisLine={false} tickLine={false} width={28} />
+                      <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
                       <Tooltip contentStyle={TT} cursor={{ stroke: "oklch(0.35 0.01 265)", strokeWidth: 1 }} />
-                      <Area type="monotone" dataKey="count" stroke="oklch(0.7 0.18 270)" strokeWidth={1.5} fill="url(#ag)" dot={false} />
+                      <Area type="monotone" dataKey="count" stroke="var(--chart-1)" strokeWidth={1.5} fill="url(#ag)" dot={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
               {/* Top Companies — 1/3 width */}
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
-                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card">
+                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-medium">Top companies</p>
                   <Select value={companyRange} onValueChange={(v) => setPrefs({ companyRange: v })}>
-                    <SelectTrigger className="h-7 w-20 text-xs border-border/60 bg-transparent"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="24h">24h</SelectItem>
                       <SelectItem value="7d">7d</SelectItem>
@@ -174,7 +172,7 @@ export function OverviewScreen() {
                   {topCompanies.length > 0 ? topCompanies.map((c: any, i: number) => (
                     <div key={i} className="flex items-center gap-3 px-5 py-3">
                       <span className="text-[10px] text-muted-foreground/50 w-3 shrink-0 font-mono">{i + 1}</span>
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/60 text-[10px] font-bold shrink-0">{c.logoInitial}</div>
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/60 text-[10px] font-semibold shrink-0">{c.logoInitial}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate">{c.name}</p>
                         <p className="text-[10px] text-muted-foreground">{c.appsToday} apps</p>
@@ -192,11 +190,10 @@ export function OverviewScreen() {
           {/* Live stream */}
           <div>
             <SectionLabel>Live stream</SectionLabel>
-            <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border/40">
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
                   </span>
                   <span className="text-xs font-medium">Recent applications</span>
@@ -229,8 +226,8 @@ export function OverviewScreen() {
             <SectionLabel>Infrastructure & Users</SectionLabel>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="px-5 py-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="px-5 py-3 border-b border-border">
                   <p className="text-xs font-medium">Portal health</p>
                 </div>
                 {portalHealth && portalHealth.length > 0 ? (
@@ -255,8 +252,8 @@ export function OverviewScreen() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="px-5 py-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="px-5 py-3 border-b border-border">
                   <p className="text-xs font-medium">Most active users</p>
                 </div>
                 {userActivity && userActivity.length > 0 ? (
@@ -264,7 +261,7 @@ export function OverviewScreen() {
                     {userActivity.map((u: any, i: number) => (
                       <div key={u.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-accent/20 transition-colors">
                         <span className="text-[10px] text-muted-foreground/50 font-mono w-3 shrink-0">{i + 1}</span>
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/60 text-[9px] font-bold shrink-0">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/60 text-[9px] font-semibold shrink-0">
                           {u.name?.charAt(0) || "?"}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -290,11 +287,11 @@ export function OverviewScreen() {
             <SectionLabel>Jobs & Agents</SectionLabel>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                   <p className="text-xs font-medium">Most applied jobs</p>
                   <Select value={jobRange} onValueChange={(v) => setPrefs({ jobRange: v })}>
-                    <SelectTrigger className="h-7 w-20 text-xs border-border/60 bg-transparent"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="24h">24h</SelectItem>
                       <SelectItem value="7d">7d</SelectItem>
@@ -323,12 +320,12 @@ export function OverviewScreen() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border/40">
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                   <p className="text-xs font-medium">AI agents</p>
                   <div className="flex items-center gap-2">
                     <Select value={agentRange} onValueChange={(v) => setPrefs({ agentRange: v })}>
-                      <SelectTrigger className="h-7 w-20 text-xs border-border/60 bg-transparent"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="1h">1h</SelectItem>
                         <SelectItem value="24h">24h</SelectItem>
@@ -343,7 +340,6 @@ export function OverviewScreen() {
                     {activeAgents.map((a: any) => (
                       <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-accent/20 transition-colors">
                         <span className="relative flex h-1.5 w-1.5 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
                           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
                         </span>
                         <span className="text-xs font-mono font-medium w-20 shrink-0">{a.id}</span>
@@ -362,9 +358,9 @@ export function OverviewScreen() {
           {/* Sync activity */}
           <div>
             <SectionLabel>Sync activity</SectionLabel>
-            <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
               {/* Totals strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-border/40 border-b border-border/40">
+              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-border/40 border-b border-border">
                 {[
                   { label: "Companies synced", value: syncActivity?.totals?.companiesSynced ?? 0, color: "text-primary" },
                   { label: "Jobs added",        value: syncActivity?.totals?.added ?? 0,            color: "text-green-400" },
@@ -372,7 +368,7 @@ export function OverviewScreen() {
                   { label: "Jobs deleted",      value: syncActivity?.totals?.deleted ?? 0,          color: "text-destructive" },
                 ].map((s) => (
                   <div key={s.label} className="flex flex-col gap-1 px-5 py-4">
-                    <p className={`text-xl font-bold tabular-nums leading-none ${s.color}`}>{s.value.toLocaleString()}</p>
+                    <p className={`text-xl font-semibold tabular-nums leading-none ${s.color}`}>{s.value.toLocaleString()}</p>
                     <p className="text-[10px] text-muted-foreground">{s.label}</p>
                   </div>
                 ))}
@@ -380,7 +376,7 @@ export function OverviewScreen() {
               {/* Per-company table */}
               {syncActivity?.byCompany?.length > 0 ? (
                 <div className="divide-y divide-border/30">
-                  <div className="hidden sm:grid grid-cols-4 px-5 py-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/50">
+                  <div className="hidden sm:grid grid-cols-4 px-5 py-2 text-xs font-medium text-muted-foreground/50">
                     <span className="col-span-1">Company</span>
                     <span className="text-center text-green-400/70">Added</span>
                     <span className="text-center text-blue-400/70">Updated</span>
@@ -389,7 +385,7 @@ export function OverviewScreen() {
                   {syncActivity.byCompany.map((c: any) => (
                     <div key={c.name} className="grid grid-cols-2 sm:grid-cols-4 items-center px-5 py-2.5 hover:bg-accent/20 transition-colors gap-y-1">
                       <div className="flex items-center gap-2 col-span-2 sm:col-span-1 min-w-0">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent/60 text-[9px] font-bold">{c.initial}</div>
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent/60 text-[9px] font-semibold">{c.initial}</div>
                         <span className="text-xs font-medium truncate">{c.name}</span>
                       </div>
                       <span className="text-xs font-semibold text-green-400 text-center tabular-nums">{c.added > 0 ? `+${c.added}` : "—"}</span>
