@@ -256,7 +256,7 @@ export function CompaniesScreen() {
           <h1 className="text-2xl font-semibold tracking-tight text-gradient">Companies</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{companies.length} total</Badge>
           <Button
             size="sm"
@@ -353,7 +353,7 @@ export function CompaniesScreen() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">Showing {((companiesPage - 1) * COMPANIES_PER_PAGE) + 1}-{Math.min(companiesPage * COMPANIES_PER_PAGE, totalFilteredCompanies)} of {totalFilteredCompanies}</span>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="text-xs h-7" disabled={companiesPage === 1} onClick={() => setCompaniesPage(p => p - 1)}>Previous</Button>

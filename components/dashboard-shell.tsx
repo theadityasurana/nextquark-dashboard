@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { DesktopNotifier } from "@/components/desktop-notifier"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
@@ -286,6 +287,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2 safe-right">
+            {mounted && <DesktopNotifier />}
             <div className="md:hidden flex items-center gap-1.5 rounded-full border border-success/20 bg-success/10 px-2 py-1">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
@@ -296,12 +298,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto overscroll-contain">
-          <ScrollArea className="h-full">
-            <div className="p-3 sm:p-4 md:p-6 animate-fade-in pb-safe">
-              {children}
-            </div>
-          </ScrollArea>
+        {/* Plain scroller, not Radix ScrollArea: its viewport wraps content in
+            display:table, which grows to the widest child and pushes the whole
+            page off-screen (marketing map, wide tables on mobile). */}
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+          <div className="w-full max-w-full min-w-0 p-3 sm:p-4 md:p-6 animate-fade-in pb-safe">
+            {children}
+          </div>
         </main>
       </div>
     </div>

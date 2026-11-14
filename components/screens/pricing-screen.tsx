@@ -95,7 +95,8 @@ function PlanTable({ plans, counts, fmt, free }: {
   fmt: (v: number) => string; free: number
 }) {
   return (
-    <table className="w-full text-sm">
+    <div className="overflow-x-auto">
+    <table className="w-full min-w-[480px] text-sm">
       <thead>
         <tr className="border-b border-border/40 text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">
           <th className="text-left px-5 py-3">Plan</th>
@@ -135,6 +136,7 @@ function PlanTable({ plans, counts, fmt, free }: {
         </tr>
       </tbody>
     </table>
+    </div>
   )
 }
 

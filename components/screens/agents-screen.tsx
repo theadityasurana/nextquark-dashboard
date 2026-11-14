@@ -329,7 +329,7 @@ export function AgentsScreen() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">Showing {((agentsPage - 1) * AGENTS_PER_PAGE) + 1}-{Math.min(agentsPage * AGENTS_PER_PAGE, totalFiltered)} of {totalFiltered}</span>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="text-xs h-7" disabled={agentsPage === 1} onClick={() => setAgentsPage(p => p - 1)}>Previous</Button>

@@ -259,7 +259,7 @@ export function BangaloreQrMap({
     >
       <div
         ref={elRef}
-        className={`${fullscreen ? "h-full w-full" : "h-[420px] w-full rounded-lg"} bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
+        className={`${fullscreen ? "h-full w-full" : "h-[300px] sm:h-[420px] w-full rounded-lg"} bg-muted/20 ${picking ? "cursor-crosshair ring-2 ring-primary/60" : ""}`}
       />
       <button
         type="button"

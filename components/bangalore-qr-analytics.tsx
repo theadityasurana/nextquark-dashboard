@@ -46,7 +46,7 @@ const QR_URL = "https://download.nextquark.in/"
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
+    <div className="min-w-0 rounded-xl border border-border/60 bg-card shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)] overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-border/40">
         <p className="text-sm font-medium">{title}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
@@ -58,7 +58,7 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
+    <div className="min-w-0 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
       <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-3">{label}</p>
       <p className="text-[28px] font-bold tracking-tight leading-none">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
@@ -242,7 +242,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         </p>
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
+      <div className="min-w-0 rounded-xl border border-border/60 bg-card p-4 shadow-[inset_0_1px_0_0_oklch(1_0_0_/_0.04)]">
         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest mb-2">QR URL</p>
         <div className="flex items-center gap-3 min-w-0">
           <code className="text-sm sm:text-base font-mono truncate flex-1">{QR_URL}</code>
@@ -338,7 +338,6 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         </div>
       </div>
 
-      {range !== "all" && (
       <ChartCard
         title="Global scan map"
         sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, purple = IP."
@@ -382,7 +381,6 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           }}
         />
       </ChartCard>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Scans by hour (IST)" sub="when people open the download page">

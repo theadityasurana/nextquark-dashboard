@@ -321,12 +321,12 @@ export function QueueScreen() {
 
       {/* ── Header + stats row ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
-        {/* Header actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Header actions — wrap onto extra lines on narrow screens */}
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {pending.filter(a => !a.is_premium).length > 0 && (
             <Button
               variant="outline"
@@ -462,8 +462,8 @@ export function QueueScreen() {
 
       {/* Search + tabs */}
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-col min-[420px]:flex-row gap-2">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search name, company or job..."
@@ -476,7 +476,7 @@ export function QueueScreen() {
             value={selectedCandidateFilter}
             onValueChange={(v) => { setSelectedCandidateFilter(v === "__all__" ? "" : v); setQueuePage(1) }}
           >
-            <SelectTrigger className="h-10 text-xs w-[160px] shrink-0 bg-card border-border">
+            <SelectTrigger className="h-10 text-xs w-full min-[420px]:w-[160px] shrink-0 bg-card border-border">
               <SelectValue placeholder="All candidates" />
             </SelectTrigger>
             <SelectContent>
@@ -530,7 +530,7 @@ export function QueueScreen() {
           const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
           const atsName = app.portal_name ?? detectAts(app.job_url)
           return (
-            <Card key={app.id} className={`bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
+            <Card key={app.id} className={`min-w-0 bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
               <CardContent className="p-3">
                 {/* Name + status */}
                 <div className="flex items-start justify-between gap-2 mb-2.5">
@@ -612,7 +612,7 @@ export function QueueScreen() {
                 {/* Footer row */}
                 <div className="flex items-center justify-between gap-1 mt-1">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] text-muted-foreground shrink-0">{createdDate}</span>
+                    <span className="text-[10px] text-muted-foreground truncate">{createdDate}</span>
                     {atsName && (
                       <Badge variant="outline" className="text-[9px] border-blue-500/30 text-blue-500 shrink-0">
                         {atsName}
@@ -717,7 +717,7 @@ export function QueueScreen() {
         onOpenChange={(open) => { if (!open) setSelectedApp(null) }}
       >
         <DialogContent
-          className="w-[95vw] max-w-4xl p-0"
+          className="w-[95vw] max-w-4xl p-0 max-h-[90dvh] overflow-y-auto overflow-x-hidden"
           // Prevent accidental dismissal while streaming
           onInteractOutside={(e) => {
             if (selectedApp && streamingApps.has(selectedApp.id)) e.preventDefault()

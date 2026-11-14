@@ -53,7 +53,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
   const waUrl = row.phone?.countryCode ? `https://wa.me/${row.phone.waDigits}?text=${encodeURIComponent(draft)}` : null
 
   return (
-    <div className={`rounded-lg border p-4 transition-colors ${row.contacted ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-border/60 bg-card"}`}>
+    <div className={`min-w-0 rounded-lg border p-3 sm:p-4 transition-colors ${row.contacted ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-border/60 bg-card"}`}>
       <div className="flex items-start gap-3">
         <Checkbox
           checked={row.contacted}
@@ -64,7 +64,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
         <div className="flex-1 min-w-0 space-y-3">
           {/* Who */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-medium">{row.name}</span>
+            <span className="font-medium break-words min-w-0">{row.name}</span>
             <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium tabular-nums">
               {row.jobsApplied} applied
             </span>
@@ -87,7 +87,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
 
           {/* Phone */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             {row.phone ? (
               <>
                 <span className="font-mono tabular-nums">{row.phone.display}</span>
@@ -97,7 +97,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
                 <CopyButton text={row.phone.national} label="Number" title="Copy number without country code" />
               </>
             ) : (
-              <span className="text-xs text-muted-foreground">No phone on file{row.email ? ` · ${row.email}` : ""}</span>
+              <span className="text-xs text-muted-foreground break-all">No phone on file{row.email ? ` · ${row.email}` : ""}</span>
             )}
           </div>
 
@@ -224,14 +224,14 @@ export function OutreachScreen() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Sales &amp; Outreach</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Personal WhatsApp notes from you to recent signups: intro, their activity, a feedback ask, and what they&apos;re looking for.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
           <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
             {RANGES.map((d) => (
               <button
@@ -294,19 +294,19 @@ export function OutreachScreen() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+        <div className="flex items-center rounded-md border border-border/60 overflow-x-auto max-w-full self-start">
           {([["todo", `To contact (${stats.total - stats.done})`], ["done", `Contacted (${stats.done})`], ["all", `All (${stats.total})`]] as const).map(([f, label]) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 h-8 text-xs transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+              className={`shrink-0 whitespace-nowrap px-3 h-8 text-xs transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+        <div className="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-xs">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, phone, email" className="h-8 pl-7 text-xs" />
         </div>

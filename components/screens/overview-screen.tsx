@@ -78,9 +78,9 @@ export function OverviewScreen() {
     <div className="flex flex-col gap-8">
 
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-gradient">Dashboard</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gradient">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Real-time metrics and analytics</p>
         </div>
         <Button size="sm" variant="outline" className="gap-2 h-8 text-xs" onClick={handleRefresh} disabled={refreshing}>

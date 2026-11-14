@@ -53,8 +53,14 @@ export function ApplicationDetails({
   const [dbLogs, setDbLogs] = useState<LogEntry[]>([])
   const [tab, setTab] = useState<DetailTab>("run")
   const [savingStatus, setSavingStatus] = useState(false)
-  const [fullProfile, setFullProfile] = useState<LiveApplicationQueue | null>(null)
+  const [fullProfile, setFullProfile] = useState<(LiveApplicationQueue & {
+    user_stats?: ApplicationStats
+    resume_download_url?: string | null
+  }) | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
+
+  // Drop the cached profile when a different application is opened.
+  useEffect(() => { setFullProfile(null) }, [application.id])
 
   useEffect(() => {
     if (tab !== "profile" || fullProfile) return
@@ -67,6 +73,9 @@ export function ApplicationDetails({
   }, [tab, application.id, fullProfile])
 
   const app = (tab === "profile" && fullProfile) ? fullProfile : application
+  // Stats in the Profile tab are this candidate's, not the whole queue's.
+  const profileStats = fullProfile?.user_stats ?? null
+  const resumeHref = fullProfile?.resume_download_url ?? null
   
   // Fetch logs from database
   useEffect(() => {
@@ -121,7 +130,7 @@ export function ApplicationDetails({
                 }
               }}
             >
-              <SelectTrigger className="h-7 text-xs w-40">
+              <SelectTrigger className="h-7 text-xs w-32 sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -155,7 +164,7 @@ export function ApplicationDetails({
         </div>
 
         {/* Tabs — Run first, because that's what the panel is usually opened for. */}
-        <div className="flex items-center gap-1 mt-4 -mb-4 border-b border-transparent" role="tablist">
+        <div className="flex items-center gap-1 mt-4 -mb-4 -mx-4 px-4 sm:mx-0 sm:px-0 border-b border-transparent overflow-x-auto" role="tablist">
           {([
             { id: "run" as const, label: "Run", icon: Activity },
             { id: "screening" as const, label: "Screening", icon: ShieldCheck },
@@ -168,7 +177,7 @@ export function ApplicationDetails({
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
                 tab === id
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -196,7 +205,7 @@ export function ApplicationDetails({
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">Job Application Link</h4>
           <div className="flex flex-col gap-3">
-            <p className="text-sm font-semibold">{application.job_title} at {application.company_name}</p>
+            <p className="text-sm font-semibold break-words">{application.job_title} at {application.company_name}</p>
             <div className="flex flex-wrap items-center gap-2">
               <a href={application.job_url} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="outline" className="text-xs gap-1.5">
@@ -352,14 +361,14 @@ export function ApplicationDetails({
         <div className="rounded-lg border border-border p-5 bg-foreground/5">
           <div className="text-center mb-4 pb-3 border-b border-border">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary mx-auto mb-2">
-              {application.first_name[0]}{application.last_name[0]}
+              {application.first_name?.[0]}{application.last_name?.[0]}
             </div>
             <h3 className="text-lg font-bold">{fullName}</h3>
             <p className="text-sm text-muted-foreground">{app.headline}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {app.phone} | {app.location}
+              {[app.phone, app.location].filter(Boolean).join(' | ')}
             </p>
-            <div className="flex items-center justify-center gap-3 mt-2">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 break-all">
               {app.linkedin_url && (
                 <a href={app.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                   {app.linkedin_url}
@@ -409,8 +418,8 @@ export function ApplicationDetails({
             <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
             {(app.experience ?? []).map((exp) => (
               <div key={exp.id} className="mb-3">
-                <div className="flex justify-between">
-                  <span className="text-xs font-semibold">{exp.title} - {exp.company}</span>
+                <div className="flex flex-wrap justify-between gap-x-2">
+                  <span className="text-xs font-semibold min-w-0">{exp.title} - {exp.company}</span>
                   <span className="text-[10px] text-muted-foreground">
                     {exp.startDate} - {exp.isCurrent ? 'Present' : exp.endDate}
                   </span>
@@ -467,9 +476,9 @@ export function ApplicationDetails({
                         </a>
                       )}
                     </div>
-                    {cert.skills.length > 0 && (
+                    {cert.skills?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {cert.skills.map((skill) => (
+                        {(cert.skills ?? []).map((skill) => (
                           <Badge key={skill} variant="outline" className="text-[9px] h-4">{skill}</Badge>
                         ))}
                       </div>
@@ -552,13 +561,14 @@ export function ApplicationDetails({
 
           <Separator className="my-3" />
 
-          {/* Application Stats */}
+          {/* Candidate's application stats */}
+          <h4 className="text-xs font-bold uppercase tracking-wider mb-2">This Candidate&apos;s Applications</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             {[
-              { label: "Total Apps", value: stats.totalApps },
-              { label: "Successful", value: stats.successful },
-              { label: "Failed", value: stats.failed },
-              { label: "In Progress", value: stats.inProgress },
+              { label: "Total Apps", value: profileStats?.totalApps ?? "—" },
+              { label: "Successful", value: profileStats?.successful ?? "—" },
+              { label: "Failed", value: profileStats?.failed ?? "—" },
+              { label: "In Progress", value: profileStats?.inProgress ?? "—" },
             ].map((s) => (
               <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
                 <p className="text-lg font-bold">{s.value}</p>
@@ -574,13 +584,21 @@ export function ApplicationDetails({
             <h4 className="text-sm font-semibold flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" /> Resume
             </h4>
-            <a href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${app.resume_url}`} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7">
-                <FileText className="h-3 w-3" /> Download PDF
+            {resumeHref ? (
+              <a href={resumeHref} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7">
+                  <FileText className="h-3 w-3" /> Download PDF
+                </Button>
+              </a>
+            ) : (
+              <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7" disabled>
+                <FileText className="h-3 w-3" /> No resume
               </Button>
-            </a>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-2">Resume will be automatically uploaded during application process</p>
+          <p className="text-xs text-muted-foreground mt-2 break-all">
+            {resumeHref ? (app.resume_url?.split('/').pop() || 'Resume on file') : 'No resume found for this candidate'}
+          </p>
         </div>
 
         {/* Cover Letter */}
@@ -599,255 +617,6 @@ export function ApplicationDetails({
           </div>
         )}
         </>
-        )}
-      </div>
-          <div className="text-center mb-4 pb-3 border-b border-border">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary mx-auto mb-2">
-              {application.first_name[0]}{application.last_name[0]}
-            </div>
-            <h3 className="text-lg font-bold">{fullName}</h3>
-            <p className="text-sm text-muted-foreground">{application.headline}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {application.phone} | {application.location}
-            </p>
-            <div className="flex items-center justify-center gap-3 mt-2">
-              {application.linkedin_url && (
-                <a href={application.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                  {application.linkedin_url}
-                </a>
-              )}
-              {application.github_url && (
-                <a href={application.github_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                  {application.github_url}
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Professional Summary */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-1.5">Professional Summary</h4>
-            <p className="text-xs text-muted-foreground leading-relaxed">{application.bio}</p>
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Personal Information */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
-              <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" /> Gender</span>
-              <span className="font-medium sm:col-span-2">{application.gender || 'Not specified'}</span>
-              <span className="text-muted-foreground flex items-center gap-1"><Heart className="h-3 w-3" /> Ethnicity</span>
-              <span className="font-medium sm:col-span-2">{application.ethnicity}</span>
-              <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Disability</span>
-              <span className="font-medium sm:col-span-2">{application.disability_status}</span>
-              <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Veteran Status</span>
-              <span className="font-medium sm:col-span-2">{application.veteran_status}</span>
-              {application.work_authorization_status && (
-                <>
-                  <span className="text-muted-foreground flex items-center gap-1"><FileText className="h-3 w-3" /> Work Authorization</span>
-                  <span className="font-medium sm:col-span-2">{application.work_authorization_status}</span>
-                </>
-              )}
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Work Experience */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
-            {(application.experience ?? []).map((exp) => (
-              <div key={exp.id} className="mb-3">
-                <div className="flex justify-between">
-                  <span className="text-xs font-semibold">{exp.title} - {exp.company}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {exp.startDate} - {exp.isCurrent ? 'Present' : exp.endDate}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{exp.description}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {exp.jobLocation} • {exp.employmentType} • {exp.workMode}
-                </p>
-                {exp.skills?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {exp.skills.map((skill) => (
-                      <Badge key={skill} variant="secondary" className="text-[9px] h-4">{skill}</Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Education */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Education</h4>
-            {(application.education ?? []).map((edu) => (
-              <div key={edu.id} className="mb-2">
-                <div className="flex justify-between">
-                  <span className="text-xs font-semibold">{edu.degree} in {edu.field} - {edu.institution}</span>
-                  <span className="text-[10px] text-muted-foreground">{edu.startDate} - {edu.endDate}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Certifications */}
-          {(application.certifications ?? []).length > 0 && (
-            <>
-              <div className="mb-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Certifications</h4>
-                {(application.certifications ?? []).map((cert) => (
-                  <div key={cert.id} className="mb-3 rounded-lg bg-accent/30 p-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-xs font-semibold">{cert.name}</span>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{cert.issuingOrganization}</p>
-                      </div>
-                      {cert.credentialUrl && (
-                        <a href={cert.credentialUrl} target="_blank" rel="noopener noreferrer">
-                          <Button size="sm" variant="ghost" className="h-6 text-[10px]">
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                        </a>
-                      )}
-                    </div>
-                    {cert.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {cert.skills.map((skill) => (
-                          <Badge key={skill} variant="outline" className="text-[9px] h-4">{skill}</Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <Separator className="my-3" />
-            </>
-          )}
-
-          {/* Achievements */}
-          {(application.achievements ?? []).length > 0 && (
-            <>
-              <div className="mb-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Achievements</h4>
-                {(application.achievements ?? []).map((ach) => (
-                  <div key={ach.id} className="mb-3 rounded-lg bg-accent/30 p-3">
-                    <div className="flex items-start justify-between">
-                      <span className="text-xs font-semibold">{ach.title}</span>
-                      <span className="text-[10px] text-muted-foreground">{ach.date}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{ach.issuer}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">{ach.description}</p>
-                  </div>
-                ))}
-              </div>
-              <Separator className="my-3" />
-            </>
-          )}
-
-          {/* Job Preferences */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Job Preferences</h4>
-            <div className="space-y-2">
-              <div>
-                <span className="text-[10px] text-muted-foreground">Job Types:</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(application.job_preferences ?? []).map((pref) => (
-                    <Badge key={pref} variant="secondary" className="text-[9px] h-4">{pref}</Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <span className="text-[10px] text-muted-foreground">Work Mode:</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(application.work_mode_preferences ?? []).map((mode) => (
-                    <Badge key={mode} variant="secondary" className="text-[9px] h-4">{mode}</Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Salary Expectations */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Salary Expectations</h4>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">
-                {application.salary_currency} {application.salary_min ? `${application.salary_min.toLocaleString()} - ` : ''}
-                {application.salary_max?.toLocaleString() ?? 'N/A'}
-              </span>
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Skills */}
-          <div className="mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Skills</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {((application.top_skills?.length > 0 ? application.top_skills : application.skills) ?? []).map((skill) => (
-                <Badge key={skill} variant="secondary" className="text-[10px] bg-accent text-accent-foreground">{skill}</Badge>
-              ))}
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          {/* Application Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            {[
-              { label: "Total Apps", value: stats.totalApps },
-              { label: "Successful", value: stats.successful },
-              { label: "Failed", value: stats.failed },
-              { label: "In Progress", value: stats.inProgress },
-            ].map((s) => (
-              <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
-                <p className="text-lg font-bold">{s.value}</p>
-                <p className="text-[10px] text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Resume Download */}
-        <div className="rounded-lg border border-border p-5 bg-foreground/5">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" /> Resume
-            </h4>
-            <a href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${application.resume_url}`} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7">
-                <FileText className="h-3 w-3" /> Download PDF
-              </Button>
-            </a>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">Resume will be automatically uploaded during application process</p>
-        </div>
-
-        {/* Cover Letter */}
-        {application.cover_letter && (
-          <div className="rounded-lg border border-border p-5">
-            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" /> Cover Letter
-            </h4>
-            <div className="rounded-lg bg-accent/30 p-4">
-              {application.cover_letter.split('\n').map((line, i) => (
-                <p key={i} className={`text-sm leading-relaxed text-muted-foreground ${line === '' ? 'h-3' : ''}`}>
-                  {line}
-                </p>
-              ))}
-            </div>
-          </div>
         )}
       </div>
     </div>

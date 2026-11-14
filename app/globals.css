@@ -446,3 +446,10 @@
 .job-content th {
   @apply bg-accent font-semibold;
 }
+
+/* Grid children default to min-width:auto, so one long unbreakable line or a
+   wide chart stretches its column past the screen. Let them shrink; anything
+   genuinely wide scrolls inside its own overflow-x-auto wrapper instead. */
+main .grid > * {
+  min-width: 0;
+}
