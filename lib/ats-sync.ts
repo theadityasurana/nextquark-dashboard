@@ -106,17 +106,15 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
   console.log(`${tag} company="${company.name}"`)
 
   console.log(`${tag} loading existing jobs from DB`)
-  const { data: existingJobs } = await supabase
-    .from('jobs')
-    .select('id, job_url, experience')
-    .eq('company_id', companyId)
+  const existingJobs = await loadCompanyJobs(supabase, companyId)
+  console.log(`${tag} found ${existingJobs.length} existing jobs in DB`)
 
-  console.log(`${tag} found ${existingJobs?.length ?? 0} existing jobs in DB`)
-
-  const existingUrlMap = new Map(
-    (existingJobs || []).filter(j => j.job_url).map(j => [jobDedupeKey(j.job_url), j.id])
-  )
-  const existingExperience = new Map((existingJobs || []).map(j => [j.id, j.experience as string | null]))
+  // One row per posting: extra rows for the same dedupe key (left over from
+  // the old random-id era) are retired below along with expired postings.
+  const preferredIds = new Set(jobs.filter((j: any) => j.jobUrl).map((j: any) => stableJobId(company.logo_initial, j.jobUrl, j.title)))
+  const { keepByKey, staleIds } = pickStaleJobs(existingJobs, liveUrlSet, preferredIds)
+  const existingUrlMap = keepByKey
+  const existingExperience = new Map(existingJobs.map(j => [j.id, j.experience as string | null]))
 
   const today = new Date().toISOString().split('T')[0]
   const toInsert: any[] = []
@@ -198,10 +196,9 @@ export async function syncCompanyJobs(companyId: string, atsType: string, atsCom
   }
 
   let deletedCount = 0
+  // An empty feed is more often an ATS hiccup than a company closing every
+  // role, so nothing is retired unless the feed returned something.
   if (liveUrlSet.size > 0) {
-    const staleIds = (existingJobs || [])
-      .filter(j => j.job_url && !liveUrlSet.has(jobDedupeKey(j.job_url)))
-      .map(j => j.id)
     if (staleIds.length > 0) {
       deletedCount = await retireStaleJobs(supabase, staleIds, tag)
     } else {
@@ -244,27 +241,93 @@ export function updatePatch<T extends Record<string, any>>(data: T): Partial<T> 
   return out as Partial<T>
 }
 
+type ExistingJob = { id: string; job_url: string | null; experience: string | null }
+
+/**
+ * Every job row for a company. A bare select is capped at 1,000 rows by
+ * PostgREST, which left most of a large board (SpaceX, OpenAI, Anduril)
+ * invisible to the sync: never updated, never retired.
+ */
+export async function loadCompanyJobs(supabase: ReturnType<typeof createAdminClient>, companyId: string): Promise<ExistingJob[]> {
+  // Unordered pages: any ORDER BY on this filter makes the planner walk a
+  // whole-table index and hit the statement timeout on 30k-row boards.
+  // Without an order a page could in theory repeat or skip a row; repeats
+  // are dropped by id, and a skipped row is only retired on a later sync.
+  const byId = new Map<string, ExistingJob>()
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    let data: ExistingJob[] | null = null
+    let error: { message: string } | null = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      ;({ data, error } = await supabase
+        .from('jobs')
+        .select('id, job_url, experience')
+        .eq('company_id', companyId)
+        .range(from, from + PAGE - 1))
+      if (!error) break
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
+    }
+    if (error) throw new Error(`loading existing jobs: ${error.message}`)
+    for (const j of data || []) byId.set(j.id, j)
+    if (!data || data.length < PAGE) break
+  }
+  return [...byId.values()]
+}
+
+/**
+ * Split a company's rows into the one kept per live posting and the rest.
+ * Stale = posting no longer in the feed, or a duplicate row for a posting
+ * that is (the row whose id matches the current stable id wins).
+ */
+export function pickStaleJobs(existing: ExistingJob[], liveKeys: Set<string>, preferredIds: Set<string>) {
+  const byKey = new Map<string, ExistingJob[]>()
+  for (const j of existing) {
+    if (!j.job_url) continue
+    const k = jobDedupeKey(j.job_url)
+    const list = byKey.get(k)
+    if (list) list.push(j)
+    else byKey.set(k, [j])
+  }
+  const keepByKey = new Map<string, string>()
+  const staleIds: string[] = []
+  for (const [k, rows] of byKey) {
+    if (!liveKeys.has(k)) { staleIds.push(...rows.map(r => r.id)); continue }
+    const keep = rows.find(r => preferredIds.has(r.id)) ?? rows[0]
+    keepByKey.set(k, keep.id)
+    for (const r of rows) if (r.id !== keep.id) staleIds.push(r.id)
+  }
+  return { keepByKey, staleIds }
+}
+
 /**
  * Remove jobs that left the ATS. A job someone applied to stays (marked
  * closed, hidden from the feed by search_jobs) — deleting it used to delete
  * the user's application rows first, emptying their Applications list.
+ * Chunked: thousands of ids in one .in() overflow the request URL.
  */
 export async function retireStaleJobs(supabase: ReturnType<typeof createAdminClient>, staleIds: string[], tag: string): Promise<number> {
-  const { data: applied } = await supabase.from('live_application_queue').select('job_id').in('job_id', staleIds)
-  const keep = new Set((applied || []).map((r: any) => r.job_id))
-  const toDelete = staleIds.filter(id => !keep.has(id))
-  const toClose = staleIds.filter(id => keep.has(id))
-  if (toClose.length) {
-    const { error } = await supabase.from('jobs').update({ status: 'closed' }).in('id', toClose)
-    if (error) console.error(`${tag} close error:`, error.message)
-    else console.log(`${tag} closed ${toClose.length} stale jobs that have applications`)
+  const CHUNK = 200
+  let retired = 0
+  for (let i = 0; i < staleIds.length; i += CHUNK) {
+    const ids = staleIds.slice(i, i + CHUNK)
+    const { data: applied, error: qErr } = await supabase.from('live_application_queue').select('job_id').in('job_id', ids)
+    if (qErr) { console.error(`${tag} application lookup error:`, qErr.message); continue }
+    const keep = new Set((applied || []).map((r: any) => r.job_id))
+    const toDelete = ids.filter(id => !keep.has(id))
+    const toClose = ids.filter(id => keep.has(id))
+    if (toClose.length) {
+      const { error } = await supabase.from('jobs').update({ status: 'closed' }).in('id', toClose)
+      if (error) console.error(`${tag} close error:`, error.message)
+      else retired += toClose.length
+    }
+    if (toDelete.length) {
+      const { error } = await supabase.from('jobs').delete().in('id', toDelete)
+      if (error) console.error(`${tag} stale job delete error:`, error.message)
+      else retired += toDelete.length
+    }
   }
-  if (toDelete.length) {
-    const { error } = await supabase.from('jobs').delete().in('id', toDelete)
-    if (error) { console.error(`${tag} stale job delete error:`, error.message); return 0 }
-    console.log(`${tag} deleted ${toDelete.length} stale jobs`)
-  }
-  return toDelete.length + toClose.length
+  console.log(`${tag} retired ${retired}/${staleIds.length} stale jobs`)
+  return retired
 }
 
 // ── ATS fetchers (unchanged logic, just moved here) ──────────────────────────

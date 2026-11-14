@@ -21,6 +21,7 @@ import {
   Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2, AlertTriangle, Clock
 } from "lucide-react"
 import { SyncProgressBar } from "@/components/sync-progress-bar"
+import { PageHeader, Panel, StatCard, KpiGrid, Meter, TableHead, EmptyState, SearchField, Pagination } from "@/components/ui/dashboard"
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -37,7 +38,7 @@ export function CompaniesScreen() {
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
   const [companiesPage, setCompaniesPage] = useState(1)
-  const COMPANIES_PER_PAGE = 12
+  const COMPANIES_PER_PAGE = 20
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -249,34 +250,40 @@ export function CompaniesScreen() {
     }
   }
 
+  const atsLinked = companies.filter((c: any) => c.atsType).length
+  const syncFailures = companies.filter((c: any) => c.syncStatus === "failed").length
+  const jobsTracked = companies.reduce((n, c) => n + (Number(c.totalJobs) || 0), 0)
+  const appsToday = companies.reduce((n, c) => n + (Number(c.appsToday) || 0), 0)
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Companies</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all companies and their job portals</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">{companies.length} total</Badge>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 text-xs"
-            onClick={handleSyncAllJobs}
-            disabled={isSyncingAll}
-          >
-            <RefreshCw className={`h-3 w-3 ${isSyncingAll ? "animate-spin" : ""}`} />
-            {isSyncingAll ? "Syncing..." : "Sync Latest Jobs"}
-          </Button>
-          <Button
-            size="sm"
-            className="gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => setShowAddForm(true)}
-          >
-            <Plus className="h-3 w-3" /> Add Company
-          </Button>
-        </div>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Companies"
+        description="Every employer Iris applies to, with its job portal and sync health."
+        actions={
+          <>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleSyncAllJobs} disabled={isSyncingAll}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncingAll ? "animate-spin" : ""}`} />
+              {isSyncingAll ? "Syncing…" : "Sync latest jobs"}
+            </Button>
+            <Button size="sm" className="gap-1.5" onClick={() => setShowAddForm(true)}>
+              <Plus className="h-3.5 w-3.5" /> Add company
+            </Button>
+          </>
+        }
+      />
+
+      <KpiGrid>
+        <StatCard label="Companies" value={companies.length} icon={Building2} footnote="in the catalogue" />
+        <StatCard label="ATS-synced" value={atsLinked} icon={Zap}
+          footnote={`${companies.length ? Math.round((atsLinked / companies.length) * 100) : 0}% of companies auto-sync jobs`}>
+          <Meter value={atsLinked} max={Math.max(1, companies.length)} />
+        </StatCard>
+        <StatCard label="Applications today" value={appsToday} icon={Briefcase} footnote={`${jobsTracked.toLocaleString()} open jobs tracked`} />
+        <StatCard label="Sync failures" value={syncFailures} icon={AlertTriangle}
+          delta={syncFailures === 0 ? "All clear" : "Needs attention"} deltaTone={syncFailures === 0 ? "positive" : "negative"}
+          footnote="last sync attempt failed" />
+      </KpiGrid>
 
       {syncSessionId && (
         <SyncProgressBar
@@ -288,80 +295,77 @@ export function CompaniesScreen() {
         />
       )}
 
-      <div className="relative w-full sm:max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search companies..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCompaniesPage(1) }} />
-      </div>
-
-      {/* Companies Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {paginatedCompanies.map((company) => (
-          <Card key={company.id} className="bg-card border-border hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setSelectedCompany(company)}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  {company.logoUrl ? (
-                    <img src={company.logoUrl} alt={company.name} className="h-10 w-10 rounded-lg object-cover" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-sm font-semibold text-accent-foreground">
-                      {company.logoInitial}
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm font-semibold">{company.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{company.industry}</p>
-                  </div>
-                </div>
-                <StatusBadge status={company.portalStatus} />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-semibold tabular-nums">{company.totalJobs}</p>
-                  <p className="text-[10px] text-muted-foreground">Jobs</p>
-                </div>
-                <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-semibold tabular-nums">{company.appsToday}</p>
-                  <p className="text-[10px] text-muted-foreground">Today</p>
-                </div>
-                <div className="text-center rounded-md bg-accent/50 py-2">
-                  <p className="text-xl font-semibold tabular-nums">{company.successRate}%</p>
-                  <p className="text-[10px] text-muted-foreground">Success</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  {(company as any).syncStatus === "failed" && (
-                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                  )}
-                  {company.portalType}
-                </span>
-                {(company as any).atsType && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {(company as any).lastSyncedAt
-                      ? timeAgo((company as any).lastSyncedAt)
-                      : "never synced"}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Showing {((companiesPage - 1) * COMPANIES_PER_PAGE) + 1}-{Math.min(companiesPage * COMPANIES_PER_PAGE, totalFilteredCompanies)} of {totalFilteredCompanies}</span>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="text-xs h-7" disabled={companiesPage === 1} onClick={() => setCompaniesPage(p => p - 1)}>Previous</Button>
-            <span className="text-xs text-muted-foreground">Page {companiesPage} of {totalPages}</span>
-            <Button size="sm" variant="outline" className="text-xs h-7" disabled={companiesPage === totalPages} onClick={() => setCompaniesPage(p => p + 1)}>Next</Button>
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">All companies</h3>
+            <p className="text-xs text-muted-foreground">{totalFilteredCompanies.toLocaleString()} {searchQuery ? "matching" : "total"}</p>
           </div>
+          <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setCompaniesPage(1) }} placeholder="Search companies…" />
         </div>
-      )}
+
+        <TableHead className="hidden md:flex" columns={[
+          { label: "Company", className: "flex-1 min-w-0" },
+          { label: "Portal", className: "w-32" },
+          { label: "Jobs", className: "w-16 text-right" },
+          { label: "Today", className: "w-16 text-right" },
+          { label: "Success", className: "w-20 text-right" },
+          { label: "Last sync", className: "w-24 text-right" },
+          { label: "Status", className: "w-24 text-right" },
+          { label: "", className: "w-4" },
+        ]} />
+
+        {paginatedCompanies.length === 0 ? (
+          <EmptyState icon={Building2} title="No companies found" description={searchQuery ? "Try a different search." : "Add your first company to get started."} />
+        ) : (
+          <div className="divide-y divide-border">
+            {paginatedCompanies.map((company) => {
+              const c = company as any
+              return (
+                <button
+                  key={company.id}
+                  onClick={() => setSelectedCompany(company)}
+                  className="group flex w-full flex-col gap-2 px-5 py-3 text-left transition-colors hover:bg-muted/40 md:flex-row md:items-center md:gap-4"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    {company.logoUrl ? (
+                      <img src={company.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-md border border-border bg-white object-contain" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                    ) : (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/60 text-xs font-semibold">{company.logoInitial}</div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium">{company.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{company.industry}</p>
+                    </div>
+                    <div className="ml-auto md:hidden"><StatusBadge status={company.portalStatus} /></div>
+                  </div>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground md:w-32">
+                    {c.syncStatus === "failed" && <AlertTriangle className="h-3 w-3 text-warning" />}
+                    <span className="truncate">{c.atsType || company.portalType}</span>
+                  </span>
+                  <span className="hidden w-16 text-right text-[13px] tabular-nums md:block">{company.totalJobs}</span>
+                  <span className="hidden w-16 text-right text-[13px] tabular-nums md:block">{company.appsToday}</span>
+                  <span className="hidden w-20 text-right text-[13px] tabular-nums md:block">{company.successRate}%</span>
+                  <span className="hidden w-24 text-right text-xs tabular-nums text-muted-foreground md:block">
+                    {c.atsType ? (c.lastSyncedAt ? timeAgo(c.lastSyncedAt) : "Never") : "—"}
+                  </span>
+                  <div className="hidden w-24 justify-end md:flex"><StatusBadge status={company.portalStatus} /></div>
+                  <ChevronRight className="hidden h-4 w-4 text-muted-foreground/50 transition-colors group-hover:text-foreground md:block" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <Pagination
+            page={companiesPage}
+            totalPages={totalPages}
+            onPage={setCompaniesPage}
+            summary={`${((companiesPage - 1) * COMPANIES_PER_PAGE) + 1}–${Math.min(companiesPage * COMPANIES_PER_PAGE, totalFilteredCompanies)} of ${totalFilteredCompanies.toLocaleString()}`}
+          />
+        )}
+      </Panel>
 
       {/* Add Company Dialog */}
       <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) { setShowAddForm(false); resetForm() } }}>

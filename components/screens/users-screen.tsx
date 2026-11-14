@@ -17,6 +17,7 @@ import {
   FolderOpen, User as UserIcon, Heart, Shield, Calendar,
   LinkIcon, Globe, RefreshCw, CheckCircle, XCircle, Clock
 } from "lucide-react"
+import { PageHeader, Panel, StatCard, KpiGrid, Meter, TableHead, EmptyState, SearchField, Pagination, Segmented, Avatar } from "@/components/ui/dashboard"
 
 interface SupabaseAuthUser {
   id: string
@@ -41,6 +42,8 @@ export function UsersScreen() {
   const [selectedAuthUser, setSelectedAuthUser] = useState<SupabaseAuthUser | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<"auth" | "app">("auth")
+  const [authPage, setAuthPage] = useState(1)
+  const USERS_PER_PAGE = 25
 
   const { data: authUsers = [], isLoading: authLoading, mutate: refreshAuth } = useSWR<SupabaseAuthUser[]>(
     "/api/users",
@@ -75,184 +78,215 @@ export function UsersScreen() {
     })
   }
 
-  return (
-    <div className="flex flex-col gap-4 sm:gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage registered users from Supabase Authentication and app data</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
-            {activeTab === "auth" ? `${filteredAuthUsers.length} auth users` : `${filteredMockUsers.length} app users`}
-          </Badge>
-        </div>
-      </div>
+  const exportCsv = () => {
+    const headers = activeTab === "auth"
+      ? ["ID", "Email", "Provider", "Confirmed", "Last Sign In", "Created At"]
+      : ["ID", "Name", "Email", "Total Apps", "Successful", "Failed", "Last Active"]
+    const rows = activeTab === "auth"
+      ? (filteredAuthUsers as SupabaseAuthUser[]).map(u => [u.id, u.email, u.provider, u.confirmed ? "Yes" : "No", formatDate(u.last_sign_in_at), formatDate(u.created_at)])
+      : filteredMockUsers.map(u => [u.id, u.name, u.email, u.totalApps, u.successfulApps, u.failedApps, u.lastActive])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `users-${activeTab}-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
-      {/* View Toggle + Search + Actions */}
-      <div className="flex flex-col gap-3">
-        <div className="flex rounded-lg border border-border overflow-hidden self-stretch sm:self-start">
-          <button
-            className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "auth" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
-            onClick={() => setActiveTab("auth")}
-          >
-            Auth Users
-          </button>
-          <button
-            className={`flex-1 sm:flex-none px-4 py-2.5 text-xs font-medium transition-colors ${activeTab === "app" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-accent"}`}
-            onClick={() => setActiveTab("app")}
-          >
-            App Users
-          </button>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="relative flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search users..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2">
+  const all = Array.isArray(authUsers) ? authUsers : []
+  const now = Date.now()
+  const DAY = 86_400_000
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+  const newToday = all.filter(u => new Date(u.created_at) >= startOfToday).length
+  const new7d = all.filter(u => now - new Date(u.created_at).getTime() < 7 * DAY).length
+  const prev7d = all.filter(u => { const t = now - new Date(u.created_at).getTime(); return t >= 7 * DAY && t < 14 * DAY }).length
+  const active7d = all.filter(u => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() < 7 * DAY).length
+  const growth = prev7d > 0 ? Math.round(((new7d - prev7d) / prev7d) * 100) : null
+  const providers = Object.entries(all.reduce<Record<string, number>>((m, u) => { m[u.provider || "email"] = (m[u.provider || "email"] || 0) + 1; return m }, {}))
+    .sort((a, b) => b[1] - a[1])
+  const PROVIDER_COLORS = ["bg-chart-1", "bg-chart-2", "bg-chart-3", "bg-chart-5", "bg-chart-4"]
+
+  const totalAuthPages = Math.max(1, Math.ceil(filteredAuthUsers.length / USERS_PER_PAGE))
+  const safeAuthPage = Math.min(authPage, totalAuthPages)
+  const pagedAuthUsers = filteredAuthUsers.slice((safeAuthPage - 1) * USERS_PER_PAGE, safeAuthPage * USERS_PER_PAGE)
+
+  const relative = (d: string | null) => {
+    if (!d) return "Never"
+    const m = Math.floor((now - new Date(d).getTime()) / 60000)
+    if (m < 1) return "Just now"
+    if (m < 60) return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h ago`
+    const days = Math.floor(h / 24)
+    if (days < 30) return `${days}d ago`
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Users"
+        description="Everyone who has signed up for Iris, from Supabase Authentication."
+        actions={
+          <>
             {activeTab === "auth" && (
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9" onClick={() => refreshAuth()}>
-                <RefreshCw className="h-3 w-3" /> Refresh
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => refreshAuth()}>
+                <RefreshCw className={`h-3.5 w-3.5 ${authLoading ? "animate-spin" : ""}`} /> Refresh
               </Button>
             )}
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs flex-1 sm:flex-none h-9" onClick={() => {
-              const users = activeTab === "auth" ? filteredAuthUsers : filteredMockUsers
-              const headers = activeTab === "auth"
-                ? ["ID", "Email", "Provider", "Confirmed", "Last Sign In", "Created At"]
-                : ["ID", "Name", "Email", "Total Apps", "Successful", "Failed", "Last Active"]
-              const rows = activeTab === "auth"
-                ? (filteredAuthUsers as SupabaseAuthUser[]).map(u => [u.id, u.email, u.provider, u.confirmed ? "Yes" : "No", formatDate(u.last_sign_in_at), formatDate(u.created_at)])
-                : filteredMockUsers.map(u => [u.id, u.name, u.email, u.totalApps, u.successfulApps, u.failedApps, u.lastActive])
-              const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
-              const blob = new Blob([csv], { type: "text/csv" })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement("a")
-              a.href = url
-              a.download = `users-${activeTab}-${new Date().toISOString().slice(0,10)}.csv`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}>
-              <Download className="h-3 w-3" /> Export CSV
+            <Button variant="outline" size="sm" className="gap-2" onClick={exportCsv}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
             </Button>
+          </>
+        }
+      />
+
+      <KpiGrid>
+        <StatCard label="Total users" value={all.length} icon={UserIcon} delta={newToday > 0 ? `+${newToday} today` : undefined} deltaTone="positive" footnote="registered accounts" />
+        <StatCard label="New this week" value={new7d} icon={Calendar}
+          delta={growth === null ? undefined : `${growth >= 0 ? "+" : ""}${growth}% vs last week`}
+          deltaTone={growth === null ? "neutral" : growth >= 0 ? "positive" : "negative"}
+          footnote={`${prev7d.toLocaleString()} the week before`} />
+        <StatCard label="Active this week" value={active7d} icon={Clock}
+          footnote={`${all.length ? Math.round((active7d / all.length) * 100) : 0}% signed in within 7 days`}>
+          <Meter value={active7d} max={Math.max(1, all.length)} />
+        </StatCard>
+        <div className="panel flex flex-col p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-medium text-muted-foreground">Sign-up method</span>
+            <Shield className="h-4 w-4 text-muted-foreground/70" />
+          </div>
+          <div className="mt-4 flex h-2 w-full overflow-hidden rounded-full bg-muted">
+            {providers.map(([name, n], i) => (
+              <div key={name} className={PROVIDER_COLORS[i % PROVIDER_COLORS.length]} style={{ width: `${(n / Math.max(1, all.length)) * 100}%` }} />
+            ))}
+          </div>
+          <div className="mt-4 space-y-1.5">
+            {providers.slice(0, 3).map(([name, n], i) => (
+              <div key={name} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 capitalize text-muted-foreground"><span className={`h-2 w-2 rounded-sm ${PROVIDER_COLORS[i % PROVIDER_COLORS.length]}`} />{name}</span>
+                <span className="num font-medium">{n.toLocaleString()} <span className="text-muted-foreground">· {Math.round((n / Math.max(1, all.length)) * 100)}%</span></span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      </KpiGrid>
 
-      {/* Supabase Auth Users */}
-      {activeTab === "auth" && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
-              <span>Email</span>
-              <span>Provider</span>
-              <span>Confirmed</span>
-              <span>Last Sign In</span>
-              <span>Created</span>
-              <span></span>
-            </div>
-            <div className="divide-y divide-border">
-              {authLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="flex flex-col items-center gap-2">
-                    <RefreshCw className="h-5 w-5 text-muted-foreground animate-spin" />
-                    <p className="text-sm text-muted-foreground">Loading users from Supabase...</p>
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+          <Segmented
+            value={activeTab}
+            onChange={(v) => { setActiveTab(v); setAuthPage(1) }}
+            options={[{ value: "auth", label: `Auth users · ${all.length.toLocaleString()}` }, { value: "app", label: "App profiles" }]}
+          />
+          <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setAuthPage(1) }} placeholder={activeTab === "auth" ? "Search email or ID…" : "Search name, email, headline…"} />
+        </div>
+
+        {activeTab === "auth" && (
+          <>
+            <TableHead className="hidden md:flex" columns={[
+              { label: "User", className: "flex-1 min-w-0" },
+              { label: "Provider", className: "w-24" },
+              { label: "Verified", className: "w-24" },
+              { label: "Last sign in", className: "w-28 text-right" },
+              { label: "Joined", className: "w-28 text-right" },
+              { label: "", className: "w-4" },
+            ]} />
+            {authLoading && all.length === 0 ? (
+              <div className="divide-y divide-border">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3">
+                    <div className="h-7 w-7 rounded-full bg-muted shimmer" />
+                    <div className="h-3 w-56 rounded bg-muted shimmer" />
                   </div>
-                </div>
-              ) : filteredAuthUsers.length === 0 ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="flex flex-col items-center gap-2">
-                    <UserIcon className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No users found in Supabase Authentication</p>
-                    <p className="text-xs text-muted-foreground">Users will appear here once they sign up through your app</p>
-                  </div>
-                </div>
-              ) : (
-                filteredAuthUsers.map((user) => (
-                  <div
+                ))}
+              </div>
+            ) : filteredAuthUsers.length === 0 ? (
+              <EmptyState icon={UserIcon} title="No users found" description={searchQuery ? "Try a different search." : "Users appear here once they sign up."} />
+            ) : (
+              <div className="divide-y divide-border">
+                {pagedAuthUsers.map((user) => (
+                  <button
                     key={user.id}
-                    className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_40px] gap-2 md:gap-4 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer items-center"
+                    className="group flex w-full flex-col gap-1.5 px-5 py-3 text-left transition-colors hover:bg-muted/40 md:flex-row md:items-center md:gap-4"
                     onClick={() => setSelectedAuthUser(user)}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-medium text-accent-foreground shrink-0">
-                        {user.email.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{user.email}</p>
-                        <p className="text-[11px] text-muted-foreground font-mono md:hidden">{user.id.slice(0, 8)}...</p>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Avatar name={user.email} />
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium">{user.email}</p>
+                        <p className="truncate font-mono text-[11px] text-muted-foreground">{user.id.slice(0, 8)}</p>
                       </div>
                     </div>
-                    <div className="hidden md:block">
-                      <Badge variant="secondary" className="text-[10px] bg-accent text-accent-foreground">
-                        {user.provider}
-                      </Badge>
-                    </div>
-                    <div className="hidden md:flex items-center gap-1">
-                      {user.confirmed ? (
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 text-amber-500" />
-                      )}
-                      <span className="text-xs">{user.confirmed ? "Yes" : "No"}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground hidden md:block">
-                      {user.last_sign_in_at ? formatDate(user.last_sign_in_at) : "Never"}
+                    <span className="w-24"><span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium capitalize">{user.provider}</span></span>
+                    <span className="hidden w-24 items-center gap-1.5 text-xs md:flex">
+                      {user.confirmed
+                        ? <><CheckCircle className="h-3.5 w-3.5 text-success" />Verified</>
+                        : <><XCircle className="h-3.5 w-3.5 text-warning" /><span className="text-muted-foreground">Pending</span></>}
                     </span>
-                    <span className="text-xs text-muted-foreground hidden md:block">
-                      {formatDate(user.created_at)}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                    <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.last_sign_in_at)}>{relative(user.last_sign_in_at)}</span>
+                    <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.created_at)}>{relative(user.created_at)}</span>
+                    <ChevronRight className="hidden h-4 w-4 text-muted-foreground/50 group-hover:text-foreground md:block" />
+                  </button>
+                ))}
+              </div>
+            )}
+            {filteredAuthUsers.length > USERS_PER_PAGE && (
+              <Pagination
+                page={safeAuthPage}
+                totalPages={totalAuthPages}
+                onPage={setAuthPage}
+                summary={`${((safeAuthPage - 1) * USERS_PER_PAGE) + 1}–${Math.min(safeAuthPage * USERS_PER_PAGE, filteredAuthUsers.length)} of ${filteredAuthUsers.length.toLocaleString()}`}
+              />
+            )}
+          </>
+        )}
 
-      {/* App Users (Mock) */}
-      {activeTab === "app" && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_1fr_40px] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
-              <span>Name</span>
-              <span>Email</span>
-              <span>Applications</span>
-              <span>Success Rate</span>
-              <span>Last Active</span>
-              <span></span>
-            </div>
-            <div className="divide-y divide-border">
-              {filteredMockUsers.map((user) => (
-                <div
-                  key={user.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1fr_1fr_1fr_40px] gap-2 md:gap-4 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer items-center"
-                  onClick={() => setSelectedUser(user)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-medium text-accent-foreground shrink-0">
-                      {user.name.split(" ").map(n => n[0]).join("")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{user.name}</p>
-                      <p className="text-[11px] text-muted-foreground md:hidden">{user.email}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground hidden md:block truncate">{user.email}</span>
-                  <span className="text-sm font-medium hidden md:block">{user.totalApps}</span>
-                  <div className="hidden md:block">
-                    <span className="text-sm font-medium">{user.totalApps > 0 ? Math.round((user.successfulApps / user.totalApps) * 100) : 0}%</span>
-                    <span className="text-[11px] text-muted-foreground ml-1">({user.successfulApps}/{user.totalApps})</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground hidden md:block">{user.lastActive}</span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        {activeTab === "app" && (
+          <>
+            <TableHead className="hidden md:flex" columns={[
+              { label: "Name", className: "flex-1 min-w-0" },
+              { label: "Applications", className: "w-28 text-right" },
+              { label: "Success", className: "w-32" },
+              { label: "Last active", className: "w-28 text-right" },
+              { label: "", className: "w-4" },
+            ]} />
+            {filteredMockUsers.length === 0 ? (
+              <EmptyState icon={UserIcon} title="No profiles found" />
+            ) : (
+              <div className="divide-y divide-border">
+                {filteredMockUsers.map((user) => {
+                  const rate = user.totalApps > 0 ? Math.round((user.successfulApps / user.totalApps) * 100) : 0
+                  return (
+                    <button
+                      key={user.id}
+                      className="group flex w-full flex-col gap-1.5 px-5 py-3 text-left transition-colors hover:bg-muted/40 md:flex-row md:items-center md:gap-4"
+                      onClick={() => setSelectedUser(user)}
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <Avatar name={user.name} />
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-medium">{user.name}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">{user.email}</p>
+                        </div>
+                      </div>
+                      <span className="w-28 text-xs tabular-nums md:text-right md:text-[13px]">{user.totalApps}</span>
+                      <span className="hidden w-32 items-center gap-2 md:flex">
+                        <Meter value={rate} tone={rate >= 80 ? "success" : rate >= 50 ? "warning" : "destructive"} className="w-16" />
+                        <span className="text-xs tabular-nums">{rate}%</span>
+                      </span>
+                      <span className="hidden w-28 text-right text-xs text-muted-foreground md:block">{user.lastActive}</span>
+                      <ChevronRight className="hidden h-4 w-4 text-muted-foreground/50 group-hover:text-foreground md:block" />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </Panel>
 
       {/* Supabase Auth User Detail Modal */}
       <Dialog open={!!selectedAuthUser} onOpenChange={() => setSelectedAuthUser(null)}>

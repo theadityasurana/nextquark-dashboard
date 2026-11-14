@@ -13,16 +13,34 @@ export async function GET(request: NextRequest) {
   const all = searchParams.get("all") === "true"
   const from = (page - 1) * limit
 
-  let query = supabase
-    .from("companies")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-
-  if (!all) {
-    query = query.range(from, from + limit - 1)
+  // PostgREST stops every select at 1000 rows, so all=true pages through the
+  // table instead of silently returning the first 1000 companies.
+  let data: any[] | null = null
+  let error: { message: string } | null = null
+  let count: number | null = null
+  if (all) {
+    const rows: any[] = []
+    for (let start = 0; start < 100_000; start += 1000) {
+      const res = await supabase
+        .from("companies")
+        .select("*", { count: start === 0 ? "exact" : undefined })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(start, start + 999)
+      if (res.error) { error = res.error; break }
+      if (start === 0) count = res.count
+      rows.push(...(res.data ?? []))
+      if (!res.data || res.data.length < 1000) break
+    }
+    data = rows
+  } else {
+    const res = await supabase
+      .from("companies")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, from + limit - 1)
+    data = res.data; error = res.error; count = res.count
   }
-
-  const { data, error, count } = await query
 
   if (error) {
     console.log("[v0] GET /api/companies error:", error.message)
@@ -34,9 +52,15 @@ export async function GET(request: NextRequest) {
   }
 
   const jobCounts = await cachedValue("company-job-counts", 60_000, async () => {
-    const { data, error } = await supabase.rpc("company_job_counts")
-    if (error) throw new Error(error.message)
-    return data as { company_id: string; job_count: number }[]
+    // One row per company, so this hits the same 1000-row cap: page it too.
+    const rows: { company_id: string; job_count: number }[] = []
+    for (let start = 0; start < 100_000; start += 1000) {
+      const { data, error } = await supabase.rpc("company_job_counts").range(start, start + 999)
+      if (error) throw new Error(error.message)
+      rows.push(...((data ?? []) as { company_id: string; job_count: number }[]))
+      if (!data || data.length < 1000) break
+    }
+    return rows
   }).catch((err) => {
     console.error("[companies] job counts failed:", err.message)
     return []

@@ -20,6 +20,7 @@ import { stepLabel } from "@/lib/run-timeline"
 import { runCost, runSeconds, formatCost, KERNEL_RATES } from "@/lib/run-cost"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { PortalHealthStrip } from "@/components/portal-health-strip"
+import { PageHeader, Panel, PanelHeader, MiniStat, Toolbar, SearchField, TableHead, EmptyState, Pagination, Avatar } from "@/components/ui/dashboard"
 import {
   Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink,
   Receipt, XCircle, CircleSlash, TriangleAlert, Info, Crown, Play
@@ -85,7 +86,7 @@ export function QueueScreen() {
   const [queuePage, setQueuePage] = useState(1)
   const [selectedCandidateFilter, setSelectedCandidateFilter] = useState<string>("")
 
-  const QUEUE_PER_PAGE = 10
+  const QUEUE_PER_PAGE = 25
 
   // AbortControllers keyed by app id — cancelled when an app is deleted mid-run
   const abortControllersRef = useRef<Record<string, AbortController>>({})
@@ -315,169 +316,148 @@ export function QueueScreen() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
+  const freePending = pending.filter(a => !a.is_premium).length
+  const statFilters: { label: string; value: number; dot?: string; tab: string }[] = [
+    { label: 'Total',      value: applications.length, tab: 'all' },
+    { label: 'Premium',    value: premiumApps.length,  dot: 'bg-warning',          tab: 'premium' },
+    { label: 'Pending',    value: pending.length,      dot: 'bg-muted-foreground', tab: 'pending' },
+    { label: 'Processing', value: processing.length,   dot: 'bg-chart-2',          tab: 'processing' },
+    { label: 'Completed',  value: completed.length,    dot: 'bg-success',          tab: 'completed' },
+    { label: 'Failed',     value: failed.length,       dot: 'bg-destructive',      tab: 'failed' },
+    { label: 'Blocked',    value: blocked.length,      dot: 'bg-orange-500',       tab: 'blocked' },
+  ]
+  const tabs: { value: string; label: string; count: number }[] = [
+    { value: 'all', label: 'All', count: applications.length },
+    { value: 'live', label: 'Live', count: liveApps.length },
+    { value: 'premium', label: 'Premium', count: premiumApps.length },
+    { value: 'pending', label: 'Pending', count: pending.length },
+    { value: 'processing', label: 'Processing', count: processing.length },
+    { value: 'completed', label: 'Completed', count: completed.length },
+    { value: 'failed', label: 'Failed', count: failed.length },
+    { value: 'awaiting_otp', label: 'OTP', count: awaitingOtp.length },
+    { value: 'awaiting_captcha', label: 'CAPTCHA', count: awaitingCaptcha.length },
+    { value: 'blocked', label: 'Blocked', count: blocked.length },
+  ]
+  const selectTab = (v: string) => { setActiveTab(v); setQueuePage(1); setSelectedCandidateFilter("") }
+
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="flex flex-col gap-4 sm:gap-6">
+    <div className="flex flex-col gap-8">
 
-      {/* ── Header + stats row ── */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
-        </div>
-        {/* Header actions — wrap onto extra lines on narrow screens */}
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
-          {pending.filter(a => !a.is_premium).length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs gap-1.5 text-green-600 border-green-600/30 hover:bg-green-600/10"
-              disabled={completingFreePending}
-              onClick={handleCompleteFreePending}
-            >
-              {completingFreePending ? <Loader className="h-3 w-3 animate-spin" /> : <Crown className="h-3 w-3" />}
-              Complete Free Pending ({pending.filter(a => !a.is_premium).length})
-            </Button>
-          )}
-          {pending.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => setConfirmDeleteAllPending(true)}
-            >
-              <Trash2 className="h-3 w-3" />
-              Delete All Pending ({pending.length})
-            </Button>
-          )}
-        {/* Live connection indicator top-right */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {realtimeConnected ? (
-            <>
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-              </span>
-              <span className="text-xs text-muted-foreground">Live</span>
-            </>
-          ) : (
-            <>
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
-              </span>
-              <span className="text-xs text-yellow-500">Reconnecting...</span>
-            </>
-          )}
-        </div>
-        </div>
-      </div>
-
-      {/* ── Stats strip ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-        {[
-          { label: 'Total',      value: applications.length,    dot: '' },
-          { label: 'Premium',    value: premiumApps.length,     dot: 'bg-yellow-500' },
-          { label: 'Pending',    value: pending.length,         dot: 'bg-muted-foreground' },
-          { label: 'Processing', value: processing.length,      dot: 'bg-chart-1' },
-          { label: 'Done',       value: completed.length,       dot: 'bg-success' },
-          { label: 'Failed',     value: failed.length,          dot: 'bg-destructive' },
-          { label: 'Blocked',    value: blocked.length,         dot: 'bg-orange-500' },
-        ].map(s => (
-          <div key={s.label} className="flex flex-col gap-2 panel px-4 py-3.5">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}
-              {s.label}
+      <PageHeader
+        eyebrow={
+          realtimeConnected ? (
+            <span className="inline-flex items-center gap-1.5 text-success">
+              <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" /></span>
+              Live · streaming updates
             </span>
-            <span className="num text-2xl font-semibold leading-none">{s.value.toLocaleString()}</span>
-          </div>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-warning"><span className="h-1.5 w-1.5 rounded-full bg-warning" />Reconnecting…</span>
+          )
+        }
+        title="Live queue"
+        description="Every application Iris is submitting, in real time."
+        actions={
+          <>
+            {freePending > 0 && (
+              <Button variant="outline" size="sm" className="gap-1.5" disabled={completingFreePending} onClick={handleCompleteFreePending}>
+                {completingFreePending ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Crown className="h-3.5 w-3.5 text-warning" />}
+                Complete free pending · {freePending}
+              </Button>
+            )}
+            {pending.length > 0 && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setConfirmDeleteAllPending(true)}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete pending · {pending.length}
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {/* Status counters double as filters */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        {statFilters.map(s => (
+          <MiniStat key={s.label} label={s.label} value={s.value} dot={s.dot} active={activeTab === s.tab} onClick={() => selectTab(s.tab)} />
         ))}
       </div>
 
-      {/* ── Dispatch controls (toggles + start) ── */}
-      <div className="flex flex-col gap-3 panel p-3">
-        <p className="text-xs font-medium text-muted-foreground">Dispatch Controls</p>
-        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
-
-          {/* Premium Only */}
-          <div className="flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-2.5 py-2">
-            <Switch
-              checked={premiumOnly}
-              onCheckedChange={setPremiumOnly}
-              className={premiumOnly ? "data-[state=checked]:bg-yellow-500" : ""}
-            />
-            <Crown className="h-3 w-3 text-yellow-500 shrink-0" />
-            <span className="text-xs font-medium">Premium Only</span>
-            <InfoTip text="When ON, Auto Start and Start All only process premium-flagged applications. Non-premium apps stay in the queue untouched." />
-          </div>
-
-          {/* Auto Start */}
-          <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-2 transition-colors ${
-            autoStart ? 'border-green-500/40 bg-green-500/5' : 'border-border bg-accent/30'
-          }`}>
-            <Switch
-              checked={autoStart}
-              onCheckedChange={setAutoStart}
-              className={autoStart ? "data-[state=checked]:bg-green-500" : ""}
-            />
-            <Play className="h-3 w-3 shrink-0" />
-            <span className="text-xs font-medium">Auto Start</span>
-            <InfoTip text="When ON, the server-side worker starts every eligible pending application within seconds, up to the concurrency limit. The dashboard does not need to be open." />
-          </div>
-
-          {/* Concurrency slider */}
-          <div className="flex items-center gap-2 rounded-md border border-border bg-accent/30 px-2.5 py-2">
-            <span className="text-xs font-medium whitespace-nowrap">Concurrency</span>
+      {/* Dispatch controls */}
+      <Panel>
+        <PanelHeader
+          title="Dispatch"
+          description="How the background worker picks up pending applications"
+          actions={
+            (autoStart || premiumOnly) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/25 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
+                {autoStart && <span className="h-1.5 w-1.5 rounded-full bg-success" />}
+                {autoStart && premiumOnly ? "Auto · premium only" : autoStart ? "Auto-starting all" : "Premium filter on"}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">Manual</span>
+            )
+          }
+        />
+        <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-3 md:divide-x md:divide-y-0">
+          <label className="flex cursor-pointer items-start justify-between gap-4 px-5 py-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium"><Play className="h-3.5 w-3.5 text-muted-foreground" />Auto start <InfoTip text="When ON, the server-side worker starts every eligible pending application within seconds, up to the concurrency limit. The dashboard does not need to be open." /></p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {autoStart ? (waitingForSlot > 0 ? `${waitingForSlot} waiting for a free slot` : "Worker starts new applications automatically") : "Applications wait until started manually"}
+              </p>
+            </div>
+            <Switch checked={autoStart} onCheckedChange={setAutoStart} className="data-[state=checked]:bg-success" />
+          </label>
+          <label className="flex cursor-pointer items-start justify-between gap-4 px-5 py-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium"><Crown className="h-3.5 w-3.5 text-warning" />Premium only <InfoTip text="When ON, Auto Start and Start All only process premium-flagged applications. Non-premium apps stay in the queue untouched." /></p>
+              <p className="mt-1 text-xs text-muted-foreground">{premiumOnly ? "Only premium users are dispatched" : "All users are dispatched"}</p>
+            </div>
+            <Switch checked={premiumOnly} onCheckedChange={setPremiumOnly} className="data-[state=checked]:bg-warning" />
+          </label>
+          <div className="flex flex-col gap-3 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-[13px] font-medium">Concurrency <InfoTip text="The maximum number of applications running at once, across the worker and manual starts." /></p>
+              <span className="num rounded-md border border-border bg-muted px-2 py-0.5 text-xs font-semibold">{maxConcurrent}</span>
+            </div>
             <input
-              type="range"
-              min={1}
-              max={50}
-              value={maxConcurrent}
+              type="range" min={1} max={50} value={maxConcurrent}
               onChange={(e) => setPrefs({ maxConcurrent: Number(e.target.value) })}
-              className="flex-1 accent-primary cursor-pointer"
+              className="w-full cursor-pointer accent-primary"
             />
-            <span className="text-xs font-mono w-6 text-center shrink-0">{maxConcurrent}</span>
-            <InfoTip text="The maximum number of applications running at once, across the worker and manual starts." />
-          </div>
-
-          {/* Start All + backlog in one cell */}
-          <div className="flex items-center gap-2">
-            {autoStart && waitingForSlot > 0 && (
-              <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-2.5 py-1.5">
-                <span className="text-xs text-blue-500 font-medium">{waitingForSlot} waiting</span>
-                <InfoTip text="Pending applications waiting for a concurrency slot. The worker picks them up as slots free." />
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground">{processing.length} of {maxConcurrent} slots in use</p>
           </div>
         </div>
-
-        {/* Active mode pill — full width below the grid */}
-        {(autoStart || premiumOnly) && (
-          <div className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium self-start border-green-500/30 bg-green-500/5 text-green-600">
-            {autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Auto · Premium only</>}
-            {autoStart && !premiumOnly && <><span className="relative flex h-1.5 w-1.5"><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" /></span> Auto-starting all</>}
-            {!autoStart && premiumOnly && <><Crown className="h-3 w-3 text-yellow-500" /> Premium filter on</>}
-          </div>
-        )}
-      </div>
+      </Panel>
 
       <PortalHealthStrip />
 
-      {/* Search + tabs */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col min-[420px]:flex-row gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search name, company or job..."
-              className="pl-9 bg-card border-border w-full"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setQueuePage(1) }}
-            />
+      {/* Applications table */}
+      <Panel>
+        <div className="border-b border-border">
+          <div className="-mb-px flex gap-1 overflow-x-auto px-3 scrollbar-hide">
+            {tabs.map(t => (
+              <button
+                key={t.value}
+                onClick={() => selectTab(t.value)}
+                className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-3 text-[13px] font-medium transition-colors ${activeTab === t.value ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              >
+                {t.value === 'live' && liveApps.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-chart-2" />}
+                {t.value === 'premium' && <Crown className="h-3 w-3 text-warning" />}
+                {t.label}
+                <span className={`rounded-full px-1.5 text-[10.5px] tabular-nums ${activeTab === t.value ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>{t.count}</span>
+              </button>
+            ))}
           </div>
+        </div>
+
+        <Toolbar className="border-b border-border px-5 py-3">
+          <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setQueuePage(1) }} placeholder="Search name, company or job…" className="sm:w-80" />
           <Select
             value={selectedCandidateFilter}
             onValueChange={(v) => { setSelectedCandidateFilter(v === "__all__" ? "" : v); setQueuePage(1) }}
           >
-            <SelectTrigger className="h-10 text-xs w-full min-[420px]:w-[160px] shrink-0 bg-card border-border">
+            <SelectTrigger size="sm" className="h-9 w-full text-xs sm:w-56">
               <SelectValue placeholder="All candidates" />
             </SelectTrigger>
             <SelectContent>
@@ -491,201 +471,122 @@ export function QueueScreen() {
                 ))}
             </SelectContent>
           </Select>
-        </div>
+          <span className="text-xs text-muted-foreground tabular-nums sm:ml-auto">{totalFilteredApps.toLocaleString()} results</span>
+        </Toolbar>
 
-        {/* Tabs — always horizontally scrollable, never wraps */}
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setQueuePage(1); setSelectedCandidateFilter("") }} className="w-full">
-          <div className="-mx-3 sm:mx-0 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <TabsList className="bg-card border border-border inline-flex w-max px-1 mx-3 sm:mx-0">
-              <TabsTrigger value="all" className="text-xs px-2.5" onClick={() => { setActiveTab("all"); setQueuePage(1) }}>All ({applications.length})</TabsTrigger>
-              <TabsTrigger value="live" className="text-xs px-2.5">
-                <span className="flex items-center gap-1">
-                  {liveApps.length > 0 && (
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
-                    </span>
-                  )}
-                  Live ({liveApps.length})
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="premium" className="text-xs px-2.5">
-                <Crown className="h-3 w-3 text-yellow-500 mr-1" />Premium ({premiumApps.length})
-              </TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs px-2.5">Pending ({pending.length})</TabsTrigger>
-              <TabsTrigger value="processing" className="text-xs px-2.5">Processing ({processing.length})</TabsTrigger>
-              <TabsTrigger value="completed" className="text-xs px-2.5">Done ({completed.length})</TabsTrigger>
-              <TabsTrigger value="failed" className="text-xs px-2.5">Failed ({failed.length})</TabsTrigger>
-              <TabsTrigger value="awaiting_otp" className="text-xs px-2.5">OTP ({awaitingOtp.length})</TabsTrigger>
-              <TabsTrigger value="awaiting_captcha" className="text-xs px-2.5">CAPTCHA ({awaitingCaptcha.length})</TabsTrigger>
-              <TabsTrigger value="blocked" className="text-xs px-2.5">Blocked ({blocked.length})</TabsTrigger>
-            </TabsList>
-          </div>
-        </Tabs>
-      </div>
+        <TableHead className="hidden lg:flex" columns={[
+          { label: "Candidate", className: "w-52 shrink-0" },
+          { label: "Company · Role", className: "flex-1 min-w-0" },
+          { label: "Portal", className: "w-28 shrink-0" },
+          { label: "Submitted", className: "w-32 shrink-0" },
+          { label: "Cost", className: "w-14 shrink-0 text-right" },
+          { label: "Status", className: "w-32 shrink-0 text-right" },
+          { label: "", className: "w-14 shrink-0" },
+        ]} />
 
-      {/* Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        {paginatedApps.length === 0 ? (
+          <EmptyState icon={Search} title="No applications here" description="Nothing matches this filter right now." />
+        ) : (
+        <div className="divide-y divide-border">
         {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
           const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
           const atsName = app.portal_name ?? detectAts(app.job_url)
+          const chip = "inline-flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium"
+          const signals: React.ReactNode[] = []
+          if (app.knockout_blocked) signals.push(<span key="ko" className={`${chip} border-destructive/25 bg-destructive/10 text-destructive`} title={app.knockout_reason || app.last_error || ''}><CircleSlash className="h-2.5 w-2.5 shrink-0" /><span className="truncate">Won&apos;t apply{(app.knockout_reason || app.last_error) ? ` · ${app.knockout_reason || app.last_error}` : ''}</span></span>)
+          if (!app.knockout_blocked && (app.coverage_blocking_missing?.length ?? 0) > 0) signals.push(<span key="miss" className={`${chip} border-orange-500/25 bg-orange-500/10 text-orange-500`}><TriangleAlert className="h-2.5 w-2.5 shrink-0" /><span className="truncate">Missing: {app.coverage_blocking_missing!.join(", ")}</span></span>)
+          if (!app.knockout_blocked && app.coverage_percent != null && app.coverage_percent < 100 && !(app.coverage_blocking_missing?.length)) signals.push(<span key="cov" className={`${chip} border-border text-muted-foreground`}>{app.coverage_percent}% fillable</span>)
+          if (app.confirmation_id) signals.push(<span key="conf" className={`${chip} border-success/25 bg-success/10 font-mono text-success`}><Receipt className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{app.confirmation_id}</span></span>)
+          if (app.failed_step && app.status === 'failed') signals.push(<span key="fs" className={`${chip} border-destructive/25 text-destructive`}><XCircle className="h-2.5 w-2.5 shrink-0" />Failed at {stepLabel(app.failed_step)}</span>)
+          if (app.attempt_count > 0) signals.push(<span key="att" className={`${chip} ${app.status === 'failed' ? 'border-destructive/25 text-destructive' : 'border-orange-500/25 text-orange-500'}`}>Attempt {app.attempt_count}/{app.max_attempts || 2}{app.last_error && app.status === 'pending' ? ' · retrying' : ''}</span>)
           return (
-            <Card key={app.id} className={`min-w-0 bg-card border-border hover:border-primary/30 transition-colors cursor-pointer ${app.is_premium ? 'ring-1 ring-yellow-500/30' : ''}`} onClick={() => setSelectedApp(app)}>
-              <CardContent className="p-3">
-                {/* Name + status */}
-                <div className="flex items-start justify-between gap-2 mb-2.5">
+            <div key={app.id} className="group cursor-pointer transition-colors hover:bg-muted/40" onClick={() => setSelectedApp(app)}>
+              <div className="flex flex-col gap-2 px-5 py-3 lg:flex-row lg:items-center lg:gap-4">
+                <div className="flex w-full min-w-0 items-center gap-2.5 lg:w-52 lg:shrink-0">
+                  <Avatar name={fullName} />
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <p className="text-sm font-semibold truncate">{fullName}</p>
+                    <p className="flex items-center gap-1 truncate text-[13px] font-medium">
+                      <span className="truncate">{fullName}</span>
                       {app.is_premium && (
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Crown className="h-3 w-3 text-yellow-500 shrink-0" />
-                          </TooltipTrigger>
+                          <TooltipTrigger asChild><Crown className="h-3 w-3 shrink-0 text-warning" /></TooltipTrigger>
                           <TooltipContent side="top" className="text-xs">Premium user</TooltipContent>
                         </Tooltip>
                       )}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{app.phone}</p>
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">{app.phone}</p>
                   </div>
-                  <StatusBadge status={app.status} className="shrink-0" />
+                  <div className="ml-auto lg:hidden"><StatusBadge status={app.status} /></div>
                 </div>
-
-                {/* Company + job */}
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-[10px] font-semibold text-accent-foreground">
-                    {app.company_name[0]}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{app.company_name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{app.job_title}</p>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px]">{app.company_name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{app.job_title}</p>
+                  {signals.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{signals}</div>}
                 </div>
-
-                {/* Badges */}
-                {app.knockout_blocked && (
-                  <div className="flex items-start gap-1.5 mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30 shrink-0">
-                      <CircleSlash className="h-2.5 w-2.5 shrink-0" /> Won&apos;t apply
-                    </Badge>
-                    <span className="text-[9px] text-muted-foreground line-clamp-2">{app.knockout_reason || app.last_error}</span>
-                  </div>
-                )}
-                {!app.knockout_blocked && (app.coverage_blocking_missing?.length ?? 0) > 0 && (
-                  <div className="mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-orange-500 border-orange-500/30 max-w-full">
-                      <TriangleAlert className="h-2.5 w-2.5 shrink-0" />
-                      <span className="truncate">Missing: {app.coverage_blocking_missing!.join(", ")}</span>
-                    </Badge>
-                  </div>
-                )}
-                {!app.knockout_blocked && app.coverage_percent != null && app.coverage_percent < 100 && !(app.coverage_blocking_missing?.length) && (
-                  <div className="mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-muted-foreground">{app.coverage_percent}% fillable</Badge>
-                  </div>
-                )}
-                {app.confirmation_id && (
-                  <div className="mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-green-600 border-green-500/30 font-mono max-w-full">
-                      <Receipt className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{app.confirmation_id}</span>
-                    </Badge>
-                  </div>
-                )}
-                {app.failed_step && app.status === 'failed' && (
-                  <div className="mb-2">
-                    <Badge variant="outline" className="text-[9px] gap-1 text-destructive border-destructive/30">
-                      <XCircle className="h-2.5 w-2.5 shrink-0" /> Failed at: {stepLabel(app.failed_step)}
-                    </Badge>
-                  </div>
-                )}
-                {app.attempt_count > 0 && (
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Badge variant="outline" className={`text-[9px] gap-1 ${app.status === 'failed' ? 'text-destructive border-destructive/30' : 'text-orange-500 border-orange-500/30'}`}>
-                      Attempt {app.attempt_count}/{app.max_attempts || 2}
-                    </Badge>
-                    {app.last_error && app.status === 'pending' && (
-                      <span className="text-[9px] text-orange-500 truncate">Retrying...</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Footer row */}
-                <div className="flex items-center justify-between gap-1 mt-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] text-muted-foreground truncate">{createdDate}</span>
-                    {atsName && (
-                      <Badge variant="outline" className="text-[9px] border-blue-500/30 text-blue-500 shrink-0">
-                        {atsName}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    {runCost(app) !== null && (
-                      <span
-                        className="text-[10px] tabular-nums text-muted-foreground px-1"
-                        title={`Kernel browser time: ${runSeconds(app)!.toFixed(1)}s at $${KERNEL_RATES.headful}/sec`}
-                      >
-                        {formatCost(runCost(app))}
-                      </span>
-                    )}
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setSelectedApp(app) }}>
-                      <Eye className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteId(app.id) }}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                <span className="truncate text-xs text-muted-foreground lg:w-28 lg:shrink-0">{atsName ?? '—'}</span>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground lg:w-32 lg:shrink-0">{createdDate}</span>
+                <span
+                  className="text-xs tabular-nums text-muted-foreground lg:w-14 lg:shrink-0 lg:text-right"
+                  title={runCost(app) !== null ? `Kernel browser time: ${runSeconds(app)!.toFixed(1)}s at $${KERNEL_RATES.headful}/sec` : undefined}
+                >
+                  {runCost(app) !== null ? formatCost(runCost(app)) : '—'}
+                </span>
+                <div className="hidden w-32 shrink-0 justify-end lg:flex"><StatusBadge status={app.status} /></div>
+                <div className="flex shrink-0 items-center justify-end gap-0.5 lg:w-14 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setSelectedApp(app) }} aria-label="View">
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteId(app.id) }} aria-label="Delete">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-
+              </div>
 
                 {/* OTP input */}
                 {app.status === 'awaiting_otp' && (
-                  <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                  <div className="mx-5 mb-3 rounded-lg border border-orange-500/25 bg-orange-500/5 p-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
-                      <Input placeholder="Enter OTP..." className="h-7 text-xs flex-1 min-w-0" value={otpInputs[app.id] || ''} onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))} />
-                      <Button size="sm" className="h-7 text-xs gap-1 shrink-0" disabled={!otpInputs[app.id] || savingOtp[app.id]} onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}>
+                      <Input placeholder="Enter OTP…" className="h-8 text-xs flex-1 min-w-0 sm:max-w-xs" value={otpInputs[app.id] || ''} onChange={(e) => setOtpInputs(prev => ({ ...prev, [app.id]: e.target.value }))} />
+                      <Button size="sm" className="h-8 text-xs gap-1 shrink-0" disabled={!otpInputs[app.id] || savingOtp[app.id]} onClick={() => handleSaveOtp(app.id, otpInputs[app.id])}>
                         {savingOtp[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-                        {savingOtp[app.id] ? 'Saving...' : 'Submit'}
+                        {savingOtp[app.id] ? 'Saving…' : 'Submit OTP'}
                       </Button>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Backend will pick it up and resume automatically</p>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">The worker picks it up and resumes automatically.</p>
                   </div>
                 )}
 
                 {/* CAPTCHA */}
                 {app.status === 'awaiting_captcha' && (
-                  <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
-                    <p className="text-[10px] text-muted-foreground mb-2">Browser session is live. Solve the CAPTCHA then mark as solved.</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {app.live_url && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => window.open(app.live_url!, '_blank')}>
-                          <ExternalLink className="h-3 w-3" /> Open Browser
-                        </Button>
-                      )}
-                      <Button size="sm" className="h-7 text-xs gap-1 bg-red-600 hover:bg-red-700" disabled={resolvingCaptcha[app.id]} onClick={() => handleResolveCaptcha(app.id)}>
-                        {resolvingCaptcha[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
-                        {resolvingCaptcha[app.id] ? 'Resuming...' : 'Mark as Solved'}
+                  <div className="mx-5 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-[11px] text-muted-foreground flex-1 min-w-48">Browser session is live. Solve the CAPTCHA, then mark it solved.</p>
+                    {app.live_url && (
+                      <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => window.open(app.live_url!, '_blank')}>
+                        <ExternalLink className="h-3 w-3" /> Open browser
                       </Button>
-                    </div>
+                    )}
+                    <Button size="sm" variant="destructive" className="h-8 text-xs gap-1" disabled={resolvingCaptcha[app.id]} onClick={() => handleResolveCaptcha(app.id)}>
+                      {resolvingCaptcha[app.id] ? <Loader className="h-3 w-3 animate-spin" /> : <ShieldAlert className="h-3 w-3" />}
+                      {resolvingCaptcha[app.id] ? 'Resuming…' : 'Mark as solved'}
+                    </Button>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+            </div>
           )
         })}
-      </div>
-
-      {/* Pagination */}
-      {totalQueuePages > 1 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Showing {((safePage - 1) * QUEUE_PER_PAGE) + 1}–{Math.min(safePage * QUEUE_PER_PAGE, totalFilteredApps)} of {totalFilteredApps}</span>
-          <div className="flex items-center justify-between sm:justify-end gap-2">
-            <Button size="sm" variant="outline" className="text-xs h-8" disabled={safePage === 1} onClick={() => setQueuePage(p => p - 1)}>Previous</Button>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Page {safePage} of {totalQueuePages}</span>
-            <Button size="sm" variant="outline" className="text-xs h-8" disabled={safePage === totalQueuePages} onClick={() => setQueuePage(p => p + 1)}>Next</Button>
-          </div>
         </div>
-      )}
+        )}
+
+        {totalQueuePages > 1 && (
+          <Pagination
+            page={safePage}
+            totalPages={totalQueuePages}
+            onPage={setQueuePage}
+            summary={`${((safePage - 1) * QUEUE_PER_PAGE) + 1}–${Math.min(safePage * QUEUE_PER_PAGE, totalFilteredApps)} of ${totalFilteredApps.toLocaleString()}`}
+          />
+        )}
+      </Panel>
 
       {/* Delete all pending confirmation */}
       <AlertDialog open={confirmDeleteAllPending} onOpenChange={setConfirmDeleteAllPending}>

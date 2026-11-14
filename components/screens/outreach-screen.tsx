@@ -1,12 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Search } from "lucide-react"
+import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Users } from "lucide-react"
+import { PageHeader, StatCard, KpiGrid, Meter, Segmented, Toolbar, SearchField, EmptyState } from "@/components/ui/dashboard"
 import { ReplyPlaybook } from "@/components/outreach-playbook"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
 import { countWords, MAX_WORDS } from "@/lib/outreach"
 import type { OutreachRow } from "@/lib/outreach-data"
 
@@ -53,7 +53,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
   const waUrl = row.phone?.countryCode ? `https://wa.me/${row.phone.waDigits}?text=${encodeURIComponent(draft)}` : null
 
   return (
-    <div className={`min-w-0 rounded-lg border p-3 sm:p-4 transition-colors ${row.contacted ? "border-emerald-500/30 bg-emerald-500/[0.03]" : "border-border bg-card"}`}>
+    <div className={`panel min-w-0 p-4 sm:p-5 transition-colors ${row.contacted ? "opacity-70" : ""}`}>
       <div className="flex items-start gap-3">
         <Checkbox
           checked={row.contacted}
@@ -64,7 +64,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
         <div className="flex-1 min-w-0 space-y-3">
           {/* Who */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-medium break-words min-w-0">{row.name}</span>
+            <span className="min-w-0 break-words text-[15px] font-semibold tracking-tight">{row.name}</span>
             <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium tabular-nums">
               {row.jobsApplied} applied
             </span>
@@ -223,94 +223,54 @@ export function OutreachScreen() {
   }, [rows, filter, query])
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; Outreach</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Personal WhatsApp notes from you to recent signups: intro, their activity, a feedback ask, and what they&apos;re looking for.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-          <div className="flex items-center rounded-md border border-border overflow-hidden">
-            {RANGES.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDays(d)}
-                className={`px-3 h-7 text-xs transition-colors ${days === d ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-              >
-                {d === 0 ? "All" : `${d}d`}
-              </button>
-            ))}
-          </div>
-          {stats.missing > 0 && (
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => draft()} disabled={draftingAll}>
-              <Sparkles className={`h-3 w-3 ${draftingAll ? "animate-pulse" : ""}`} />
-              {draftingAll ? "Drafting…" : `Draft ${stats.missing} missing`}
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Sales & outreach"
+        description="Personal WhatsApp notes to recent signups: intro, their activity, a feedback ask, and what they're looking for."
+        actions={
+          <>
+            <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={RANGES.map((d) => ({ value: String(d), label: d === 0 ? "All" : `${d}d` }))} />
+            {stats.missing > 0 && (
+              <Button size="sm" className="gap-1.5" onClick={() => draft()} disabled={draftingAll}>
+                <Sparkles className={`h-3.5 w-3.5 ${draftingAll ? "animate-pulse" : ""}`} />
+                {draftingAll ? "Drafting…" : `Draft ${stats.missing} missing`}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => load()} disabled={loading}>
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
-          )}
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border" onClick={() => load()} disabled={loading}>
-            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      <div className="flex items-center rounded-md border border-border overflow-hidden self-start">
-        {([["contacts", "Contacts"], ["playbook", "Reply playbook"]] as const).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-4 h-8 text-xs font-medium transition-colors ${view === v ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Segmented value={view} onChange={setView} options={[{ value: "contacts", label: "Contacts" }, { value: "playbook", label: "Reply playbook" }]} />
 
       {view === "playbook" ? (
         <ReplyPlaybook key={playbookName} initialName={playbookName} />
       ) : (
       <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Signups", value: stats.total },
-          { label: "To contact", value: stats.total - stats.done },
-          { label: "Contacted", value: stats.done },
-          { label: "Have a phone", value: stats.withPhone },
-        ].map((s) => (
-          <div key={s.label} className="panel px-4 py-3">
-            <p className="text-xs text-muted-foreground">{s.label}</p>
-            <p className="text-2xl font-semibold tabular-nums mt-1">{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <KpiGrid>
+        <StatCard label="Signups" value={stats.total} icon={Users} footnote={`${stats.applied} applied to a job`} />
+        <StatCard label="To contact" value={stats.total - stats.done} icon={MessageCircle} footnote="still waiting for a note" />
+        <StatCard label="Contacted" value={stats.done} icon={Check}
+          footnote={`${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}% of signups in range`}>
+          <Meter value={stats.done} max={Math.max(1, stats.total)} tone="success" />
+        </StatCard>
+        <StatCard label="Have a phone" value={stats.withPhone} icon={Phone} footnote={`${stats.missing} without a drafted message`} />
+      </KpiGrid>
 
-      {stats.total > 0 && (
-        <div className="space-y-1">
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(stats.done / stats.total) * 100}%` }} />
-          </div>
-          <p className="text-[11px] text-muted-foreground">{stats.done} of {stats.total} contacted · {stats.applied} have applied to at least one job</p>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
-        <div className="flex items-center rounded-md border border-border overflow-x-auto max-w-full self-start">
-          {([["todo", `To contact (${stats.total - stats.done})`], ["done", `Contacted (${stats.done})`], ["all", `All (${stats.total})`]] as const).map(([f, label]) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`shrink-0 whitespace-nowrap px-3 h-8 text-xs transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-xs">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, phone, email" className="h-8 pl-7 text-xs" />
-        </div>
-      </div>
+      <Toolbar>
+        <Segmented
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "todo", label: `To contact · ${stats.total - stats.done}` },
+            { value: "done", label: `Contacted · ${stats.done}` },
+            { value: "all", label: `All · ${stats.total}` },
+          ]}
+        />
+        <SearchField value={query} onChange={setQuery} placeholder="Search name, phone, email…" />
+      </Toolbar>
 
       {error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>

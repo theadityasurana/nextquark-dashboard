@@ -199,13 +199,140 @@ export function Avatar({ name, className }: { name?: string | null; className?: 
   const initials = (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "?"
   // Stable hue per name so the same person always gets the same colour.
   let h = 0
-  for (const ch of name || "") h = (h * 31 + ch.charCodeAt(0)) % 360
+  for (const ch of name || "") h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const hues = [272, 250, 300, 195, 165, 20, 340, 230]
   return (
     <div
       className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold text-white", className)}
-      style={{ background: `oklch(0.6 0.13 ${h})` }}
+      style={{ background: `oklch(0.56 0.14 ${hues[h % hues.length]})` }}
     >
       {initials}
+    </div>
+  )
+}
+
+// ── Section, toolbar and chart helpers ─────────────────────────────────────
+
+export function Section({ title, description, actions, children, className }: {
+  title: React.ReactNode
+  description?: React.ReactNode
+  actions?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={cn("flex flex-col gap-4", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+          {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function Toolbar({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center", className)}>{children}</div>
+}
+
+export function SearchField({ value, onChange, placeholder = "Search…", className }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <div className={cn("relative w-full sm:w-72", className)}>
+      <svg className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-sm text-foreground shadow-[var(--shadow-card)] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 dark:bg-input/20"
+      />
+    </div>
+  )
+}
+
+export function KpiGrid({ children, cols = 4 }: { children: React.ReactNode; cols?: 3 | 4 | 5 | 6 }) {
+  const c = { 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 5: "lg:grid-cols-5", 6: "lg:grid-cols-6" }[cols]
+  return <div className={cn("grid grid-cols-2 gap-3 sm:gap-4", c)}>{children}</div>
+}
+
+/** Compact KPI tile for dense strips (6+ metrics). */
+export function MiniStat({ label, value, dot, hint, active, onClick }: {
+  label: string
+  value: React.ReactNode
+  dot?: string
+  hint?: React.ReactNode
+  active?: boolean
+  onClick?: () => void
+}) {
+  const Comp = onClick ? "button" : "div"
+  return (
+    <Comp
+      onClick={onClick}
+      className={cn(
+        "panel flex flex-col gap-2 px-4 py-3.5 text-left",
+        onClick && "transition-colors hover:border-input",
+        active && "ring-2 ring-primary/50",
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {dot && <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />}
+        {label}
+      </span>
+      <span className="num text-2xl font-semibold leading-none text-foreground">
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </span>
+      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+    </Comp>
+  )
+}
+
+export const chartTooltip = {
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
+  fontSize: 12,
+  color: "var(--popover-foreground)",
+  padding: "8px 12px",
+  boxShadow: "var(--shadow-pop)",
+}
+export const axisTick = { fontSize: 11, fill: "var(--muted-foreground)" }
+export const gridStroke = "var(--border)"
+/** Ordered palette for categorical series; one hue family, then supporting hues. */
+export const SERIES = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-5)", "var(--chart-4)"]
+
+export function Pagination({ page, totalPages, onPage, summary }: {
+  page: number
+  totalPages: number
+  onPage: (p: number) => void
+  summary?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+      <span className="text-xs text-muted-foreground tabular-nums">{summary}</span>
+      <div className="flex items-center gap-1.5">
+        <button
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+          className="h-8 rounded-lg border border-input bg-card px-3 text-xs font-medium shadow-[var(--shadow-card)] transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <span className="px-2 text-xs tabular-nums text-muted-foreground">{page} / {Math.max(1, totalPages)}</span>
+        <button
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+          className="h-8 rounded-lg border border-input bg-card px-3 text-xs font-medium shadow-[var(--shadow-card)] transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
     </div>
   )
 }

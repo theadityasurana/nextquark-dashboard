@@ -4,12 +4,16 @@ import { useState } from "react"
 import useSWR from "swr"
 import { formatCost } from "@/lib/run-cost"
 import { PLANS } from "@/lib/plans"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Legend, AreaChart, Area, CartesianGrid,
+  PieChart, Pie, CartesianGrid,
 } from "recharts"
+import { DollarSign, IndianRupee, Users, TrendingUp } from "lucide-react"
+import {
+  PageHeader, Panel, PanelHeader, Section, StatCard, KpiGrid, MiniStat, Meter, EmptyState, Segmented, Avatar,
+  chartTooltip, axisTick, gridStroke, SERIES,
+} from "@/components/ui/dashboard"
 
 // ── Pricing — from lib/plans.ts, which mirrors the app's PLAN_CONFIGS ────────
 // (subscription_plan = starter | pro | ultra; monthly or quarterly).
@@ -19,15 +23,10 @@ const INTL_MAP: Record<string, (typeof INTL)[number]> = Object.fromEntries(INTL.
 const IN_MAP: Record<string, (typeof IN)[number]>     = Object.fromEntries(IN.map((p) => [p.id, p]))
 
 const PC: Record<string, string> = {
-  free: "#6b7280", starter: "#22c4ac", pro: "#818cf8", ultra: "#f59e0b",
+  free: "var(--muted-foreground)", starter: "var(--chart-2)", pro: "var(--chart-1)", ultra: "var(--chart-3)",
 }
 
-const TT = {
-  backgroundColor: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: "6px", fontSize: 11,
-  color: "var(--popover-foreground)", padding: "6px 10px",
-}
+const TT = chartTooltip
 
 const APPLE_FEE   = 0.30
 const GOOGLE_FEE  = 0.15
@@ -69,27 +68,6 @@ interface CostStats {
   completedCost: number; completedRuns: number; costPerCompleted: number
 }
 
-// ── Small reusable components ─────────────────────────────────────────────────
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-medium text-muted-foreground/60 mb-3">
-      {children}
-    </p>
-  )
-}
-
-function KpiCard({ label, value, sub, accent }: {
-  label: string; value: React.ReactNode; sub?: string; accent?: string
-}) {
-  return (
-    <div className="panel p-4">
-      <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
-      <p className={`text-[24px] font-semibold tracking-tight leading-none ${accent ?? ""}`}>{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
-    </div>
-  )
-}
-
 function PlanTable({ plans, counts, fmt, free }: {
   plans: typeof INTL; counts: Record<string, number>
   fmt: (v: number) => string; free: number
@@ -98,17 +76,17 @@ function PlanTable({ plans, counts, fmt, free }: {
     <div className="overflow-x-auto">
     <table className="w-full min-w-[480px] text-sm">
       <thead>
-        <tr className="border-b border-border text-xs text-muted-foreground font-semibold">
-          <th className="text-left px-5 py-3">Plan</th>
-          <th className="text-right px-4 py-3">Monthly</th>
-          <th className="text-right px-4 py-3">Quarterly</th>
-          <th className="text-right px-4 py-3">Credits</th>
-          <th className="text-right px-5 py-3">Subscribers</th>
+        <tr className="border-b border-border bg-muted/40">
+          <th className="eyebrow text-left px-5 py-2.5">Plan</th>
+          <th className="eyebrow text-right px-4 py-2.5">Monthly</th>
+          <th className="eyebrow text-right px-4 py-2.5">Quarterly</th>
+          <th className="eyebrow text-right px-4 py-2.5">Credits</th>
+          <th className="eyebrow text-right px-5 py-2.5">Subscribers</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-border/30">
+      <tbody className="divide-y divide-border">
         {plans.map((p) => (
-          <tr key={p.id} className="hover:bg-accent/20 transition-colors">
+          <tr key={p.id} className="hover:bg-muted/40 transition-colors">
             <td className="px-5 py-3">
               <div className="flex items-center gap-2.5">
                 <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: PC[p.id] }} />
@@ -122,7 +100,7 @@ function PlanTable({ plans, counts, fmt, free }: {
             <td className="text-right px-5 py-3 font-semibold tabular-nums">{counts[p.id] ?? 0}</td>
           </tr>
         ))}
-        <tr className="bg-accent/10">
+        <tr className="bg-muted/20">
           <td className="px-5 py-3">
             <div className="flex items-center gap-2.5">
               <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: PC.free }} />
@@ -202,303 +180,211 @@ export function PricingScreen() {
     { name: "−Runs",    value: netMargin },
   ]
 
+  const [region, setRegion] = useState<"INTL" | "IN">("INTL")
+  const subBar = region === "INTL" ? intlSubBar : inSubBar
+  const revBar = region === "INTL" ? intlRevBar : inRevBar
+  const fmtRegion = region === "INTL" ? fmtUSD : fmtINR
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="flex flex-col gap-6">
+        <div className="h-14 w-72 rounded-lg bg-muted/60 shimmer" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-36 shimmer" />)}
+        </div>
+        <div className="panel h-80 shimmer" />
       </div>
     )
   }
 
+  const waterfall = [
+    { label: "Gross revenue", value: mrrUSD, note: "INTL MRR", tone: "base" as const },
+    { label: "Apple fees", value: -appleFees, note: "30% of App Store revenue", tone: "neg" as const },
+    { label: "Google fees", value: -googleFees, note: "15% of Play revenue", tone: "neg" as const },
+    { label: "Infrastructure", value: -MONTHLY_INFRA, note: "fixed monthly", tone: "neg" as const },
+    { label: "Automation runs", value: -automationCost, note: `${cost?.billedRuns ?? 0} billed runs`, tone: "neg" as const },
+  ]
+  const wfMax = Math.max(1, mrrUSD, Math.abs(netMargin))
+  const failedRuns = (cost?.billedRuns ?? 0) - (cost?.completedRuns ?? 0)
+
   return (
     <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Revenue"
+        description="Subscriptions, recurring revenue and unit economics across both regions."
+      />
 
-      {/* Header — no region toggle, page always shows both */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Revenue</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">Subscription analytics across all regions and plans</p>
-      </div>
+      <KpiGrid>
+        <StatCard label="MRR · International" value={fmtUSD(mrrUSD)} icon={DollarSign}
+          footnote={`ARR ${fmtUSD(mrrUSD * 12)} · ARPU ${fmtUSD(intlPaid > 0 ? mrrUSD / intlPaid : 0)}`} />
+        <StatCard label="MRR · India" value={fmtINR(mrrINR)} icon={IndianRupee}
+          footnote={`ARR ${fmtINR(mrrINR * 12)} · ARPU ${fmtINR(inPaid > 0 ? mrrINR / inPaid : 0)}`} />
+        <StatCard label="Paying subscribers" value={paid} icon={Users}
+          delta={`${paidPct}% conversion`} deltaTone="neutral"
+          footnote={`${intlPaid} international · ${inPaid} India · ${stats?.lapsed ?? 0} lapsed`}>
+          <Meter value={paid} max={Math.max(1, total)} />
+        </StatCard>
+        <StatCard label="Net margin (est.)" value={fmtUSD(netMargin)} icon={TrendingUp}
+          delta={netMargin >= 0 ? "Profitable" : "Below break-even"} deltaTone={netMargin >= 0 ? "positive" : "negative"}
+          footnote="INTL MRR after store fees, infra and runs" />
+      </KpiGrid>
 
-      {/* ── Overview KPIs ── */}
-      <div>
-        <SectionLabel>Overview</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Total Users"   value={total} />
-          <KpiCard label="Paid"          value={paid}  sub={`${paidPct}% conversion`} />
-          <KpiCard label="Free"          value={free} />
-          <KpiCard label="INTL Paid"     value={intlPaid} sub="USD region" />
-          <KpiCard label="IN Paid"       value={inPaid}   sub="INR region" />
-          <KpiCard label="Quarterly Billing" value={quarterlyPaid} sub={`${paid > 0 ? ((quarterlyPaid/paid)*100).toFixed(0) : 0}% of paid · ${stats?.lapsed ?? 0} lapsed`} />
-        </div>
-      </div>
-
-      {/* ── Revenue KPIs — both regions side by side ── */}
-      <div>
-        <SectionLabel>Revenue</SectionLabel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="MRR · INTL (USD)" value={fmtUSD(mrrUSD)} sub={`ARR ${fmtUSD(mrrUSD * 12)}`} />
-          <KpiCard label="MRR · IN (INR)"   value={fmtINR(mrrINR)} sub={`ARR ${fmtINR(mrrINR * 12)}`} />
-          <KpiCard label="ARPU · INTL"      value={fmtUSD(intlPaid > 0 ? mrrUSD / intlPaid : 0)} sub="per paid INTL user" />
-          <KpiCard label="ARPU · IN"        value={fmtINR(inPaid  > 0 ? mrrINR / inPaid  : 0)} sub="per paid IN user" />
-        </div>
-      </div>
-
-      {/* ── Plan breakdown: INTL (USD) ── */}
-      <div>
-        <SectionLabel>Plan breakdown · INTL (USD)</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Subscribers per plan</p>
-            </div>
-            <div className="h-52 px-2 pt-4 pb-2">
+      <Section
+        title="Plans"
+        description="Subscribers and monthly revenue by plan"
+        actions={<Segmented value={region} onChange={setRegion} options={[{ value: "INTL", label: "International · USD" }, { value: "IN", label: "India · INR" }]} />}
+      >
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel>
+            <PanelHeader title="Subscribers per plan" description={`${(region === "INTL" ? intlPaid : inPaid).toLocaleString()} paying in this region`} />
+            <div className="h-60 px-3 pb-3 pt-5">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={intlSubBar} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <BarChart data={subBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} allowDecimals={false} width={32} />
                   <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [v, "Subscribers"]} />
-                  <Bar dataKey="users" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {intlSubBar.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  <Bar dataKey="users" radius={[6, 6, 0, 0]} maxBarSize={56}>
+                    {subBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Monthly revenue per plan (USD)</p>
-            </div>
-            <div className="h-52 px-2 pt-4 pb-2">
+          </Panel>
+          <Panel>
+            <PanelHeader title="Monthly revenue per plan" description={`${fmtRegion(region === "INTL" ? mrrUSD : mrrINR)} MRR in this region`} />
+            <div className="h-60 px-3 pb-3 pt-5">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={intlRevBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [fmtUSD(v), "Revenue"]} />
-                  <Bar dataKey="revenue" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {intlRevBar.map((e, i) => <Cell key={i} fill={e.color} />)}
+                <BarChart data={revBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => region === "INTL" ? `$${v}` : `₹${v}`} />
+                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [fmtRegion(v), "Revenue"]} />
+                  <Bar dataKey="revenue" radius={[6, 6, 0, 0]} maxBarSize={56}>
+                    {revBar.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </Panel>
         </div>
-      </div>
+      </Section>
 
-      {/* ── Plan breakdown: IN (INR) ── */}
-      <div>
-        <SectionLabel>Plan breakdown · IN (INR)</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Subscribers per plan</p>
-            </div>
-            <div className="h-52 px-2 pt-4 pb-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={inSubBar} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [v, "Subscribers"]} />
-                  <Bar dataKey="users" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {inSubBar.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Monthly revenue per plan (INR)</p>
-            </div>
-            <div className="h-52 px-2 pt-4 pb-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={inRevBar} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => `₹${v}`} />
-                  <Tooltip contentStyle={TT} cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }} formatter={(v: number) => [fmtINR(v), "Revenue"]} />
-                  <Bar dataKey="revenue" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {inRevBar.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Distribution ── */}
-      <div>
-        <SectionLabel>Distribution</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Plan distribution (all regions)</p>
-            </div>
-            <div className="h-52 px-2 pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={donutData} cx="40%" cy="50%" innerRadius={48} outerRadius={74} paddingAngle={3} dataKey="value" stroke="none">
-                    {donutData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${v} users`, n]} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8}
-                    formatter={(v) => <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{v}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Platform split</p>
-            </div>
-            <div className="h-52 px-2 pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={platformData} cx="40%" cy="50%" innerRadius={48} outerRadius={74} paddingAngle={3} dataKey="value" stroke="none">
-                    {platformData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${v} users`, n]} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8}
-                    formatter={(v) => <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{v}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="panel overflow-hidden">
-            <div className="px-5 pt-4 pb-1 border-b border-border">
-              <p className="text-sm font-medium">Billing period split</p>
-            </div>
-            <div className="h-52 px-4 pt-5 pb-3 flex flex-col gap-4 justify-center">
+      <Section title="Customer mix" description="How subscribers break down across plan, platform and billing">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {[
+            { title: "Plan distribution", data: donutData, total: donutData.reduce((n, d) => n + d.value, 0), unit: "users" },
+            { title: "Platform", data: platformData.map((d, i) => ({ ...d, color: SERIES[i] })), total: paid, unit: "paying" },
+          ].map((chart) => (
+            <Panel key={chart.title}>
+              <PanelHeader title={chart.title} />
+              <div className="flex items-center gap-5 px-5 py-5">
+                <div className="relative h-32 w-32 shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={chart.data} innerRadius={44} outerRadius={60} paddingAngle={2} dataKey="value" stroke="none" startAngle={90} endAngle={-270}>
+                        {chart.data.map((e, i) => <Cell key={i} fill={e.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={TT} formatter={(v: number, n: string) => [`${v} users`, n]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="num text-lg font-semibold">{chart.total.toLocaleString()}</span>
+                    <span className="text-[10px] text-muted-foreground">{chart.unit}</span>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  {chart.data.length === 0 && <p className="text-xs text-muted-foreground">No data yet</p>}
+                  {chart.data.map((d) => (
+                    <div key={d.name} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex min-w-0 items-center gap-2 text-muted-foreground"><span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: d.color }} /><span className="truncate">{d.name}</span></span>
+                      <span className="num font-medium">{d.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+          ))}
+          <Panel>
+            <PanelHeader title="Billing & region" description="Share of paying subscribers" />
+            <div className="flex flex-col gap-4 px-5 py-5">
               {[
-                { name: "Monthly", value: monthlyPaid, color: "#818cf8" },
-                { name: "Quarterly", value: quarterlyPaid, color: "#f59e0b" },
-                { name: "INTL",    value: intlPaid,    color: "#f97316" },
-                { name: "IN",      value: inPaid,      color: "#22c4ac" },
+                { name: "Monthly", value: monthlyPaid, tone: "primary" as const },
+                { name: "Quarterly", value: quarterlyPaid, tone: "warning" as const },
+                { name: "International", value: intlPaid, tone: "primary" as const },
+                { name: "India", value: inPaid, tone: "success" as const },
               ].map((b) => (
-                <div key={b.name} className="flex flex-col gap-1">
+                <div key={b.name} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">{b.name}</span>
-                    <span className="font-semibold tabular-nums">
-                      {b.value}
-                      <span className="text-muted-foreground font-normal ml-1">
-                        ({paid > 0 ? ((b.value / paid) * 100).toFixed(0) : 0}%)
-                      </span>
-                    </span>
+                    <span className="num font-medium">{b.value} <span className="font-normal text-muted-foreground">· {paid > 0 ? ((b.value / paid) * 100).toFixed(0) : 0}%</span></span>
                   </div>
-                  <div className="h-2.5 rounded-full bg-accent/30 overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500"
-                      style={{ width: paid > 0 ? `${(b.value / paid) * 100}%` : "0%", backgroundColor: b.color }} />
-                  </div>
+                  <Meter value={b.value} max={Math.max(1, paid)} tone={b.tone} />
                 </div>
               ))}
             </div>
-          </div>
+          </Panel>
         </div>
-      </div>
+      </Section>
 
-      {/* ── Margin waterfall (USD only) ── */}
-      <div>
-        <SectionLabel>Margin waterfall · INTL (USD)</SectionLabel>
-        <div className="panel overflow-hidden">
-          <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-border/40">
-            {[
-              { label: "Gross Revenue",  value: fmtUSD(mrrUSD),                         sub: "INTL MRR" },
-              { label: "− Apple Fees",   value: fmtUSD(appleFees),                      sub: "30% cut", neg: true },
-              { label: "− Google Fees",  value: fmtUSD(googleFees),                     sub: "15% cut", neg: true },
-              { label: "− Infra & Runs", value: fmtUSD(MONTHLY_INFRA + automationCost), sub: `$${MONTHLY_INFRA} + runs`, neg: true },
-              { label: "Net Margin",     value: fmtUSD(netMargin),                      sub: "est. monthly", net: true },
-            ].map(({ label, value, sub, neg, net }) => (
-              <div key={label} className="px-5 py-4">
-                <p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
-                <p className={`text-xl font-semibold tabular-nums ${neg ? "text-destructive" : net ? (netMargin >= 0 ? "text-emerald-400" : "text-destructive") : ""}`}>{value}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>
+      <Section title="Unit economics" description="Estimated monthly margin and what automation costs us">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <Panel className="lg:col-span-3">
+            <PanelHeader title="Margin breakdown · INTL" description="From gross MRR down to estimated net" icon={TrendingUp} />
+            <div className="divide-y divide-border">
+              {waterfall.map((w) => (
+                <div key={w.label} className="flex items-center gap-4 px-5 py-3">
+                  <div className="w-36 shrink-0">
+                    <p className="text-[13px] font-medium">{w.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{w.note}</p>
+                  </div>
+                  <div className="flex-1">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${w.tone === "neg" ? "bg-destructive/70" : "bg-chart-1"}`} style={{ width: `${(Math.abs(w.value) / wfMax) * 100}%` }} />
+                    </div>
+                  </div>
+                  <span className={`num w-24 shrink-0 text-right text-[13px] font-medium ${w.tone === "neg" ? "text-destructive" : ""}`}>
+                    {w.tone === "neg" ? "−" : ""}{fmtUSD(Math.abs(w.value))}
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center gap-4 bg-muted/30 px-5 py-3.5">
+                <p className="w-36 shrink-0 text-[13px] font-semibold">Net margin</p>
+                <div className="flex-1">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div className={`h-full rounded-full ${netMargin >= 0 ? "bg-success" : "bg-destructive"}`} style={{ width: `${(Math.abs(netMargin) / wfMax) * 100}%` }} />
+                  </div>
+                </div>
+                <span className={`num w-24 shrink-0 text-right text-sm font-semibold ${netMargin >= 0 ? "text-success" : "text-destructive"}`}>{fmtUSD(netMargin)}</span>
               </div>
-            ))}
-          </div>
-          <div className="px-4 pb-4 pt-2 border-t border-border">
-            <div className="h-28">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={marginSteps} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#34d399" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis hide />
-                  <Tooltip contentStyle={TT} formatter={(v: number) => [fmtUSD(v), "Revenue"]} />
-                  <Area type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} fill="url(#mg)" dot={{ fill: "#34d399", r: 3 }} />
-                </AreaChart>
-              </ResponsiveContainer>
             </div>
+          </Panel>
+          <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+            <MiniStat label="Total run cost" value={formatCost(cost?.totalCost)} hint={`${cost?.billedRuns ?? 0} runs · ${((cost?.totalSeconds ?? 0) / 60).toFixed(0)} min`} />
+            <MiniStat label="Cost / application" value={formatCost(cost?.costPerApplication)} hint={`avg ${(cost?.averageSeconds ?? 0).toFixed(0)}s per run`} />
+            <MiniStat label="Cost / completed" value={formatCost(cost?.costPerCompleted)} hint={`${cost?.completedRuns ?? 0} completed`} />
+            <MiniStat label="Spent on failures" value={formatCost(cost ? cost.totalCost - cost.completedCost : undefined)} dot="bg-destructive" hint={`${failedRuns} failed runs`} />
           </div>
         </div>
-      </div>
+      </Section>
 
-      {/* ── Automation costs ── */}
-      <div>
-        <SectionLabel>Automation costs</SectionLabel>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Total Run Cost"     value={formatCost(cost?.totalCost)}          sub={`${cost?.billedRuns ?? 0} runs · ${((cost?.totalSeconds ?? 0) / 60).toFixed(0)} min`} />
-          <KpiCard label="Cost / Application" value={formatCost(cost?.costPerApplication)} sub={`avg ${(cost?.averageSeconds ?? 0).toFixed(0)}s per run`} />
-          <KpiCard label="Cost / Completed"   value={formatCost(cost?.costPerCompleted)}   sub={`${cost?.completedRuns ?? 0} completed`} />
-          <KpiCard label="Wasted on Failures" value={formatCost(cost ? cost.totalCost - cost.completedCost : undefined)}
-            sub={`${(cost?.billedRuns ?? 0) - (cost?.completedRuns ?? 0)} failed runs`} />
-        </div>
-      </div>
-
-      {/* ── Pricing reference — separate INTL / IN tabs ── */}
-      <div>
-        <SectionLabel>Pricing reference</SectionLabel>
-        <div className="panel overflow-hidden">
-          <Tabs defaultValue="intl">
-            <div className="px-5 pt-3 pb-0 border-b border-border flex items-center justify-between">
-              <p className="text-sm font-medium">Plan pricing</p>
-              <TabsList className="h-7 mb-2">
-                <TabsTrigger value="intl" className="text-xs px-3 h-6">INTL · USD</TabsTrigger>
-                <TabsTrigger value="in"   className="text-xs px-3 h-6">IN · INR</TabsTrigger>
-              </TabsList>
-            </div>
-            <TabsContent value="intl" className="mt-0">
-              <PlanTable plans={INTL} counts={intlCounts} fmt={fmtUSD} free={free} />
-            </TabsContent>
-            <TabsContent value="in" className="mt-0">
-              <PlanTable plans={IN} counts={inCounts} fmt={fmtINR} free={free} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* ── Paid subscribers table ── */}
-      <div>
-        <SectionLabel>Paid subscribers</SectionLabel>
-        <div className="panel overflow-hidden">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <p className="text-sm font-medium">All paid subscribers</p>
-            <Badge variant="secondary" className="text-[10px]">{paid} total</Badge>
-          </div>
-          <div className="overflow-auto max-h-[480px]">
+      <Section title="Subscribers" description="Everyone on a paid plan, including lapsed accounts">
+        <Panel>
+          <PanelHeader title="Paid subscribers" description={`${paid.toLocaleString()} active · ${paidUsers.length.toLocaleString()} listed`} />
+          <div className="max-h-[520px] overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-card z-10">
-                <tr className="border-b border-border text-xs text-muted-foreground font-semibold">
-                  <th className="text-left px-5 py-2.5">User</th>
-                  <th className="text-left px-4 py-2.5 hidden md:table-cell">Email</th>
-                  <th className="text-left px-4 py-2.5">Plan</th>
-                  <th className="text-left px-4 py-2.5 hidden sm:table-cell">Region</th>
-                  <th className="text-left px-4 py-2.5 hidden sm:table-cell">Billing</th>
-                  <th className="text-left px-4 py-2.5 hidden lg:table-cell">Platform</th>
-                  <th className="text-right px-4 py-2.5 hidden sm:table-cell">Price/mo</th>
-                  <th className="text-right px-5 py-2.5 hidden md:table-cell">Expires</th>
+              <thead className="sticky top-0 z-10 bg-card">
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="eyebrow px-5 py-2.5 text-left">Subscriber</th>
+                  <th className="eyebrow px-4 py-2.5 text-left">Plan</th>
+                  <th className="eyebrow hidden px-4 py-2.5 text-left sm:table-cell">Region</th>
+                  <th className="eyebrow hidden px-4 py-2.5 text-left sm:table-cell">Billing</th>
+                  <th className="eyebrow hidden px-4 py-2.5 text-left lg:table-cell">Platform</th>
+                  <th className="eyebrow hidden px-4 py-2.5 text-right sm:table-cell">Price / mo</th>
+                  <th className="eyebrow hidden px-5 py-2.5 text-right md:table-cell">Renews</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/30">
+              <tbody className="divide-y divide-border">
                 {paidUsers.map((user) => {
                   const plan    = user.plan ?? "free"
                   const isIN    = user.region === "IN"
@@ -508,60 +394,61 @@ export function PricingScreen() {
                   // Same rule as the app (has_paid_access): "Expired" only once access has really ended.
                   const expired = user.state === "lapsed"
                   return (
-                    <tr key={user.id} className="hover:bg-accent/20 transition-colors">
+                    <tr key={user.id} className="transition-colors hover:bg-muted/40">
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[10px] font-semibold shrink-0">
-                            {(user.full_name || user.email).charAt(0).toUpperCase()}
+                          <Avatar name={user.full_name || user.email} />
+                          <div className="min-w-0">
+                            <p className="max-w-[200px] truncate text-[13px] font-medium">{user.full_name || "—"}</p>
+                            <p className="max-w-[200px] truncate text-[11px] text-muted-foreground">{user.email}</p>
                           </div>
-                          <span className="font-medium truncate max-w-[120px]">{user.full_name || "—"}</span>
                         </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground hidden md:table-cell">
-                        <span className="truncate max-w-[180px] block">{user.email}</span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: PC[plan] ?? PC.free }} />
-                          <span className="capitalize text-xs">{plan}</span>
-                        </div>
+                        <span className="inline-flex items-center gap-1.5 text-xs capitalize"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: PC[plan] ?? PC.free }} />{plan}</span>
                       </td>
-                      <td className="px-4 py-2.5 hidden sm:table-cell">
-                        <Badge variant="outline" className="text-[10px]">{user.region ?? "INTL"}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 hidden sm:table-cell">
-                        <Badge variant="secondary" className="text-[10px]">
-                          {user.billing_period === "quarterly" ? "Quarterly" : "Monthly"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground capitalize hidden lg:table-cell">
-                        {user.platform ?? "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-xs hidden sm:table-cell">{price}</td>
-                      <td className="px-5 py-2.5 text-right hidden md:table-cell">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className="text-xs text-muted-foreground">
-                            {user.subscription_end_date ? new Date(user.subscription_end_date).toLocaleDateString() : "—"}
+                      <td className="hidden px-4 py-2.5 text-xs text-muted-foreground sm:table-cell">{user.region === "IN" ? "India" : "International"}</td>
+                      <td className="hidden px-4 py-2.5 text-xs text-muted-foreground sm:table-cell">{user.billing_period === "quarterly" ? "Quarterly" : "Monthly"}</td>
+                      <td className="hidden px-4 py-2.5 text-xs capitalize text-muted-foreground lg:table-cell">{user.platform ?? "—"}</td>
+                      <td className="num hidden px-4 py-2.5 text-right text-[13px] sm:table-cell">{price}</td>
+                      <td className="hidden px-5 py-2.5 text-right md:table-cell">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {user.subscription_end_date ? new Date(user.subscription_end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                           </span>
-                          {expired && <Badge variant="secondary" className="bg-destructive/15 text-destructive text-[9px]">Expired</Badge>}
+                          {expired && <span className="rounded-full border border-destructive/25 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">Expired</span>}
                         </div>
                       </td>
                     </tr>
                   )
                 })}
-                {paidUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                      No paid subscribers yet.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
+            {paidUsers.length === 0 && <EmptyState icon={Users} title="No paid subscribers yet" />}
           </div>
-        </div>
-      </div>
+        </Panel>
 
+        <Panel>
+          <Tabs defaultValue="intl" className="gap-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight">Price list</h3>
+                <p className="text-xs text-muted-foreground">Current plan pricing from lib/plans.ts</p>
+              </div>
+              <TabsList>
+                <TabsTrigger value="intl" className="px-3 text-xs">International · USD</TabsTrigger>
+                <TabsTrigger value="in" className="px-3 text-xs">India · INR</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="intl" className="mt-0">
+              <PlanTable plans={INTL} counts={intlCounts} fmt={fmtUSD} free={free} />
+            </TabsContent>
+            <TabsContent value="in" className="mt-0">
+              <PlanTable plans={IN} counts={inCounts} fmt={fmtINR} free={free} />
+            </TabsContent>
+          </Tabs>
+        </Panel>
+      </Section>
     </div>
   )
 }

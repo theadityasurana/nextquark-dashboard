@@ -4,23 +4,18 @@ import { useState, useMemo } from "react"
 import { useApi } from "@/lib/api-cache"
 import { heardAboutLabel, percentOf } from "@/lib/marketing"
 import {
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList,
-  CartesianGrid, ReferenceLine,
+  BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, UserPlus, CalendarDays, MailCheck, Rocket } from "lucide-react"
+import {
+  PageHeader, Panel, PanelHeader, Section, StatCard, KpiGrid, Meter, Segmented, Sparkline,
+  chartTooltip, axisTick, gridStroke, SERIES,
+} from "@/components/ui/dashboard"
 import { Button } from "@/components/ui/button"
 import { BangaloreQrAnalytics } from "@/components/bangalore-qr-analytics"
 
-const TT_STYLE = {
-  backgroundColor: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
-  fontSize: 12,
-  color: "var(--popover-foreground)",
-  padding: "8px 12px",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-}
+const TT_STYLE = chartTooltip
 
 const COLORS = [
   "var(--chart-1)",
@@ -71,36 +66,6 @@ function PieTooltip({ active, payload, total }: { active?: boolean; payload?: an
       <p className="font-semibold mb-1" style={{ color: d.payload.fill }}>{d.name}</p>
       <p className="text-sm">{val.toLocaleString()} <span className="text-xs text-muted-foreground">users</span></p>
       <p className="text-xs text-muted-foreground">{pct}% of total</p>
-    </div>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-medium text-muted-foreground/60 mb-3">
-      {children}
-    </p>
-  )
-}
-
-function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0 panel overflow-hidden">
-      <div className="px-5 pt-4 pb-3 border-b border-border">
-        <p className="text-sm font-medium">{title}</p>
-        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
-      </div>
-      <div className="px-4 pb-4 pt-3">{children}</div>
-    </div>
-  )
-}
-
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="min-w-0 panel p-4">
-      <p className="text-xs font-medium text-muted-foreground mb-3">{label}</p>
-      <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
     </div>
   )
 }
@@ -254,311 +219,251 @@ export function MarketingScreen() {
   const pct = (n: number) => percentOf(n, total)
   const confirmedPct = pct(funnelData[1].value)
 
-  return (
-    <div className="flex flex-col gap-8 min-w-0 overflow-x-hidden">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Marketing</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, global download QR, signup trends & onboarding funnel</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="flex items-center rounded-md border border-border overflow-hidden">
-            <button
-              onClick={() => setTimeRange("30d")}
-              className={`px-3 h-7 text-xs transition-colors ${timeRange === "30d" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-            >
-              Last 30d
-            </button>
-            <button
-              onClick={() => setTimeRange("all")}
-              className={`px-3 h-7 text-xs transition-colors ${timeRange === "all" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-            >
-              All Time
-            </button>
-          </div>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 border-border" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-          </Button>
-        </div>
-      </div>
+  const maxDow = Math.max(0, ...signupsByDay.map(d => d.count))
+  const maxHour = Math.max(0, ...signupsByHour.map(h => h.count))
+  const referralTotal = referralData.reduce((s, d) => s + d.value, 0)
+  const referralMax = Math.max(1, ...referralData.map(d => d.value))
+  const providerTotal = providerData.reduce((s, d) => s + d.value, 0)
+  const lastWeek = weeklyGrowth[weeklyGrowth.length - 1]?.signups ?? 0
+  const prevWeek = weeklyGrowth[weeklyGrowth.length - 2]?.signups ?? 0
+  const wow = prevWeek > 0 ? Math.round(((lastWeek - prevWeek) / prevWeek) * 100) : null
+  const dash = (v: React.ReactNode) => (loadError ? "—" : v)
 
-      {/* Bangalore QR / download.nextquark.in — loads independently of user stats */}
-      <div>
-        <SectionLabel>Link &amp; QR visits</SectionLabel>
-        <BangaloreQrAnalytics refreshKey={qrRefreshKey} range={timeRange} />
-      </div>
+  return (
+    <div className="flex flex-col gap-10 min-w-0 overflow-x-hidden">
+      <PageHeader
+        title="Marketing"
+        description="Acquisition, signup trends, activation and link & QR traffic."
+        actions={
+          <>
+            <Segmented value={timeRange} onChange={setTimeRange} options={[{ value: "30d", label: "Last 30 days" }, { value: "all", label: "All time" }]} />
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+            </Button>
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-36 shimmer" />)}
+          </div>
+          <div className="panel h-80 shimmer" />
         </div>
       ) : (
         <>
       {loadError && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           Couldn&apos;t load signup data: {loadError}. Charts below are empty until it loads — hit Refresh to retry.
         </div>
       )}
-      {/* KPI strip */}
-      <div>
-        <SectionLabel>Overview</SectionLabel>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label={timeRange === "all" ? "Total Users" : "Users (30d)"} value={loadError ? "—" : filteredUsers.length} sub={timeRange === "all" ? "all time signups" : "last 30 days"} />
-          <StatCard label="Email Confirmed" value={loadError ? "—" : `${confirmedPct}%`} sub="of all signups" />
-          <StatCard label="Profile Complete" value={loadError ? "—" : `${pct(funnelData[3].value)}%`} sub="completed onboarding" />
-          <StatCard label="Activation Rate" value={loadError ? "—" : `${pct(funnelData[4].value)}%`} sub="applied to ≥1 job" />
-        </div>
-      </div>
 
-      {/* Acquisition */}
-      <div>
-        <SectionLabel>Acquisition</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <KpiGrid>
+        <StatCard
+          label={timeRange === "all" ? "Total signups" : "Signups · 30 days"}
+          value={dash(filteredUsers.length)}
+          icon={UserPlus}
+          delta={wow === null || loadError ? undefined : `${wow >= 0 ? "+" : ""}${wow}% WoW`}
+          deltaTone={wow === null ? "neutral" : wow >= 0 ? "positive" : "negative"}
+        >
+          <div className="-mx-1 h-10"><Sparkline id="signups" data={dailySignups} /></div>
+        </StatCard>
+        <StatCard label="Today" value={dash(todaySignups)} icon={CalendarDays}
+          footnote={`${monthSignups.toLocaleString()} so far in ${new Date().toLocaleDateString("en-US", { month: "long" })}`} />
+        <StatCard label="Email confirmed" value={dash(`${confirmedPct}%`)} icon={MailCheck} footnote={`${funnelData[1].value.toLocaleString()} of ${total.toLocaleString()} signups`}>
+          <Meter value={Number(confirmedPct) || 0} tone="success" />
+        </StatCard>
+        <StatCard label="Activation rate" value={dash(`${pct(funnelData[4].value)}%`)} icon={Rocket} footnote="applied to at least one job">
+          <Meter value={Number(pct(funnelData[4].value)) || 0} />
+        </StatCard>
+      </KpiGrid>
 
-          {/* Where did you hear about us */}
-          <ChartCard title="Where did you hear about us?" sub={`${referralData.reduce((s, d) => s + d.value, 0).toLocaleString()} responses`}>
-            <div className="h-56">
+      <Section title="Signups" description={timeRange === "all" ? "Every day since launch" : "Daily signups over the last 30 days"}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Panel className="lg:col-span-2">
+            <PanelHeader title="Daily new signups" description={`${filteredUsers.length.toLocaleString()} in range · peak ${Math.max(0, ...dailySignups.map(d => d.count))} in a day`} />
+            <div className="h-72 px-3 pb-3 pt-5">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={referralData} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={90} />
-                  <Tooltip content={<BarTooltip total={referralData.reduce((s, d) => s + d.value, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 11, fill: "var(--muted-foreground)", formatter: (v: number) => v.toLocaleString() }}>
-                    {referralData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Bar>
+                <BarChart data={dailySignups} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={24} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                  <Tooltip
+                    cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return (
+                        <div style={TT_STYLE}>
+                          <p className="text-xs text-muted-foreground">{d.dow}, {d.fullDate}</p>
+                          <p className="mt-0.5 text-sm font-semibold">{d.count} <span className="text-xs font-normal text-muted-foreground">signups</span></p>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Bar dataKey="count" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </ChartCard>
-
-          {/* Auth provider */}
-          <ChartCard title="Sign-up method" sub="how users authenticated">
-            <div className="h-56 flex items-center gap-2">
-              <ResponsiveContainer width="60%" height="100%">
-                <PieChart>
-                  <Pie data={providerData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={85} innerRadius={48} paddingAngle={3}
-                    label={({ cx, cy, midAngle, innerRadius, outerRadius, value }) => {
-                      const RADIAN = Math.PI / 180
-                      const r = innerRadius + (outerRadius - innerRadius) * 0.5
-                      const x = cx + r * Math.cos(-midAngle * RADIAN)
-                      const y = cy + r * Math.sin(-midAngle * RADIAN)
-                      return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={600}>{value}</text>
-                    }}
-                    labelLine={false}
-                  >
-                    {providerData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip content={<PieTooltip total={providerData.reduce((s, d) => s + d.value, 0)} />} />
-                </PieChart>
+          </Panel>
+          <Panel>
+            <PanelHeader title="Weekly signups" description={timeRange === "all" ? "New users per week" : "Last 5 weeks"} />
+            <div className="px-5 pt-4">
+              <p className="num text-2xl font-semibold">{lastWeek.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">this week{wow !== null && <span className={wow >= 0 ? " text-success" : " text-destructive"}> · {wow >= 0 ? "+" : ""}{wow}%</span>}</p>
+            </div>
+            <div className="h-48 px-3 pb-3 pt-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={weeklyGrowth} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="wk" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="week" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={16} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                  <Tooltip content={<LineTooltip />} cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }} />
+                  <Area type="monotone" dataKey="signups" stroke="var(--chart-1)" strokeWidth={2} fill="url(#wk)" dot={false} activeDot={{ r: 4, stroke: "var(--card)", strokeWidth: 2 }} />
+                </AreaChart>
               </ResponsiveContainer>
-              <div className="flex flex-col gap-2.5 flex-1 min-w-0">
+            </div>
+          </Panel>
+        </div>
+      </Section>
+
+      <Section title="Activation funnel" description="Where new users drop off between signup and their first application">
+        <Panel>
+          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
+            {funnelData.map((step, i) => {
+              const ofTotal = percentOf(step.value, funnelData[0].value)
+              const dropPct = i > 0 ? percentOf(funnelData[i - 1].value - step.value, funnelData[i - 1].value) : null
+              return (
+                <div key={step.name} className="flex flex-col gap-3 px-5 py-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">{i + 1}</span>
+                      {step.name}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="num text-2xl font-semibold">{dash(step.value.toLocaleString())}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{ofTotal}%</span>
+                  </div>
+                  <div className="h-16 w-full overflow-hidden rounded-md bg-muted/60">
+                    <div className="h-full w-full origin-bottom rounded-md bg-primary transition-transform duration-500"
+                      style={{ transform: `scaleY(${Math.max(0.02, Number(ofTotal) / 100)})`, opacity: 1 - i * 0.14 }} />
+                  </div>
+                  <span className={`text-[11px] tabular-nums ${dropPct === null ? "text-muted-foreground" : "text-destructive"}`}>
+                    {dropPct === null ? "Starting point" : `−${dropPct}% from previous step`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </Panel>
+      </Section>
+
+      <Section title="Acquisition" description="How people found Iris and how they signed up">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel>
+            <PanelHeader title="Where did you hear about us?" description={`${referralTotal.toLocaleString()} survey responses`} />
+            <div className="flex flex-col gap-3 px-5 py-5">
+              {referralData.length === 0 && <p className="text-xs text-muted-foreground">No responses yet</p>}
+              {referralData.map((d) => (
+                <div key={d.name} className="flex items-center gap-3">
+                  <span className="w-32 shrink-0 truncate text-[13px]">{d.name}</span>
+                  <div className="h-6 flex-1 overflow-hidden rounded-md bg-muted/60">
+                    <div className="h-full rounded-md bg-chart-1" style={{ width: `${(d.value / referralMax) * 100}%`, opacity: 0.35 + 0.65 * (d.value / referralMax) }} />
+                  </div>
+                  <span className="num w-12 shrink-0 text-right text-[13px] font-medium">{d.value.toLocaleString()}</span>
+                  <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{referralTotal ? Math.round((d.value / referralTotal) * 100) : 0}%</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <Panel>
+            <PanelHeader title="Sign-up method" description="How users authenticated" />
+            <div className="flex items-center gap-6 px-5 py-6">
+              <div className="relative h-40 w-40 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={providerData} dataKey="value" nameKey="name" innerRadius={54} outerRadius={74} paddingAngle={2} stroke="none" startAngle={90} endAngle={-270}>
+                      {providerData.map((_, i) => <Cell key={i} fill={SERIES[i % SERIES.length]} />)}
+                    </Pie>
+                    <Tooltip content={<PieTooltip total={providerTotal} />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="num text-xl font-semibold">{providerTotal.toLocaleString()}</span>
+                  <span className="text-[11px] text-muted-foreground">users</span>
+                </div>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
                 {providerData.map((d, i) => {
-                  const total = providerData.reduce((s, x) => s + x.value, 0)
-                  const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : "0"
+                  const share = providerTotal > 0 ? (d.value / providerTotal) * 100 : 0
                   return (
-                    <div key={d.name}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                          <span className="text-xs text-muted-foreground">{d.name}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold tabular-nums">{d.value.toLocaleString()}</span>
-                          <span className="text-[10px] text-muted-foreground w-9 text-right">{pct}%</span>
-                        </div>
+                    <div key={d.name} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-sm" style={{ background: SERIES[i % SERIES.length] }} />{d.name}</span>
+                        <span className="num font-medium">{d.value.toLocaleString()} <span className="font-normal text-muted-foreground">· {share.toFixed(1)}%</span></span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-accent/30 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full" style={{ width: `${share}%`, background: SERIES[i % SERIES.length] }} />
                       </div>
                     </div>
                   )
                 })}
               </div>
             </div>
-          </ChartCard>
+          </Panel>
         </div>
-      </div>
+      </Section>
 
-      {/* Signup timing */}
-      <div>
-        <SectionLabel>Signup Timing</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* By day of week */}
-          <ChartCard title="Signups by day of week" sub="which days users sign up most">
-            <div className="h-48">
+      <Section title="Signup timing" description="When people sign up — the busiest slot is highlighted">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel>
+            <PanelHeader title="By day of week" />
+            <div className="h-56 px-3 pb-3 pt-5">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={signupsByDay} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                <BarChart data={signupsByDay} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="day" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
                   <Tooltip content={<BarTooltip total={signupsByDay.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)" }}>
-                    {signupsByDay.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                    {signupsByDay.map((d, i) => <Cell key={i} fill={d.count === maxDow ? "var(--chart-1)" : "color-mix(in oklch, var(--chart-1) 35%, transparent)"} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </ChartCard>
-
-          {/* By hour of day */}
-          <ChartCard title="Signups by hour of day" sub="UTC — peak activity window">
-            <div className="h-48">
+          </Panel>
+          <Panel>
+            <PanelHeader title="By hour of day" description="UTC" />
+            <div className="h-56 px-3 pb-3 pt-5">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={signupsByHour} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="hour" tick={{ fontSize: 8, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} interval={3} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
+                <BarChart data={signupsByHour} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="hour" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} interval={3} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
                   <Tooltip content={<BarTooltip total={signupsByHour.reduce((s, d) => s + d.count, 0)} />} cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }} />
-                  <ReferenceLine y={Math.max(...signupsByHour.map(h => h.count))} stroke="color-mix(in oklch, var(--chart-1) 30%, transparent)" strokeDasharray="4 4" />
-                  <Bar dataKey="count" fill="oklch(0.65 0.15 250)" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                    {signupsByHour.map((h, i) => <Cell key={i} fill={h.count === maxHour ? "var(--chart-1)" : "color-mix(in oklch, var(--chart-1) 35%, transparent)"} />)}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </ChartCard>
+          </Panel>
         </div>
-      </div>
-
-      {/* Daily Signups */}
-      <div>
-        <SectionLabel>Daily Signups</SectionLabel>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <StatCard label="Today" value={loadError ? "—" : todaySignups} sub="signups so far today" />
-          <StatCard label="This Month" value={loadError ? "—" : monthSignups} sub={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })} />
-        </div>
-        <ChartCard title="Daily new signups" sub={timeRange === "all" ? "all time — scroll to see every day" : "last 30 days — scroll to see every day"}>
-          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
-            <div style={{ width: Math.max(dailySignups.length * 52, 400), height: 220, minWidth: 0 }}>
-              <BarChart
-                width={Math.max(dailySignups.length * 52, 400)}
-                height={220}
-                data={dailySignups}
-                margin={{ top: 8, right: 16, left: 0, bottom: 32 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-45}
-                  textAnchor="end"
-                  height={48}
-                />
-                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null
-                    const d = payload[0].payload
-                    return (
-                      <div style={TT_STYLE}>
-                        <p className="font-semibold mb-0.5" style={{ color: COLORS[2] }}>{d.fullDate}</p>
-                        <p className="text-[11px] text-muted-foreground mb-1">{d.dow}</p>
-                        <p className="text-sm">{d.count} <span className="text-xs text-muted-foreground">signups</span></p>
-                      </div>
-                    )
-                  }}
-                  cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
-                />
-                <Bar dataKey="count" fill={COLORS[2]} radius={[3, 3, 0, 0]}
-                  label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)", formatter: (v: number) => v > 0 ? v : "" }}
-                />
-              </BarChart>
-            </div>
-          </div>
-        </ChartCard>
-      </div>
-
-      {/* Growth */}
-      <div>
-        <SectionLabel>Growth</SectionLabel>
-        <ChartCard title="Weekly new signups" sub={timeRange === "all" ? "all time — new users per week" : "last 5 weeks — new users per week"}>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weeklyGrowth} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip content={<LineTooltip />} cursor={{ stroke: "color-mix(in oklch, var(--chart-1) 20%, transparent)", strokeWidth: 1 }} />
-                <Line
-                  type="monotone" dataKey="signups" stroke={COLORS[0]} strokeWidth={2.5}
-                  dot={{ r: 4, fill: COLORS[0], strokeWidth: 2, stroke: "var(--popover)" }}
-                  activeDot={{ r: 6, fill: COLORS[0], stroke: "var(--popover)", strokeWidth: 2 }}
-                  label={{ position: "top", fontSize: 10, fill: "var(--muted-foreground)", dy: -4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartCard>
-      </div>
-
-      {/* Onboarding funnel */}
-      <div>
-        <SectionLabel>Onboarding Funnel</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Visual funnel bars */}
-          <ChartCard title="Completion steps" sub="drop-off at each onboarding stage">
-            <div className="flex flex-col gap-3 py-1">
-              {funnelData.map((step, i) => {
-                const pct = percentOf(step.value, funnelData[0].value)
-                const dropPct = i > 0 ? percentOf(funnelData[i - 1].value - step.value, funnelData[i - 1].value) : null
-                return (
-                  <div key={step.name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium">{step.name}</span>
-                      <div className="flex items-center gap-2">
-                        {dropPct !== null && (
-                          <span className="text-[10px] text-destructive/70 tabular-nums">-{dropPct}%</span>
-                        )}
-                        <span className="text-xs font-semibold tabular-nums">{step.value.toLocaleString()}</span>
-                        <span className="text-[10px] text-muted-foreground w-8 text-right tabular-nums">{pct}%</span>
-                      </div>
-                    </div>
-                    <div className="h-3 rounded-full bg-accent/30 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%`, backgroundColor: step.fill }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </ChartCard>
-
-          {/* Funnel chart */}
-          <ChartCard title="Funnel visualisation" sub="proportional drop-off view">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <FunnelChart>
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null
-                      const d = payload[0].payload
-                      const pct = percentOf(d.value, funnelData[0].value)
-                      return (
-                        <div style={TT_STYLE}>
-                          <p className="font-semibold mb-1" style={{ color: d.fill }}>{d.name}</p>
-                          <p className="text-sm">{d.value.toLocaleString()} <span className="text-xs text-muted-foreground">users</span></p>
-                          <p className="text-xs text-muted-foreground">{pct}% of signups</p>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                    <LabelList position="right" fill="var(--muted-foreground)" style={{ fontSize: 10 }} dataKey="name" />
-                  </Funnel>
-                </FunnelChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </div>
-      </div>
+      </Section>
         </>
       )}
+
+      <Section title="Link & QR visits" description="Traffic to irisjobs.live, download.nextquark.in and the QR code">
+        <BangaloreQrAnalytics refreshKey={qrRefreshKey} range={timeRange} />
+      </Section>
     </div>
   )
 }
