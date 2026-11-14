@@ -6,19 +6,23 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient()
   const { searchParams } = new URL(request.url)
 
-  const page      = parseInt(searchParams.get('page')  || '1')
-  const limit     = parseInt(searchParams.get('limit') || '20')
+  const page      = Math.max(1, parseInt(searchParams.get('page')  || '1') || 1)
+  // Capped: the jobs table is ~130k wide rows (full descriptions), so there is
+  // no "all" mode — callers page.
+  const limit     = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20))
   const companyId = searchParams.get('companyId')
-  const all       = searchParams.get('all') === 'true'
+  const q         = (searchParams.get('q') || '').trim().replace(/[%_,()]/g, ' ')
   const from      = (page - 1) * limit
 
   let query = supabase
     .from('jobs')
-    .select('*', { count: companyId ? 'exact' : 'estimated' })
+    .select('*', { count: companyId || q ? 'exact' : 'estimated' })
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, from + limit - 1)
 
   if (companyId) query = query.eq('company_id', companyId)
-  if (!all)      query = query.range(from, from + limit - 1)
+  if (q)         query = query.or(`title.ilike.%${q}%,company_name.ilike.%${q}%`)
 
   const { data, error, count } = await query
 

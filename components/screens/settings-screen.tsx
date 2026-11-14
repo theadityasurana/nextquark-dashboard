@@ -1,5 +1,7 @@
 "use client"
 
+import { PageHeader } from "@/components/ui/dashboard"
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -129,11 +131,8 @@ export function SettingsScreen() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage automation provider and API credentials</p>
-      </div>
+    <div className="flex max-w-3xl flex-col gap-8">
+      <PageHeader title="Settings" description="Automation provider, API credentials and system status." />
 
       {/* System Status */}
       <Card className="bg-card border-border">
@@ -141,7 +140,7 @@ export function SettingsScreen() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">System Status</CardTitle>
             <div className="flex items-center gap-2">
-              <span className={`text-xs font-medium ${systemDown ? 'text-destructive' : 'text-green-500'}`}>
+              <span className={`text-xs font-medium ${systemDown ? 'text-destructive' : 'text-success'}`}>
                 {systemDown ? 'DOWN' : 'UP'}
               </span>
               <Switch

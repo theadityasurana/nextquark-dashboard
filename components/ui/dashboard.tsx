@@ -336,3 +336,31 @@ export function Pagination({ page, totalPages, onPage, summary }: {
     </div>
   )
 }
+
+/** Placeholder rows shown while a table page loads. */
+export function TableSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <div className="divide-y divide-border" aria-busy="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+          <div className="h-7 w-7 shrink-0 rounded-full bg-muted shimmer" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <div className="h-3 w-1/3 rounded bg-muted shimmer" />
+            <div className="h-2.5 w-1/5 rounded bg-muted/70 shimmer" />
+          </div>
+          <div className="hidden h-3 w-16 rounded bg-muted shimmer sm:block" />
+          <div className="hidden h-5 w-20 rounded-full bg-muted shimmer md:block" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Block placeholder for a chart or card body. */
+export function ChartSkeleton({ className }: { className?: string }) {
+  return <div className={cn("h-full min-h-40 w-full rounded-lg bg-muted/50 shimmer", className)} aria-busy="true" />
+}
+
+/** Class names for Radix Tabs rendered as an underline tab bar (secondary navigation inside a page). */
+export const underlineTabsList = "h-auto w-full justify-start gap-1 rounded-none border-0 border-b border-border bg-transparent p-0 overflow-x-auto scrollbar-hide"
+export const underlineTabsTrigger = "flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 pb-2.5 pt-1 text-[13px] font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent"

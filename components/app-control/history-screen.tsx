@@ -57,7 +57,7 @@ export function SectionHistory({ sectionKey }: { sectionKey: string }) {
   return (
     <div className="flex flex-col gap-5 max-w-4xl">
       <div className="flex flex-col gap-3">
-        <Link href="/app-control" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"><ArrowLeft className="h-3 w-3" />App Control</Link>
+        <Link href="/settings?tab=app-control" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"><ArrowLeft className="h-3 w-3" />App Control</Link>
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">History · {def.name}</h1>

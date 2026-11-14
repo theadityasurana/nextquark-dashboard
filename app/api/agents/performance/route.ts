@@ -10,14 +10,22 @@ export async function GET(request: NextRequest) {
     daysAgo.setDate(daysAgo.getDate() - parseInt(timeRange))
     
     // Get applications data
-    const { data: applications, error } = await supabase
-      .from('live_application_queue')
-      .select('*')
-      .gte('created_at', daysAgo.toISOString())
-      .order('created_at', { ascending: true })
-    
-    if (error) {
-      return Response.json({ error: error.message }, { status: 500 })
+    // Only the columns the calculations use, paged past PostgREST's 1000-row
+    // cap. select('*') pulled every wide JSONB column and timed out on Vercel.
+    const range = Math.min(90, Math.max(1, parseInt(timeRange) || 7))
+    daysAgo.setTime(Date.now() - range * 86_400_000)
+    const applications: { status: string; created_at: string; job_url: string | null; company_name: string | null }[] = []
+    for (let from = 0; from < 50_000; from += 1000) {
+      const { data, error } = await supabase
+        .from('live_application_queue')
+        .select('status, created_at, job_url, company_name')
+        .gte('created_at', daysAgo.toISOString())
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + 999)
+      if (error) return Response.json({ error: error.message }, { status: 500 })
+      applications.push(...(data ?? []))
+      if (!data || data.length < 1000) break
     }
 
     // Calculate success rate trends

@@ -1,3 +1,4 @@
+import { cachedRoute } from '@/lib/server-cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -9,6 +10,10 @@ const PROJECT_REF = 'widujxpahzlpegzjjpqp'
 const DASHBOARD_URL = `https://supabase.com/dashboard/project/${PROJECT_REF}`
 
 const lastAlertState: Record<string, string> = {}
+
+// A single slow round-trip from a cold serverless instance is common; only call
+// a service degraded when it is clearly slow.
+const DEGRADED_MS = 4000
 
 type ServiceStatus = 'healthy' | 'degraded' | 'down'
 
@@ -119,7 +124,7 @@ async function probe(name: string, url: string, apiKey?: string, timeoutMs = 500
     // reachableOnly: any HTTP response means the service is up (used for Realtime
     // whose /api/health returns 500 via Cloudflare but the service itself works fine)
     const ok = reachableOnly ? true : res.ok
-    return { name, status: ok ? (latencyMs > 3000 ? 'degraded' : 'healthy') : 'degraded', latencyMs }
+    return { name, status: ok ? (latencyMs > DEGRADED_MS ? 'degraded' : 'healthy') : 'degraded', latencyMs }
   } catch (err: any) {
     return { name, status: 'down', latencyMs: Date.now() - start, detail: err?.message }
   }
@@ -129,10 +134,11 @@ async function checkDatabase(): Promise<ServiceResult> {
   const admin = createAdminClient()
   const start = Date.now()
   try {
-    const { error } = await admin.from('profiles').select('id', { count: 'exact', head: true })
+    // One indexed row, not an exact count over the whole table.
+    const { error } = await admin.from('profiles').select('id').limit(1)
     const latencyMs = Date.now() - start
     if (error) return { name: 'PostgreSQL', status: 'down', latencyMs, detail: error.message }
-    return { name: 'PostgreSQL', status: latencyMs > 3000 ? 'degraded' : 'healthy', latencyMs }
+    return { name: 'PostgreSQL', status: latencyMs > DEGRADED_MS ? 'degraded' : 'healthy', latencyMs }
   } catch (err: any) {
     return { name: 'PostgreSQL', status: 'down', latencyMs: Date.now() - start, detail: err?.message }
   }
@@ -141,18 +147,22 @@ async function checkDatabase(): Promise<ServiceResult> {
 async function getRecentErrorRate() {
   const admin = createAdminClient()
   const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-  const [{ data: logs }, { data: authLogs }] = await Promise.all([
-    admin.from('application_logs').select('level').gte('timestamp', since),
-    admin.from('application_logs').select('level, message').gte('timestamp', since).ilike('message', '%auth%'),
+  // Counts only. This used to download every log row from the last 15 minutes
+  // (twice) on each health check, and the dashboard calls this from several
+  // places — that alone was enough to push Postgres into "degraded".
+  const base = () => admin.from('application_logs').select('id', { count: 'exact', head: true }).gte('timestamp', since)
+  const [total, errors, authErrors] = await Promise.all([
+    base(),
+    base().eq('level', 'error'),
+    base().eq('level', 'error').ilike('message', '%auth%'),
   ])
-  const total = logs?.length || 0
-  const errors = logs?.filter(l => l.level === 'error').length || 0
-  const authErrors = authLogs?.filter(l => l.level === 'error').length || 0
+  const t = total.count || 0
+  const e = errors.count || 0
   return {
-    httpErrorRate: total > 0 ? Math.round((errors / total) * 100) : 0,
-    totalErrors: errors,
-    authErrors,
-    totalRequests: total,
+    httpErrorRate: t > 0 ? Math.round((e / t) * 100) : 0,
+    totalErrors: e,
+    authErrors: authErrors.count || 0,
+    totalRequests: t,
   }
 }
 
@@ -239,7 +249,7 @@ function buildErrorRateAlert(stats: { httpErrorRate: number; totalErrors: number
   ].join('\n')
 }
 
-export async function GET() {
+async function computeHealth(): Promise<Response> {
   const [auth, postgrest, realtime, storage, db, errorStats] = await Promise.all([
     probe('Auth', `${SUPABASE_URL}/auth/v1/health`, ANON_KEY),
     probe('PostgREST', `${SUPABASE_URL}/rest/v1/`, SERVICE_KEY),
@@ -283,4 +293,15 @@ export async function GET() {
   }
 
   return Response.json({ overallStatus, services, alerts, errorStats, checkedAt: new Date().toISOString() })
+}
+
+/**
+ * Every open dashboard tab polls this (header pill, health panel, desktop
+ * notifier), so results are shared for 45s across all callers instead of
+ * re-probing Supabase on each request. Called without a request (the
+ * admin-notify cron), it always runs fresh.
+ */
+export async function GET(request?: Request) {
+  if (!request) return computeHealth()
+  return cachedRoute(request, 45_000, computeHealth)
 }

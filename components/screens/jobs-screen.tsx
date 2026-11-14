@@ -1,5 +1,7 @@
 "use client"
 
+import useSWR from "swr"
+
 import { useState, useCallback, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import { Card, CardContent } from "@/components/ui/card"
@@ -107,15 +109,22 @@ export function JobsScreen() {
   })
   const [isAutoPopulating, setIsAutoPopulating] = useState(false)
 
-  const filteredJobs = jobs.filter((job) => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      job.title.toLowerCase().includes(q) ||
-      job.companyName.toLowerCase().includes(q) ||
-      job.id.toLowerCase().includes(q)
-    )
-  })
+  // Search runs in Postgres across every job, not just the pages loaded so far.
+  const [debouncedJobQuery, setDebouncedJobQuery] = useState("")
+  useEffect(() => { const t = setTimeout(() => setDebouncedJobQuery(searchQuery.trim()), 300); return () => clearTimeout(t) }, [searchQuery])
+  const { data: searchResp, isLoading: searching } = useSWR<{ data: Record<string, unknown>[]; total: number }>(
+    debouncedJobQuery ? `/api/jobs?q=${encodeURIComponent(debouncedJobQuery)}&limit=50` : null,
+    (u: string) => fetch(u).then((r) => r.json()),
+    { keepPreviousData: true, revalidateOnFocus: false },
+  )
+  const filteredJobs = debouncedJobQuery
+    ? (searchResp?.data ?? []).map((j) => ({
+        id: j.id as string, title: (j.title as string) || "", companyId: j.company_id as string,
+        companyName: (j.company_name as string) || "", companyInitial: (j.company_initial as string) || "",
+        location: j.location as string, status: j.status as string, portalUrl: j.portal_url as string,
+        applications: (j.applications as number) || 0, ...j,
+      } as any))
+    : jobs
 
   const resetJobForm = () => {
     setJobForm({

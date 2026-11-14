@@ -1,4 +1,4 @@
-import { cachedRoute } from "@/lib/server-cache"
+import { cachedRoute, cachedValue } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
@@ -36,65 +36,115 @@ async function collectProfiles(supabase: ReturnType<typeof createAdminClient>): 
   return profiles
 }
 
-export function GET(request: Request) {
-  return cachedRoute(request, 60_000, () => load(request))
+type AuthUser = Awaited<ReturnType<ReturnType<typeof createAdminClient>['auth']['admin']['listUsers']>>['data']['users'][number]
+
+/** Every auth user, paged from GoTrue and shared for 2 minutes across requests. */
+function allAuthUsers(supabase: ReturnType<typeof createAdminClient>): Promise<AuthUser[]> {
+  return cachedValue('auth-users', 2 * 60_000, async () => {
+    const out: AuthUser[] = []
+    for (let page = 1; page < 200; page++) {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+      if (error) throw new Error(error.message)
+      out.push(...data.users)
+      if (data.users.length < 1000) break
+    }
+    return out
+  })
 }
 
-async function load(request: Request) {
+const slim = (user: AuthUser) => ({
+  id: user.id,
+  email: user.email || 'No email',
+  phone: user.phone || null,
+  created_at: user.created_at,
+  last_sign_in_at: user.last_sign_in_at ?? null,
+  email_confirmed_at: user.email_confirmed_at ?? null,
+  phone_confirmed_at: user.phone_confirmed_at ?? null,
+  role: user.role,
+  app_metadata: user.app_metadata,
+  user_metadata: user.user_metadata,
+  confirmed: !!user.email_confirmed_at,
+  banned: !!(user as { banned_until?: string }).banned_until,
+  provider: (user.app_metadata?.provider as string) || 'email',
+})
+
+/**
+ * GET /api/users?page=1&perPage=25&q=   → { rows, total, stats }  (Users page)
+ * GET /api/users?funnel=1               → per-user funnel flags   (Marketing page)
+ *
+ * The list is paged here rather than shipping every auth user (with metadata)
+ * to the browser on each visit.
+ */
+export async function GET(request: Request) {
   const supabase = createAdminClient()
-  // ?funnel=1 is the Marketing page: signup facts and onboarding flags, no contact details.
-  const withFunnel = new URL(request.url).searchParams.get('funnel') === '1'
+  const sp = new URL(request.url).searchParams
 
-  const allUsers: ReturnType<typeof supabase.auth.admin.listUsers> extends Promise<{ data: { users: infer U } }> ? U : never[] = []
-  let page = 1
-  const perPage = 1000
-
-  while (true) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    allUsers.push(...(data.users as typeof allUsers))
-    if (data.users.length < perPage) break
-    page++
+  if (sp.get('funnel') === '1') {
+    return cachedRoute(request, 5 * 60_000, () => loadFunnel(supabase))
   }
 
-  if (withFunnel) {
-    try {
-      const [profiles, appliedIds] = await Promise.all([collectProfiles(supabase), collectIds(supabase, 'live_application_queue', 'user_id')])
-      return NextResponse.json(
-        allUsers.map((user) => {
-          const profile = profiles.get(user.id)
-          return {
-            id: user.id,
-            created_at: user.created_at,
-            provider: user.app_metadata?.provider || 'email',
-            confirmed: !!user.email_confirmed_at,
-            profile_started: !!profile,
-            onboarding_complete: !!profile?.is_onboarding_complete,
-            has_applied: appliedIds.has(user.id),
-            heard_about_us: profile?.heard_about_us ?? null,
-          }
-        }),
-      )
-    } catch (e) {
-      return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load funnel data' }, { status: 500 })
+  try {
+    const users = await allAuthUsers(supabase)
+    const page = Math.max(1, Number(sp.get('page')) || 1)
+    const perPage = Math.min(100, Math.max(1, Number(sp.get('perPage')) || 25))
+    const q = (sp.get('q') || '').trim().toLowerCase()
+
+    const sorted = [...users].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    const matched = q ? sorted.filter((u) => (u.email || '').toLowerCase().includes(q) || u.id.includes(q)) : sorted
+
+    const now = Date.now()
+    const DAY = 86_400_000
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+    const age = (d?: string | null) => (d ? now - new Date(d).getTime() : Infinity)
+    const providers: Record<string, number> = {}
+    for (const u of users) {
+      const p = (u.app_metadata?.provider as string) || 'email'
+      providers[p] = (providers[p] || 0) + 1
     }
+    const stats = {
+      total: users.length,
+      newToday: users.filter((u) => new Date(u.created_at) >= startOfToday).length,
+      new7d: users.filter((u) => age(u.created_at) < 7 * DAY).length,
+      prev7d: users.filter((u) => { const t = age(u.created_at); return t >= 7 * DAY && t < 14 * DAY }).length,
+      active7d: users.filter((u) => age(u.last_sign_in_at) < 7 * DAY).length,
+      providers,
+    }
+
+    return NextResponse.json({
+      rows: matched.slice((page - 1) * perPage, page * perPage).map(slim),
+      total: matched.length,
+      page,
+      perPage,
+      stats,
+    })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load users' }, { status: 500 })
   }
+}
 
-  const users = allUsers.map(user => ({
-    id: user.id,
-    email: user.email || 'No email',
-    phone: user.phone || null,
-    created_at: user.created_at,
-    last_sign_in_at: user.last_sign_in_at,
-    email_confirmed_at: user.email_confirmed_at,
-    phone_confirmed_at: user.phone_confirmed_at,
-    role: user.role,
-    app_metadata: user.app_metadata,
-    user_metadata: user.user_metadata,
-    confirmed: !!user.email_confirmed_at,
-    banned: !!user.banned_until,
-    provider: user.app_metadata?.provider || 'email',
-  }))
-
-  return NextResponse.json(users)
+async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
+  try {
+    const [allUsers, profiles, appliedIds] = await Promise.all([
+      allAuthUsers(supabase),
+      collectProfiles(supabase),
+      collectIds(supabase, 'live_application_queue', 'user_id'),
+    ])
+    return NextResponse.json(
+      allUsers.map((user) => {
+        const profile = profiles.get(user.id)
+        return {
+          id: user.id,
+          created_at: user.created_at,
+          provider: user.app_metadata?.provider || 'email',
+          confirmed: !!user.email_confirmed_at,
+          profile_started: !!profile,
+          onboarding_complete: !!profile?.is_onboarding_complete,
+          has_applied: appliedIds.has(user.id),
+          heard_about_us: profile?.heard_about_us ?? null,
+        }
+      }),
+    )
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load funnel data' }, { status: 500 })
+  }
 }

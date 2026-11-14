@@ -98,7 +98,7 @@ const EMPTY: DownloadAnalyticsPayload = {
 }
 
 export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number; range: "30d" | "all" }) {
-  const { data: loaded, error: loadError, isLoading: loading, isUpdating, refresh: reload } = useApi<DownloadAnalyticsPayload>(`/api/download-analytics?range=${range}`)
+  const { data: loaded, error: loadError, isLoading: loading, isSwitching, isUpdating, refresh: reload } = useApi<DownloadAnalyticsPayload>(`/api/download-analytics?range=${range}`)
   const [stableData, setStableData] = useState<DownloadAnalyticsPayload | null>(null)
   useEffect(() => { if (loaded) setStableData(loaded) }, [loaded])
   const data: DownloadAnalyticsPayload | null = loaded ?? stableData ?? (loadError ? { ...EMPTY, error: `Failed to load download analytics (${loadError.message})` } : null)
@@ -195,10 +195,14 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
     reload()
   }
 
-  if (loading && !data && !isUpdating) {
+  if ((loading && !data && !isUpdating) || isSwitching) {
     return (
-      <div className="flex items-center justify-center h-40">
-        <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="flex flex-col gap-4" aria-busy="true">
+        <div className="panel h-14 shimmer" />
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-24 shimmer" />)}
+        </div>
+        <div className="panel h-[460px] shimmer" />
       </div>
     )
   }

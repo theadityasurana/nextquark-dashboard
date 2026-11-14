@@ -77,24 +77,33 @@ export function ApplicationDetails({
   const profileStats = fullProfile?.user_stats ?? null
   const resumeHref = fullProfile?.resume_download_url ?? null
   
-  // Fetch logs from database
+  // Fetch logs from database: the full log once, then only new lines, and only
+  // while the run is still going. Re-reading 1000 rows every 3s for a finished
+  // run was pure egress.
+  const isLiveRun = ['processing', 'awaiting_otp', 'awaiting_captcha', 'pending'].includes(application.status)
   useEffect(() => {
+    let cancelled = false
+    let lastTs: string | null = null
     const fetchLogs = async () => {
+      if (document.hidden) return
       try {
-        const response = await fetch(`/api/logs?applicationId=${application.id}`)
+        const url = `/api/logs?applicationId=${application.id}` + (lastTs ? `&after=${encodeURIComponent(lastTs)}` : '')
+        const response = await fetch(url)
         const data = await response.json()
-        if (data.logs) {
-          setDbLogs(data.logs)
-        }
+        if (cancelled || !Array.isArray(data.logs)) return
+        if (data.logs.length > 0) lastTs = data.logs[data.logs.length - 1].timestamp ?? lastTs
+        if (!url.includes('&after=')) setDbLogs(data.logs)
+        else if (data.logs.length > 0) setDbLogs((prev: any[]) => [...prev, ...data.logs])
       } catch (err) {
         console.error('Failed to fetch logs:', err)
       }
     }
-    
+
     fetchLogs()
-    const interval = setInterval(fetchLogs, 3000)
-    return () => clearInterval(interval)
-  }, [application.id])
+    if (!isLiveRun) return () => { cancelled = true }
+    const interval = setInterval(fetchLogs, 4000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [application.id, isLiveRun])
   
   // Combine context logs (real-time) with database logs
   const contextLogs = logs.filter(log => log.applicationId === application.id)

@@ -1,5 +1,5 @@
-import { LogsScreen } from "@/components/screens/logs-screen"
+import { redirect } from "next/navigation"
 
 export default function LogsPage() {
-  return <LogsScreen />
+  redirect("/settings?tab=logs")
 }

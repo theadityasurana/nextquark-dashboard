@@ -7,6 +7,7 @@ import { AlertTriangle, History, Pencil, RefreshCw, Smartphone } from "lucide-re
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/ui/dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { deepEqual, type ConfigRow } from "@/lib/remote-config/core"
 import { SECTIONS } from "@/lib/remote-config/fields"
@@ -40,19 +41,19 @@ export function AppControlOverview() {
   const versionsKey = rows ? Object.values(rows).map(r => `${r.key}:${r.version}`).join("|") : ""
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">App Control</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">Control what Iris app users see, without shipping an app update.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <HelpPanel />
-          <Button variant="outline" size="sm" className="h-8" onClick={load} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
-        </div>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="App control"
+        description="Control what Iris app users see, without shipping an app update."
+        actions={
+          <>
+            <HelpPanel />
+            <Button variant="outline" size="sm" className="gap-2" onClick={load} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
+          </>
+        }
+      />
 
-      <div className="panel/50 p-3 text-xs text-muted-foreground flex gap-2.5">
+      <div className="panel p-3 text-xs text-muted-foreground flex gap-2.5">
         <Smartphone className="h-4 w-4 shrink-0 text-primary mt-px" />
         <p>
           Users see changes within about <strong className="text-foreground">5 minutes</strong> (limits apply immediately).

@@ -7,6 +7,7 @@ import { LogsProvider } from '@/lib/logs-context'
 import { ThemeProvider } from '@/components/theme-provider'
 import { PWARegister } from '@/components/pwa-register'
 import { ApiCacheProvider } from '@/lib/api-cache'
+import { AppControlToaster } from '@/components/app-control/toaster'
 import './globals.css'
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </DataProvider>
           </ApiCacheProvider>
         </ThemeProvider>
+        <AppControlToaster />
         <PWARegister />
         <Analytics />
       </body>

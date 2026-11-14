@@ -1,5 +1,5 @@
-import { AppControlOverview } from "@/components/app-control/overview-screen"
+import { redirect } from "next/navigation"
 
 export default function AppControlPage() {
-  return <AppControlOverview />
+  redirect("/settings?tab=app-control")
 }

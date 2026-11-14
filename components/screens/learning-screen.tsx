@@ -1,6 +1,7 @@
 "use client"
 
 import { useApi } from "@/lib/api-cache"
+import { PageHeader, Panel, PanelHeader, Section, MiniStat } from "@/components/ui/dashboard"
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -50,35 +51,36 @@ interface LearningData {
 }
 
 function Ranked({ title, rows, empty }: { title: string; rows: Array<{ label: string; detail?: string; count: number }>; empty: string }) {
+  const max = Math.max(1, ...rows.map((r) => r.count))
   return (
-    <Card>
-      <CardContent className="p-4 space-y-2">
-        <p className="text-sm font-medium">{title}</p>
-        {rows.length === 0 && <p className="text-sm text-muted-foreground">{empty}</p>}
-        {rows.map((r) => (
-          <div key={`${r.label}-${r.detail ?? ""}`} className="flex items-start justify-between gap-3 text-sm">
-            <span className="min-w-0 break-words">
-              {r.label}
-              {r.detail && <span className="text-muted-foreground"> · {r.detail}</span>}
-            </span>
-            <span className="tabular-nums text-muted-foreground shrink-0">{r.count}</span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+    <Panel>
+      <PanelHeader title={title} description={rows.length ? `${rows.length} distinct` : undefined} />
+      {rows.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <div className="flex flex-col gap-3 px-5 py-4">
+          {rows.map((r) => (
+            <div key={`${r.label}-${r.detail ?? ""}`} className="flex flex-col gap-1.5">
+              <div className="flex items-start justify-between gap-3 text-[13px]">
+                <span className="min-w-0 break-words">
+                  {r.label}
+                  {r.detail && <span className="text-muted-foreground"> · {r.detail}</span>}
+                </span>
+                <span className="num shrink-0 font-medium">{r.count}</span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-chart-1" style={{ width: `${(r.count / max) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   )
 }
 
 function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-2xl font-semibold tabular-nums mt-1">{value}</p>
-        {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
-      </CardContent>
-    </Card>
-  )
+  return <MiniStat label={label} value={value} hint={hint} />
 }
 
 export function LearningScreen() {
@@ -89,21 +91,23 @@ export function LearningScreen() {
   const retiredSkills = data?.domains.reduce((n, d) => n + d.retired, 0) ?? 0
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary" /> Learning
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            What the system has taught itself from real runs — site knowledge it distils, answers it
-            remembers, and the outcomes both were derived from. Nothing on this page is hand-written.
-          </p>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Learning"
+        description="What the system taught itself from real runs: site lessons, remembered answers, and what to fix next."
+        actions={
+          <Button variant="outline" size="sm" className="gap-2" onClick={load} disabled={loading}>
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh
+          </Button>
+        }
+      />
+
+      {loading && !data && (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-24 shimmer" />)}</div>
+          <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-48 shimmer" />)}</div>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} /> Refresh
-        </Button>
-      </div>
+      )}
 
       {error && (
         <Card className="border-destructive/40">
@@ -126,26 +130,23 @@ export function LearningScreen() {
         </Card>
       )}
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <Stat label="Site lessons" value={totalSkills} hint={`${retiredSkills} retired after failing`} />
         <Stat label="Sites covered" value={data?.domains.length ?? 0} />
         <Stat label="Answers remembered" value={data?.answerStats.total ?? 0} />
         <Stat
-          label="Model calls avoided"
+          label="Answers reused"
           value={data?.answerStats.reusedTotal ?? 0}
-          hint="every reuse past the first"
+          hint="each one saved a model call"
         />
       </div>
 
       {/* ─── What is going wrong, ranked by how many applications it touched ─── */}
       {data?.health && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            What to fix next <span className="font-normal">· last 7 days, counted per application</span>
-          </h2>
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            <Stat label="Completed" value={data.health.queue.completed ?? 0} hint={`${data.health.queue.pending ?? 0} still pending`} />
-            <Stat label="Failed" value={data.health.queue.failed ?? 0} hint={`${data.health.queue.blocked ?? 0} blocked`} />
+        <Section title="What to fix next" description="Problems from the last 7 days, counted per application">
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+            <Stat label="Completed (all time)" value={data.health.queue.completed ?? 0} hint={`${data.health.queue.pending ?? 0} still pending`} />
+            <Stat label="Failed (all time)" value={data.health.queue.failed ?? 0} hint={`${data.health.queue.blocked ?? 0} blocked`} />
             <Stat
               label="Runs with refills"
               value={`${data.health.refills.runsWithRefills}/${data.health.refills.runsMeasured}`}
@@ -179,12 +180,11 @@ export function LearningScreen() {
               empty="None recorded."
             />
           </div>
-        </div>
+        </Section>
       )}
 
       {/* ─── Site knowledge ─── */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Site knowledge</h2>
+      <Section title="Site knowledge" description="Lessons distilled per site after runs complete, newest version first">
         {data?.domains.length === 0 && !loading && (
           <Card><CardContent className="p-4 text-sm text-muted-foreground">
             No site lessons yet. One is distilled after a run completes, so this fills in as applications go out.
@@ -242,17 +242,14 @@ export function LearningScreen() {
             </CardContent>
           </Card>
         ))}
-      </div>
+      </Section>
 
       {/* ─── Outcome evidence ─── */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" /> Outcomes by site
-        </h2>
-        <Card>
+      <Section title="Outcomes by site" description="Attempts, submissions and the most common blocker per site">
+        <Card className="gap-0 py-0">
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-[0.04em] text-muted-foreground">
                 <tr>
                   <th className="text-left font-medium p-3">Site</th>
                   <th className="text-right font-medium p-3">Attempts</th>
@@ -263,7 +260,7 @@ export function LearningScreen() {
               </thead>
               <tbody>
                 {data?.outcomes.map((o) => (
-                  <tr key={o.domain} className="border-b last:border-0">
+                  <tr key={o.domain} className="border-b border-border last:border-0 hover:bg-muted/40">
                     <td className="p-3 font-mono text-xs">{o.domain}</td>
                     <td className="p-3 text-right tabular-nums">{o.attempts}</td>
                     <td className="p-3 text-right tabular-nums">
@@ -284,15 +281,14 @@ export function LearningScreen() {
             </table>
           </CardContent>
         </Card>
-      </div>
+      </Section>
 
       {/* ─── Answer bank ─── */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Most reused answers</h2>
-        <Card>
+      <Section title="Most reused answers" description="Answers the system remembered and reused instead of asking a model">
+        <Card className="gap-0 py-0">
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-[0.04em] text-muted-foreground">
                 <tr>
                   <th className="text-left font-medium p-3">Question</th>
                   <th className="text-left font-medium p-3">Answer</th>
@@ -302,7 +298,7 @@ export function LearningScreen() {
               </thead>
               <tbody>
                 {data?.answerStats.topReused.map((a, i) => (
-                  <tr key={i} className="border-b last:border-0">
+                  <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/40">
                     <td className="p-3 max-w-md truncate" title={a.question}>{a.question}</td>
                     <td className={cn("p-3 max-w-xs truncate", a.isSensitive && "text-muted-foreground italic")} title={a.isSensitive ? "sensitive — hidden" : a.answer}>
                       {a.answer}
@@ -318,15 +314,14 @@ export function LearningScreen() {
             </table>
           </CardContent>
         </Card>
-      </div>
+      </Section>
 
       {/* ─── Recent runs ─── */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Runs these lessons came from</h2>
-        <Card>
+      <Section title="Recent runs" description="The runs these lessons came from">
+        <Card className="gap-0 py-0">
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-muted-foreground border-b">
+              <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-[0.04em] text-muted-foreground">
                 <tr>
                   <th className="text-left font-medium p-3">Company</th>
                   <th className="text-left font-medium p-3">Site</th>
@@ -337,7 +332,7 @@ export function LearningScreen() {
               </thead>
               <tbody>
                 {data?.recentRuns.map((r, i) => (
-                  <tr key={i} className="border-b last:border-0">
+                  <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/40">
                     <td className="p-3">{r.company}</td>
                     <td className="p-3 font-mono text-xs text-muted-foreground">{r.domain ?? "—"}</td>
                     <td className="p-3">
@@ -356,7 +351,7 @@ export function LearningScreen() {
             </table>
           </CardContent>
         </Card>
-      </div>
+      </Section>
     </div>
   )
 }

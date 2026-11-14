@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Bell, Users, CheckCircle, Loader2, Calendar, Smartphone, ChevronDown, ChevronUp, Search, X } from "lucide-react"
 import { toast } from "sonner"
+import { PageHeader } from "@/components/ui/dashboard"
 
 const SUPABASE_URL = "https://widujxpahzlpegzjjpqp.supabase.co"
 const SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpZHVqeHBhaHpscGVnempqcHFwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTc1MjY2MiwiZXhwIjoyMDg3MzI4NjYyfQ.6KGHcAofT7nFX03JII8yLiEagZfOXWY_0YbEepEf55M"
@@ -370,26 +371,23 @@ export function NotificationsScreen() {
   const canSend = title.trim().length > 0 && body.trim().length > 0 && !sending
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Notification Manager</h1>
-          <p className="text-sm text-muted-foreground">Compose and broadcast push notifications to your users</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 self-start sm:self-auto">
-          <Users className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">
-            {tokenCount === null ? "Loading..." : <><span className="font-semibold text-foreground">{tokenCount}</span> registered devices</>}
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Push notifications"
+        description="Compose and broadcast push notifications to the Iris mobile app."
+        actions={
+          <span className="inline-flex h-8 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs text-muted-foreground shadow-[var(--shadow-card)]">
+            <Users className="h-3.5 w-3.5" />
+            {tokenCount === null ? <span className="h-3 w-16 rounded bg-muted shimmer" /> : <><span className="num font-semibold text-foreground">{tokenCount.toLocaleString()}</span> registered devices</>}
           </span>
-        </div>
-      </div>
+        }
+      />
 
       {/* Success Banner */}
       {successBanner && (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-          <span className="text-sm font-medium text-emerald-400">
+        <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/10 px-4 py-3">
+          <CheckCircle className="h-4 w-4 text-success shrink-0" />
+          <span className="text-sm font-medium text-success">
             ✓ Sent to {successBanner.devices} devices
           </span>
           <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSuccessBanner(null)}>Dismiss</button>
@@ -418,13 +416,13 @@ export function NotificationsScreen() {
               <CardContent className="space-y-5 pt-0">
                 {TEMPLATES.map((cat) => (
                   <div key={cat.category}>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">{cat.category}</p>
+                    <p className="eyebrow mb-2">{cat.category}</p>
                     <div className="flex flex-col gap-1.5">
                       {cat.items.map((tpl) => (
                         <button
                           key={tpl.title}
                           onClick={() => handleTemplateSelect(tpl)}
-                          className="flex flex-col gap-0.5 panel px-3 py-2.5 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors group"
+                          className="group flex flex-col gap-0.5 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                         >
                           <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">{tpl.title}</span>
                           <span className="text-[11px] text-muted-foreground line-clamp-1">{tpl.body}</span>

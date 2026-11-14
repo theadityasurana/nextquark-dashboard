@@ -1,3 +1,4 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createClient } from "@/lib/supabase/server"
 import { healthLabel, type BreakerRecord } from "@/lib/circuit-breaker"
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic"
  * so the countdown is against server time — a client clock that is off would
  * otherwise show a wrong retry estimate.
  */
-export async function GET() {
+async function load(): Promise<Response> {
   try {
     const supabase = await createClient()
     const { data, error } = await supabase
@@ -56,4 +57,9 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+// Shared across requests: this reads whole tables, and several tabs/devices ask at once.
+export function GET(request: Request) {
+  return cachedRoute(request, 30_000, load)
 }

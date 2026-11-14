@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Users } from "lucide-react"
-import { PageHeader, StatCard, KpiGrid, Meter, Segmented, Toolbar, SearchField, EmptyState } from "@/components/ui/dashboard"
+import { useEffect, useState } from "react"
+import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Users, Mail, Linkedin, ExternalLink, Repeat } from "lucide-react"
+import useSWR from "swr"
+import { PageHeader, StatCard, KpiGrid, Meter, Segmented, Toolbar, SearchField, EmptyState, Pagination } from "@/components/ui/dashboard"
 import { ReplyPlaybook } from "@/components/outreach-playbook"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -10,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { countWords, MAX_WORDS } from "@/lib/outreach"
 import type { OutreachRow } from "@/lib/outreach-data"
 
-type Filter = "todo" | "done" | "all"
+type Filter = "todo" | "done" | "all" | "returning"
 const RANGES = [7, 14, 30, 0] as const
 
 function daysAgo(iso: string): string {
@@ -73,8 +74,13 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
             )}
             {row.isPremium && <span className="rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 text-[11px]">Premium</span>}
             <span className="text-[11px] text-muted-foreground">joined {daysAgo(row.signedUpAt)}</span>
+            {row.returnedAfterDays >= 1 && (
+              <span className="rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success" title={row.lastSignInAt ? `Last sign-in ${new Date(row.lastSignInAt).toLocaleString()}` : undefined}>
+                Came back after {row.returnedAfterDays}d · last seen {daysAgo(row.lastSignInAt ?? row.lastActive ?? row.signedUpAt)}
+              </span>
+            )}
             {row.contacted && row.contactedAt && (
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400">✓ contacted {daysAgo(row.contactedAt)}</span>
+              <span className="text-[11px] text-success" title={new Date(row.contactedAt).toLocaleString()}>✓ marked contacted {daysAgo(row.contactedAt)}</span>
             )}
           </div>
           {(row.headline || row.roles.length > 0 || row.location || row.companies.length > 0) && (
@@ -85,20 +91,47 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
             </p>
           )}
 
-          {/* Phone */}
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            {row.phone ? (
-              <>
-                <span className="font-mono tabular-nums">{row.phone.display}</span>
-                {row.phone.assumedCountryCode && <span className="text-[11px] text-amber-600 dark:text-amber-400">(+91 assumed)</span>}
-                <CopyButton text={`${row.phone.countryCode}${row.phone.national}`} label="Full" title="Copy number with country code" />
-                {row.phone.countryCode && <CopyButton text={row.phone.countryCode} label={row.phone.countryCode} title="Copy country code" />}
-                <CopyButton text={row.phone.national} label="Number" title="Copy number without country code" />
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground break-all">No phone on file{row.email ? ` · ${row.email}` : ""}</span>
-            )}
+          {/* Contact channels */}
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              {row.phone ? (
+                <>
+                  <span className="font-mono tabular-nums">{row.phone.display}</span>
+                  {row.phone.assumedCountryCode && <span className="text-[11px] text-warning">(+91 assumed)</span>}
+                  <CopyButton text={`${row.phone.countryCode}${row.phone.national}`} label="Full" title="Copy number with country code" />
+                  {row.phone.countryCode && <CopyButton text={row.phone.countryCode} label={row.phone.countryCode} title="Copy country code" />}
+                  <CopyButton text={row.phone.national} label="Number" title="Copy number without country code" />
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">No phone on file</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              {row.email ? (
+                <>
+                  <a href={`mailto:${row.email}`} className="break-all text-[13px] hover:underline">{row.email}</a>
+                  <CopyButton text={row.email} label="Copy" title="Copy email address" />
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">No email</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Linkedin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              {row.linkedinUrl ? (
+                <>
+                  <a href={row.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 break-all text-[13px] text-primary hover:underline">
+                    {row.linkedinUrl.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                  <CopyButton text={row.linkedinUrl} label="Copy" title="Copy LinkedIn URL" />
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">No LinkedIn on profile</span>
+              )}
+            </div>
           </div>
 
           {/* Message */}
@@ -149,41 +182,49 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
   )
 }
 
+type OutreachStats = { total: number; done: number; withPhone: number; withLinkedin: number; applied: number; missing: number; returning: number; returningUncontacted: number }
+type OutreachResp = { rows: OutreachRow[]; total: number; stats: OutreachStats }
+const PER_PAGE = 20
+const outreachFetcher = async (url: string) => {
+  const res = await fetch(url, { cache: "no-store" })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error || res.statusText)
+  return json
+}
+
 export function OutreachScreen() {
-  const [days, setDays] = useState<number>(0)
-  const [rows, setRows] = useState<OutreachRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [days, setDays] = useState<number>(7)
   const [filter, setFilter] = useState<Filter>("todo")
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+  const [page, setPage] = useState(1)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [drafting, setDrafting] = useState<Set<string>>(new Set())
   const [draftingAll, setDraftingAll] = useState(false)
   const [view, setView] = useState<"contacts" | "playbook">("contacts")
   const [playbookName, setPlaybookName] = useState("")
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/outreach?days=${days || 99999}`, { cache: "no-store" })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || res.statusText)
-      setRows(json.rows)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load")
-    } finally {
-      setLoading(false)
-    }
-  }, [days])
+  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(query.trim()), 300); return () => clearTimeout(t) }, [query])
+  useEffect(() => { setPage(1) }, [days, filter, debouncedQuery])
 
-  useEffect(() => { void load() }, [load])
+  const key = `/api/outreach?days=${days || 99999}&filter=${filter}&page=${page}&limit=${PER_PAGE}${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}`
+  const { data, error: loadError, isLoading, isValidating, mutate } = useSWR<OutreachResp>(key, outreachFetcher, { keepPreviousData: true, revalidateOnFocus: false })
+  const rows = data?.rows ?? []
+  const stats: OutreachStats = data?.stats ?? { total: 0, done: 0, withPhone: 0, withLinkedin: 0, applied: 0, missing: 0, returning: 0, returningUncontacted: 0 }
+  const error = actionError ?? (loadError ? (loadError as Error).message : null)
+  const load = () => mutate()
 
   const patch = async (userId: string, fields: { contacted?: boolean; message?: string }) => {
-    setRows((prev) => prev.map((r) => r.userId === userId
-      ? { ...r, ...fields, contactedAt: fields.contacted === undefined ? r.contactedAt : fields.contacted ? new Date().toISOString() : null }
-      : r))
+    // Optimistic: update this page now, then let the server confirm.
+    void mutate((prev) => prev ? {
+      ...prev,
+      rows: prev.rows.map((r) => r.userId === userId
+        ? { ...r, ...fields, contactedAt: fields.contacted === undefined ? r.contactedAt : fields.contacted ? new Date().toISOString() : null }
+        : r),
+    } : prev, { revalidate: false })
     const res = await fetch("/api/outreach", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, ...fields }) })
-    if (!res.ok) void load()
+    if (!res.ok) setActionError("Couldn't save that change — refreshed from the server.")
+    void mutate()
   }
 
   const draft = async (userIds?: string[]) => {
@@ -193,40 +234,27 @@ export function OutreachScreen() {
       const res = await fetch("/api/outreach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days, userIds, regenerate: !!userIds }),
+        body: JSON.stringify({ days: days || 99999, userIds, regenerate: !!userIds }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || res.statusText)
-      await load()
+      await mutate()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Drafting failed")
+      setActionError(e instanceof Error ? e.message : "Drafting failed")
     } finally {
       if (userIds) setDrafting((s) => { const n = new Set(s); userIds.forEach((id) => n.delete(id)); return n })
       else setDraftingAll(false)
     }
   }
 
-  const stats = useMemo(() => ({
-    total: rows.length,
-    done: rows.filter((r) => r.contacted).length,
-    withPhone: rows.filter((r) => r.phone).length,
-    applied: rows.filter((r) => r.jobsApplied > 0).length,
-    missing: rows.filter((r) => !r.message).length,
-  }), [rows])
-
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return rows.filter((r) =>
-      (filter === "all" || (filter === "done" ? r.contacted : !r.contacted)) &&
-      (!q || r.name.toLowerCase().includes(q) || (r.phone?.display ?? "").replace(/\s/g, "").includes(q.replace(/\s/g, "")) || (r.email ?? "").toLowerCase().includes(q))
-    )
-  }, [rows, filter, query])
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Sales & outreach"
-        description="Personal WhatsApp notes to recent signups: intro, their activity, a feedback ask, and what they're looking for."
+        description="Personal notes to recent signups over WhatsApp, email or LinkedIn — plus the returning users worth a direct pitch."
         actions={
           <>
             <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={RANGES.map((d) => ({ value: String(d), label: d === 0 ? "All" : `${d}d` }))} />
@@ -236,28 +264,38 @@ export function OutreachScreen() {
                 {draftingAll ? "Drafting…" : `Draft ${stats.missing} missing`}
               </Button>
             )}
-            <Button size="sm" variant="outline" className="gap-2" onClick={() => load()} disabled={loading}>
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <Button size="sm" variant="outline" className="gap-2" onClick={() => load()} disabled={isValidating}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isValidating ? "animate-spin" : ""}`} /> Refresh
             </Button>
           </>
         }
       />
 
-      <Segmented value={view} onChange={setView} options={[{ value: "contacts", label: "Contacts" }, { value: "playbook", label: "Reply playbook" }]} />
+      <div className="self-start">
+        <Segmented value={view} onChange={setView} options={[{ value: "contacts", label: "Contacts" }, { value: "playbook", label: "Reply playbook" }]} />
+      </div>
 
       {view === "playbook" ? (
         <ReplyPlaybook key={playbookName} initialName={playbookName} />
       ) : (
       <>
-      <KpiGrid>
-        <StatCard label="Signups" value={stats.total} icon={Users} footnote={`${stats.applied} applied to a job`} />
-        <StatCard label="To contact" value={stats.total - stats.done} icon={MessageCircle} footnote="still waiting for a note" />
-        <StatCard label="Contacted" value={stats.done} icon={Check}
-          footnote={`${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}% of signups in range`}>
-          <Meter value={stats.done} max={Math.max(1, stats.total)} tone="success" />
-        </StatCard>
-        <StatCard label="Have a phone" value={stats.withPhone} icon={Phone} footnote={`${stats.missing} without a drafted message`} />
-      </KpiGrid>
+      {isLoading && !data ? (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-32 shimmer" />)}
+        </div>
+      ) : (
+        <KpiGrid>
+          <StatCard label="Signups" value={stats.total} icon={Users} footnote={`${stats.applied} applied to a job`} />
+          <StatCard label="To contact" value={stats.total - stats.done} icon={MessageCircle} footnote={`${stats.withPhone} phone · ${stats.withLinkedin} LinkedIn`} />
+          <StatCard label="Marked contacted" value={stats.done} icon={Check}
+            footnote={`${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}% of signups in range`}>
+            <Meter value={stats.done} max={Math.max(1, stats.total)} tone="success" />
+          </StatCard>
+          <StatCard label="Returning users" value={stats.returning} icon={Repeat}
+            delta={stats.returningUncontacted > 0 ? `${stats.returningUncontacted} not contacted` : undefined} deltaTone="positive"
+            footnote="signed in again a day or more after joining" />
+        </KpiGrid>
+      )}
 
       <Toolbar>
         <Segmented
@@ -265,6 +303,7 @@ export function OutreachScreen() {
           onChange={setFilter}
           options={[
             { value: "todo", label: `To contact · ${stats.total - stats.done}` },
+            { value: "returning", label: `Returning · ${stats.returning}` },
             { value: "done", label: `Contacted · ${stats.done}` },
             { value: "all", label: `All · ${stats.total}` },
           ]}
@@ -272,21 +311,29 @@ export function OutreachScreen() {
         <SearchField value={query} onChange={setQuery} placeholder="Search name, phone, email…" />
       </Toolbar>
 
-      {error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
+      {filter === "returning" && (
+        <p className="-mt-4 text-xs text-muted-foreground">
+          Ranked by interest: applications, swipes, how long after signup they came back, and how recently they were active.
+          Supabase doesn&apos;t record a sign-in count, so &quot;returning&quot; means their latest sign-in or activity was at least a day after they joined.
+        </p>
       )}
 
-      {loading && rows.length === 0 ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        </div>
-      ) : visible.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-12 text-center">
-          {filter === "todo" && stats.total > 0 ? "Everyone in this range has been contacted." : "No signups in this range."}
-        </p>
-      ) : (
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
+      )}
+
+      {isLoading && !data ? (
         <div className="flex flex-col gap-3">
-          {visible.map((row) => (
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-48 shimmer" />)}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="panel">
+          <EmptyState icon={MessageCircle}
+            title={filter === "todo" && stats.total > 0 ? "Everyone in this range is marked contacted" : filter === "returning" ? "No returning users in this range" : "No signups in this range"} />
+        </div>
+      ) : (
+        <div className={`flex flex-col gap-3 transition-opacity ${isValidating ? "opacity-60" : ""}`}>
+          {rows.map((row) => (
             <OutreachCard
               key={row.userId}
               row={row}
@@ -297,6 +344,13 @@ export function OutreachScreen() {
               onPlaybook={() => { setPlaybookName(row.firstName); setView("playbook"); window.scrollTo({ top: 0 }) }}
             />
           ))}
+        </div>
+      )}
+
+      {total > PER_PAGE && (
+        <div className="panel">
+          <Pagination page={page} totalPages={totalPages} onPage={(p) => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+            summary={`${(page - 1) * PER_PAGE + 1}–${Math.min(page * PER_PAGE, total)} of ${total.toLocaleString()}`} />
         </div>
       )}
       </>

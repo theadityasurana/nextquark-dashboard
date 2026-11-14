@@ -35,7 +35,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
 
   const fetchLogs = useCallback(async () => {
       try {
-        const response = await fetch('/api/logs?limit=1000')
+        const response = await fetch('/api/logs?limit=500')
         const data = await response.json()
         if (data.logs) {
           const formattedLogs = data.logs.map((log: any) => ({
@@ -54,9 +54,8 @@ export function LogsProvider({ children }: { children: ReactNode }) {
       }
     }, [])
 
-  useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
+  // No fetch on mount: this provider wraps every page, and the Logs tab loads
+  // the feed itself when it opens (refreshLogs).
 
   const addLog = (log: LogEntry) => {
     setLogs((prev) => [log, ...prev])
@@ -70,6 +69,7 @@ export function LogsProvider({ children }: { children: ReactNode }) {
 
   const clearLogs = () => {
     setLogs([])
+    setAgentDetailsMap({})
   }
 
   return (

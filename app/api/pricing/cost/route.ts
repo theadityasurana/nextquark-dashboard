@@ -1,3 +1,4 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { summarizeCost } from "@/lib/run-cost"
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic"
  * never-launched application consumed no browser time, and counting it would
  * understate what an application actually costs to run.
  */
-export async function GET() {
+async function load(): Promise<Response> {
   try {
     const supabase = createAdminClient()
 
@@ -56,4 +57,9 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+// Shared across requests: this reads whole tables, and several tabs/devices ask at once.
+export function GET(request: Request) {
+  return cachedRoute(request, 120_000, load)
 }

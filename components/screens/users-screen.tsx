@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import useSWR from "swr"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -35,7 +35,18 @@ interface SupabaseAuthUser {
   provider: string
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  const body = await res.json()
+  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
+  return body
+}
+
+type UsersResponse = {
+  rows: SupabaseAuthUser[]
+  total: number
+  stats: { total: number; newToday: number; new7d: number; prev7d: number; active7d: number; providers: Record<string, number> }
+}
 
 export function UsersScreen() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
@@ -45,11 +56,15 @@ export function UsersScreen() {
   const [authPage, setAuthPage] = useState(1)
   const USERS_PER_PAGE = 25
 
-  const { data: authUsers = [], isLoading: authLoading, mutate: refreshAuth } = useSWR<SupabaseAuthUser[]>(
-    "/api/users",
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300); return () => clearTimeout(t) }, [searchQuery])
+  const usersKey = `/api/users?page=${authPage}&perPage=${USERS_PER_PAGE}${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}`
+  const { data: usersResp, isLoading: authLoading, isValidating: authValidating, mutate: refreshAuth } = useSWR<UsersResponse>(
+    usersKey,
     fetcher,
-    { fallbackData: [], revalidateOnFocus: false }
+    { keepPreviousData: true, revalidateOnFocus: false }
   )
+  const authUsers: SupabaseAuthUser[] = usersResp?.rows ?? []
 
   const filteredMockUsers = mockUsers.filter((user) => {
     if (!searchQuery) return true
@@ -61,11 +76,8 @@ export function UsersScreen() {
     )
   })
 
-  const filteredAuthUsers = (Array.isArray(authUsers) ? authUsers : []).filter((user) => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return user.email.toLowerCase().includes(q) || user.id.toLowerCase().includes(q)
-  })
+  // Already searched and paged on the server.
+  const filteredAuthUsers = authUsers
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "Never"
@@ -78,13 +90,23 @@ export function UsersScreen() {
     })
   }
 
-  const exportCsv = () => {
-    const headers = activeTab === "auth"
-      ? ["ID", "Email", "Provider", "Confirmed", "Last Sign In", "Created At"]
-      : ["ID", "Name", "Email", "Total Apps", "Successful", "Failed", "Last Active"]
-    const rows = activeTab === "auth"
-      ? (filteredAuthUsers as SupabaseAuthUser[]).map(u => [u.id, u.email, u.provider, u.confirmed ? "Yes" : "No", formatDate(u.last_sign_in_at), formatDate(u.created_at)])
-      : filteredMockUsers.map(u => [u.id, u.name, u.email, u.totalApps, u.successfulApps, u.failedApps, u.lastActive])
+  const exportCsv = async () => {
+    if (activeTab === "auth") {
+      // Export walks the server pages rather than holding every user in the browser.
+      const rowsAll: SupabaseAuthUser[] = []
+      for (let p = 1; p < 500; p++) {
+        const r: UsersResponse = await fetcher(`/api/users?page=${p}&perPage=100${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}`)
+        rowsAll.push(...r.rows)
+        if (rowsAll.length >= r.total || r.rows.length === 0) break
+      }
+      const csv = [["ID", "Email", "Provider", "Confirmed", "Last Sign In", "Created At"], ...rowsAll.map(u => [u.id, u.email, u.provider, u.confirmed ? "Yes" : "No", formatDate(u.last_sign_in_at), formatDate(u.created_at)])]
+        .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+      const a = document.createElement("a"); a.href = url; a.download = `users-auth-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url)
+      return
+    }
+    const headers = ["ID", "Name", "Email", "Total Apps", "Successful", "Failed", "Last Active"]
+    const rows = filteredMockUsers.map(u => [u.id, u.name, u.email, u.totalApps, u.successfulApps, u.failedApps, u.lastActive])
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
@@ -95,22 +117,21 @@ export function UsersScreen() {
     URL.revokeObjectURL(url)
   }
 
-  const all = Array.isArray(authUsers) ? authUsers : []
+  const st = usersResp?.stats
+  const all = { length: st?.total ?? 0 }
+  const newToday = st?.newToday ?? 0
+  const new7d = st?.new7d ?? 0
+  const prev7d = st?.prev7d ?? 0
+  const active7d = st?.active7d ?? 0
   const now = Date.now()
-  const DAY = 86_400_000
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
-  const newToday = all.filter(u => new Date(u.created_at) >= startOfToday).length
-  const new7d = all.filter(u => now - new Date(u.created_at).getTime() < 7 * DAY).length
-  const prev7d = all.filter(u => { const t = now - new Date(u.created_at).getTime(); return t >= 7 * DAY && t < 14 * DAY }).length
-  const active7d = all.filter(u => u.last_sign_in_at && now - new Date(u.last_sign_in_at).getTime() < 7 * DAY).length
   const growth = prev7d > 0 ? Math.round(((new7d - prev7d) / prev7d) * 100) : null
-  const providers = Object.entries(all.reduce<Record<string, number>>((m, u) => { m[u.provider || "email"] = (m[u.provider || "email"] || 0) + 1; return m }, {}))
-    .sort((a, b) => b[1] - a[1])
+  const providers = Object.entries(st?.providers ?? {}).sort((a, b) => b[1] - a[1])
   const PROVIDER_COLORS = ["bg-chart-1", "bg-chart-2", "bg-chart-3", "bg-chart-5", "bg-chart-4"]
 
-  const totalAuthPages = Math.max(1, Math.ceil(filteredAuthUsers.length / USERS_PER_PAGE))
+  const totalMatched = usersResp?.total ?? 0
+  const totalAuthPages = Math.max(1, Math.ceil(totalMatched / USERS_PER_PAGE))
   const safeAuthPage = Math.min(authPage, totalAuthPages)
-  const pagedAuthUsers = filteredAuthUsers.slice((safeAuthPage - 1) * USERS_PER_PAGE, safeAuthPage * USERS_PER_PAGE)
+  const pagedAuthUsers = authUsers
 
   const relative = (d: string | null) => {
     if (!d) return "Never"
@@ -179,7 +200,7 @@ export function UsersScreen() {
           <Segmented
             value={activeTab}
             onChange={(v) => { setActiveTab(v); setAuthPage(1) }}
-            options={[{ value: "auth", label: `Auth users · ${all.length.toLocaleString()}` }, { value: "app", label: "App profiles" }]}
+            options={[{ value: "auth", label: `Auth users · ${(st?.total ?? 0).toLocaleString()}` }, { value: "app", label: "App profiles" }]}
           />
           <SearchField value={searchQuery} onChange={(v) => { setSearchQuery(v); setAuthPage(1) }} placeholder={activeTab === "auth" ? "Search email or ID…" : "Search name, email, headline…"} />
         </div>
@@ -194,7 +215,7 @@ export function UsersScreen() {
               { label: "Joined", className: "w-28 text-right" },
               { label: "", className: "w-4" },
             ]} />
-            {authLoading && all.length === 0 ? (
+            {authLoading && !usersResp ? (
               <div className="divide-y divide-border">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 px-5 py-3">
@@ -203,10 +224,10 @@ export function UsersScreen() {
                   </div>
                 ))}
               </div>
-            ) : filteredAuthUsers.length === 0 ? (
+            ) : authUsers.length === 0 ? (
               <EmptyState icon={UserIcon} title="No users found" description={searchQuery ? "Try a different search." : "Users appear here once they sign up."} />
             ) : (
-              <div className="divide-y divide-border">
+              <div className={`divide-y divide-border transition-opacity ${authValidating && usersResp ? "opacity-60" : ""}`}>
                 {pagedAuthUsers.map((user) => (
                   <button
                     key={user.id}
@@ -233,12 +254,12 @@ export function UsersScreen() {
                 ))}
               </div>
             )}
-            {filteredAuthUsers.length > USERS_PER_PAGE && (
+            {totalMatched > USERS_PER_PAGE && (
               <Pagination
                 page={safeAuthPage}
                 totalPages={totalAuthPages}
                 onPage={setAuthPage}
-                summary={`${((safeAuthPage - 1) * USERS_PER_PAGE) + 1}–${Math.min(safeAuthPage * USERS_PER_PAGE, filteredAuthUsers.length)} of ${filteredAuthUsers.length.toLocaleString()}`}
+                summary={`${((safeAuthPage - 1) * USERS_PER_PAGE) + 1}–${Math.min(safeAuthPage * USERS_PER_PAGE, totalMatched)} of ${totalMatched.toLocaleString()}`}
               />
             )}
           </>

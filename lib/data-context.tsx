@@ -106,6 +106,7 @@ const fetcher = async (url: string) => {
 }
 
 interface DataContextType {
+  activate: () => void
   companies: Company[]
   jobs: Job[]
   totalJobs: number
@@ -127,15 +128,22 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined)
 
 const JOBS_PER_PAGE = 20
+/** id / name / logo for every company: enough for dropdowns and name lookups. */
+const COMPANIES_KEY = "/api/companies?lite=1"
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [jobsPage, setJobsPage] = useState(1)
   const [accumulatedJobs, setAccumulatedJobs] = useState<Job[]>([])
 
-  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR("/api/companies?all=true", fetcher)
+  // Nothing loads until a screen that needs it calls useData(). This provider
+  // wraps the whole app, so eager fetches here ran on every page view.
+  const [active, setActive] = useState(false)
+  const activate = useCallback(() => setActive(true), [])
+  const { data: rawCompanies, isLoading: loadingCompanies } = useSWR(active ? COMPANIES_KEY : null, fetcher, { revalidateOnFocus: false })
   const { data: rawJobsResponse, isLoading: loadingJobs } = useSWR(
-    `/api/jobs?page=${jobsPage}&limit=${JOBS_PER_PAGE}`,
+    active ? `/api/jobs?page=${jobsPage}&limit=${JOBS_PER_PAGE}` : null,
     jobsFetcher,
+    { revalidateOnFocus: false },
   )
 
   useEffect(() => {
@@ -147,16 +155,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return [...prev, ...newJobs.filter((j: Job) => !existingIds.has(j.id))]
     })
   }, [rawJobsResponse, jobsPage])
-  const { data: rawApplications, isLoading: loadingApplications } = useSWR("/api/applications/queue", async (url) => {
-    const res = await fetch(url)
-    if (!res.ok) return []
-    const json = await res.json()
-    return json.data || []
-  }, {
-    fallbackData: [],
-    revalidateOnFocus: false,
-    refreshInterval: 600000,
-  })
+  // The queue lives on the Live Queue screen (paged server-side); nothing reads it from here.
+  const rawApplications: Record<string, unknown>[] = []
+  const loadingApplications = false
 
   const companies: Company[] = Array.isArray(rawCompanies) ? rawCompanies.map(mapCompany) : []
   const totalJobs = rawJobsResponse?.total || 0
@@ -165,7 +166,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const applications: Application[] = Array.isArray(rawApplications) ? rawApplications.map(mapApplication) : []
 
   const setCompanies = useCallback(() => {
-    globalMutate("/api/companies?all=true")
+    globalMutate(COMPANIES_KEY)
   }, [])
 
   const setJobs = useCallback(() => {
@@ -189,7 +190,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const raw = await res.json()
       const mapped = mapCompany(raw)
-      globalMutate("/api/companies?all=true")
+      globalMutate(COMPANIES_KEY)
       return mapped
     } catch (err) {
       console.error("Error adding company:", err)
@@ -214,7 +215,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const mapped = mapJob(raw)
       setAccumulatedJobs(prev => [mapped, ...prev])
       globalMutate((key: string) => typeof key === 'string' && key.startsWith('/api/jobs?'), undefined, { revalidate: true })
-      globalMutate("/api/companies?all=true")
+      globalMutate(COMPANIES_KEY)
       return mapped
     } catch (err) {
       console.error("Error adding job:", err)
@@ -245,7 +246,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshCompanies = useCallback(() => {
-    globalMutate("/api/companies?all=true")
+    globalMutate(COMPANIES_KEY)
   }, [])
 
   const loadMoreJobs = useCallback(() => {
@@ -261,6 +262,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider
       value={{
+        activate,
         companies,
         jobs,
         totalJobs,
@@ -287,5 +289,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 export function useData() {
   const ctx = useContext(DataContext)
   if (!ctx) throw new Error("useData must be used within DataProvider")
+  const { activate } = ctx
+  useEffect(() => { activate() }, [activate])
   return ctx
 }

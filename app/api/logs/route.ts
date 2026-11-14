@@ -28,6 +28,9 @@ export async function GET(request: NextRequest) {
     if (applicationId) {
       query = query.eq('application_id', applicationId)
     }
+    // Incremental reads: only lines newer than the last one the client has.
+    const after = request.nextUrl.searchParams.get('after')
+    if (after) query = query.gt('timestamp', after)
     
     const { data, error } = await query
     
@@ -83,5 +86,28 @@ export async function POST(request: Request) {
     return Response.json({ success: true })
   } catch (err) {
     return Response.json({ error: 'Failed to save log' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/logs → removes every row in application_logs (the "Clear all"
+ * button). Batched by id so one huge DELETE never holds a long lock or times out.
+ */
+export async function DELETE() {
+  try {
+    const supabase = await createClient()
+    let removed = 0
+    for (let i = 0; i < 2000; i++) {
+      const { data, error } = await supabase.from('application_logs').select('id').limit(1000)
+      if (error) return Response.json({ error: error.message }, { status: 500 })
+      if (!data?.length) break
+      const { error: delError } = await supabase.from('application_logs').delete().in('id', data.map((r) => r.id))
+      if (delError) return Response.json({ error: delError.message, removed }, { status: 500 })
+      removed += data.length
+      if (data.length < 1000) break
+    }
+    return Response.json({ ok: true, removed })
+  } catch {
+    return Response.json({ error: 'Failed to clear logs' }, { status: 500 })
   }
 }

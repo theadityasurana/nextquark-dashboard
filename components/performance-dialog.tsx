@@ -15,24 +15,27 @@ interface PerformanceDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
+const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
+
+const EMPTY_METRICS = {
+  successRateTrends: [],
+  processingTimeByPortal: [],
+  errorAnalysis: [],
+  throughput: [],
+  portalPerformance: [],
+  companyPerformance: [],
+  timeOfDayAnalysis: [],
+  agentUtilization: {},
+  totalApplications: 0,
+  successfulApplications: 0,
+  failedApplications: 0,
+}
 
 export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps) {
   const [loading, setLoading] = useState(false)
   const [timeRange, setTimeRange] = useState('7')
-  const [metrics, setMetrics] = useState<any>({
-    successRateTrends: [],
-    processingTimeByPortal: [],
-    errorAnalysis: [],
-    throughput: [],
-    portalPerformance: [],
-    companyPerformance: [],
-    timeOfDayAnalysis: [],
-    agentUtilization: {},
-    totalApplications: 0,
-    successfulApplications: 0,
-    failedApplications: 0,
-  })
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [metrics, setMetrics] = useState<any>(EMPTY_METRICS)
 
   useEffect(() => {
     if (open) {
@@ -43,11 +46,21 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
   const fetchMetrics = async () => {
     setLoading(true)
     try {
+      setLoadError(null)
       const response = await fetch(`/api/agents/performance?range=${timeRange}`)
-      const data = await response.json()
-      setMetrics(data)
+      const data = await response.json().catch(() => null)
+      // An error body ({ error }) used to replace the metrics outright, and the
+      // first `.map` on a missing array crashed the whole page.
+      if (!response.ok || !data || data.error) {
+        setLoadError(data?.error || `Request failed (${response.status})`)
+        setMetrics(EMPTY_METRICS)
+        return
+      }
+      setMetrics({ ...EMPTY_METRICS, ...data })
     } catch (error) {
       console.error('Failed to fetch metrics:', error)
+      setLoadError('Could not reach the server')
+      setMetrics(EMPTY_METRICS)
     } finally {
       setLoading(false)
     }
@@ -61,6 +74,7 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-6xl">
+          <DialogTitle className="sr-only">Loading performance</DialogTitle>
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -87,6 +101,11 @@ export function PerformanceDialog({ open, onOpenChange }: PerformanceDialogProps
             </Select>
           </div>
         </DialogHeader>
+        {loadError && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Couldn&apos;t load performance data: {loadError}
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

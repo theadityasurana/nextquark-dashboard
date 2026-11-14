@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { PageHeader, Panel, MiniStat, Toolbar, SearchField, TableHead, TableSkeleton, EmptyState } from "@/components/ui/dashboard"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLogs } from "@/lib/logs-context"
-import { Search, Download, X, RefreshCw } from "lucide-react"
+import { Download, X, RefreshCw, Trash2, ScrollText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const levelColors: Record<string, string> = {
@@ -22,17 +23,39 @@ const levelBg: Record<string, string> = {
 }
 
 export function LogsScreen() {
-  const { logs, agentDetailsMap, refreshLogs } = useLogs()
+  const { logs, agentDetailsMap, refreshLogs, clearLogs } = useLogs()
+  const [loadingLogs, setLoadingLogs] = useState(true)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  useEffect(() => { refreshLogs().finally(() => setLoadingLogs(false)) }, [refreshLogs])
+
+  const handleClearAll = async () => {
+    setClearing(true)
+    try {
+      const res = await fetch("/api/logs", { method: "DELETE" })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+      clearLogs()
+      toast.success(`Cleared ${Number(body.removed || 0).toLocaleString()} log lines`)
+    } catch (e) {
+      toast.error(`Couldn't clear logs: ${e instanceof Error ? e.message : "unknown error"}`)
+      await refreshLogs()
+    } finally {
+      setClearing(false)
+      setConfirmClear(false)
+    }
+  }
   const [searchQuery, setSearchQuery] = useState("")
   const [levelFilter, setLevelFilter] = useState("all")
   const [agentFilter, setAgentFilter] = useState("all")
   const [refreshing, setRefreshing] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(15)
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const handleRefresh = async () => {
     setRefreshing(true)
     await refreshLogs()
-    setVisibleCount(15)
+    setVisibleCount(50)
     setRefreshing(false)
   }
 
@@ -46,7 +69,7 @@ export function LogsScreen() {
     return agentId
   }
 
-  const PAGE_SIZE = 15
+  const PAGE_SIZE = 25
 
   const filteredLogs = logs.filter((log) => {
     if (levelFilter !== "all" && log.level !== levelFilter) return false
@@ -79,102 +102,126 @@ export function LogsScreen() {
     URL.revokeObjectURL(url)
   }
 
+  const errorCount = logs.filter((l) => l.level === "error").length
+  const warnCount = logs.filter((l) => l.level === "warn").length
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">System Logs</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-1">View all system logs for debugging</p>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="System logs"
+        description="The latest 500 log lines from every run, newest first."
+        actions={
+          <>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+            </Button>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleDownload} disabled={!filteredLogs.length}>
+              <Download className="h-3.5 w-3.5" /> Download
+            </Button>
+            <Button size="sm" variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setConfirmClear(true)} disabled={clearing}>
+              <Trash2 className="h-3.5 w-3.5" /> {clearing ? "Clearing…" : "Clear all logs"}
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+        <MiniStat label="Loaded" value={logs.length} hint="most recent lines" />
+        <MiniStat label="Warnings" value={warnCount} dot="bg-warning" onClick={() => setLevelFilter("warn")} active={levelFilter === "warn"} />
+        <MiniStat label="Errors" value={errorCount} dot="bg-destructive" onClick={() => setLevelFilter("error")} active={levelFilter === "error"} />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="relative flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search logs..." className="pl-9 bg-card border-border" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={levelFilter} onValueChange={setLevelFilter}>
-              <SelectTrigger className="w-[130px] bg-card border-border text-sm">
-                <SelectValue placeholder="All Levels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="warn">Warning</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-[180px] sm:w-[280px] bg-card border-border text-sm">
-                <SelectValue placeholder="All Agents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {uniqueAgents.map((agent) => (
-                  <SelectItem key={agent} value={agent}>{getAgentDisplayName(agent)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+      <Panel>
+        <Toolbar className="border-b border-border px-5 py-3">
+          <SearchField value={searchQuery} onChange={setSearchQuery} placeholder="Search messages…" />
+          <Select value={levelFilter} onValueChange={setLevelFilter}>
+            <SelectTrigger size="sm" className="h-9 w-full text-xs sm:w-36"><SelectValue placeholder="All levels" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All levels</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warn">Warning</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={agentFilter} onValueChange={setAgentFilter}>
+            <SelectTrigger size="sm" className="h-9 w-full text-xs sm:w-72"><SelectValue placeholder="All runs" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All runs</SelectItem>
+              {uniqueAgents.map((agent) => (
+                <SelectItem key={agent} value={agent}>{getAgentDisplayName(agent)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(levelFilter !== "all" || agentFilter !== "all" || searchQuery) && (
+            <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery(""); setVisibleCount(PAGE_SIZE) }}>
+              <X className="h-3 w-3" /> Reset
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownload}>
-              <Download className="h-3 w-3" /> Download
-            </Button>
-            {(levelFilter !== "all" || agentFilter !== "all" || searchQuery) && (
-              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => { setLevelFilter("all"); setAgentFilter("all"); setSearchQuery(""); setVisibleCount(15) }}>
-                <X className="h-3 w-3" /> Clear
-              </Button>
-            )}
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-              </span>
-              <span className="text-xs text-muted-foreground">Live</span>
-            </div>
-          </div>
-        </div>
-      </div>
+          )}
+        </Toolbar>
 
-      {/* Logs */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-0">
-          <div className="hidden md:grid grid-cols-[80px_70px_200px_1fr] gap-4 px-4 py-3 border-b border-border text-xs text-muted-foreground font-medium">
-            <span>Time</span>
-            <span>Level</span>
-            <span>Agent</span>
-            <span>Message</span>
-          </div>
-          <div className="divide-y divide-border font-mono text-sm">
+        <TableHead className="hidden md:flex" columns={[
+          { label: "Time", className: "w-20 shrink-0" },
+          { label: "Level", className: "w-16 shrink-0" },
+          { label: "Run", className: "w-56 shrink-0" },
+          { label: "Message", className: "flex-1" },
+        ]} />
+
+        {loadingLogs && logs.length === 0 ? (
+          <TableSkeleton rows={10} />
+        ) : visibleLogs.length === 0 ? (
+          <EmptyState icon={ScrollText} title={logs.length ? "No logs match these filters" : "No logs"} description={logs.length ? undefined : "New runs will write their logs here."} />
+        ) : (
+          <div className="divide-y divide-border">
             {visibleLogs.map((log) => (
               <div
                 key={log.id}
                 className={cn(
-                  "grid grid-cols-1 md:grid-cols-[80px_70px_200px_1fr] gap-1 md:gap-4 px-4 py-2.5 hover:bg-accent/50 transition-colors items-center",
-                  log.level === "error" && "bg-destructive/5"
+                  "flex flex-col gap-1 px-5 py-2.5 transition-colors hover:bg-muted/40 md:flex-row md:items-start md:gap-4",
+                  log.level === "error" && "bg-destructive/5",
                 )}
               >
-                <span className="text-xs text-muted-foreground">{log.timestamp}</span>
-                <span className={cn("text-[11px] font-semibold uppercase px-1.5 py-0.5 rounded w-fit", levelColors[log.level], levelBg[log.level])}>
+                <span className="w-20 shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{log.timestamp}</span>
+                <span className={cn("w-fit shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase md:w-16 md:text-center", levelColors[log.level], levelBg[log.level])}>
                   {log.level}
                 </span>
-                <span className="text-xs text-muted-foreground truncate" title={getAgentDisplayName(log.agentId)}>{getAgentDisplayName(log.agentId)}</span>
-                <span className="text-xs text-foreground">{log.message}</span>
+                <span className="w-56 shrink-0 truncate text-xs text-muted-foreground" title={getAgentDisplayName(log.agentId)}>{getAgentDisplayName(log.agentId)}</span>
+                <button
+                  type="button"
+                  onClick={() => setExpanded((prev) => { const n = new Set(prev); if (n.has(log.id)) n.delete(log.id); else n.add(log.id); return n })}
+                  className={cn("min-w-0 flex-1 cursor-text select-text break-all text-left font-mono text-xs", !expanded.has(log.id) && "line-clamp-4")}
+                  title={expanded.has(log.id) ? undefined : "Click to expand"}
+                >
+                  {log.message}
+                </button>
               </div>
             ))}
           </div>
+        )}
 
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-            <span className="text-xs text-muted-foreground">Showing {visibleLogs.length} of {filteredLogs.length} entries</span>
-            {visibleCount < filteredLogs.length && (
-              <Button size="sm" variant="outline" className="text-xs" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}>
-                Load more
-              </Button>
-            )}
+        <div className="flex items-center justify-between border-t border-border px-5 py-3">
+          <span className="text-xs tabular-nums text-muted-foreground">Showing {visibleLogs.length} of {filteredLogs.length}</span>
+          {visibleCount < filteredLogs.length && (
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setVisibleCount((c) => c + PAGE_SIZE * 2)}>
+              Load more
+            </Button>
+          )}
+        </div>
+      </Panel>
+
+      <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Clear all logs?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes every row in application_logs. Run timelines in application details and the
+            Learning page&apos;s failure analysis are built from these logs, so they will be empty for past runs.
+            This cannot be undone.
+          </AlertDialogDescription>
+          <div className="flex justify-end gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete all logs</AlertDialogAction>
           </div>
-        </CardContent>
-      </Card>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

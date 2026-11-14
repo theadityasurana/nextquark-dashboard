@@ -26,7 +26,7 @@ interface Pending {
 
 function Action({ title, help, children, onApply, disabled }: { title: string; help: string; children: ReactNode; onApply: () => void; disabled?: boolean }) {
   return (
-    <div className="flex flex-col gap-2 panel/50 p-3">
+    <div className="flex flex-col gap-2 panel p-3">
       <div>
         <p className="text-sm font-medium">{title}</p>
         <p className="text-[11px] text-muted-foreground">{help}</p>

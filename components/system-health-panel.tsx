@@ -50,7 +50,7 @@ export function SystemHealthPanel() {
 
   useEffect(() => {
     fetchHealth()
-    const interval = setInterval(fetchHealth, 60_000) // auto-refresh every 60s
+    const interval = setInterval(() => { if (!document.hidden) fetchHealth() }, 60_000)
     return () => clearInterval(interval)
   }, [fetchHealth])
 

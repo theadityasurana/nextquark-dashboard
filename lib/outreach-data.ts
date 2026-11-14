@@ -22,6 +22,12 @@ export interface OutreachRow {
   contacted: boolean
   contactedAt: string | null
   isPremium: boolean
+  linkedinUrl: string | null
+  lastSignInAt: string | null
+  /** Days between signup and the latest sign-in/activity; >= 1 means they came back. */
+  returnedAfterDays: number
+  /** Rough interest score for prioritising personal outreach. */
+  engagement: number
 }
 
 const asArray = (v: unknown): string[] =>
@@ -43,7 +49,7 @@ async function inChunks<T>(ids: string[], fetchChunk: (chunk: string[]) => Promi
 /** Everyone who signed up in the last `days` days, with their activity and outreach state. */
 export async function loadOutreachRows(supabase: SupabaseClient, days: number): Promise<OutreachRow[]> {
   const since = Date.now() - days * 24 * 60 * 60 * 1000
-  const users: Array<{ id: string; email?: string; phone?: string; created_at: string; user_metadata?: Record<string, unknown> }> = []
+  const users: Array<{ id: string; email?: string; phone?: string; created_at: string; last_sign_in_at?: string | null; user_metadata?: Record<string, unknown> }> = []
   for (let page = 1; ; page++) {
     const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
     if (error) throw new Error(error.message)
@@ -57,15 +63,21 @@ export async function loadOutreachRows(supabase: SupabaseClient, days: number): 
     inChunks(ids, async (chunk) => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, first_name, last_name, phone, country_code, headline, desired_roles, experience_level, user_type, location, top_skills, swiped_job_ids, last_active, subscription_type")
+        .select("id, full_name, first_name, last_name, phone, country_code, headline, desired_roles, experience_level, user_type, location, top_skills, swiped_job_ids, last_active, subscription_type, linkedin_url")
         .in("id", chunk)
       if (error) throw new Error(`profiles: ${error.message}`)
       return data ?? []
     }),
     inChunks(ids, async (chunk) => {
-      const { data, error } = await supabase.from("live_application_queue").select("user_id, company_name").in("user_id", chunk)
-      if (error) throw new Error(`queue: ${error.message}`)
-      return data ?? []
+      // 150 users can easily own more than 1000 queue rows; page so counts aren't truncated.
+      const out: Array<{ user_id: string; company_name: string | null }> = []
+      for (let from = 0; from < 50_000; from += 1000) {
+        const { data, error } = await supabase.from("live_application_queue").select("user_id, company_name").in("user_id", chunk).order("id").range(from, from + 999)
+        if (error) throw new Error(`queue: ${error.message}`)
+        out.push(...(data ?? []))
+        if (!data || data.length < 1000) break
+      }
+      return out
     }),
     inChunks(ids, async (chunk) => {
       const { data, error } = await supabase.from("removed_applications").select("company_name, row_data->>user_id").in("row_data->>user_id", chunk)
@@ -98,7 +110,21 @@ export async function loadOutreachRows(supabase: SupabaseClient, days: number): 
     const phone = formatPhone(rawPhone, p.country_code)
     const message = o?.message ?? null
     const activity = applied.get(u.id)
+    const signup = new Date(u.created_at).getTime()
+    const latest = Math.max(
+      u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : 0,
+      p.last_active ? new Date(p.last_active).getTime() : 0,
+    )
+    const returnedAfterDays = latest > signup ? Math.floor((latest - signup) / 86_400_000) : 0
+    const swiped = asArray(p.swiped_job_ids).length
+    const recentDays = latest ? (Date.now() - latest) / 86_400_000 : 999
+    const engagement = Math.round((activity?.count ?? 0) * 3 + swiped + Math.min(returnedAfterDays, 30) * 2 + (recentDays < 3 ? 10 : recentDays < 7 ? 5 : 0))
+    const linkedin = typeof p.linkedin_url === "string" && p.linkedin_url.trim() ? p.linkedin_url.trim() : null
     return {
+      linkedinUrl: linkedin ? (/^https?:\/\//i.test(linkedin) ? linkedin : `https://${linkedin.replace(/^\/+/, "")}`) : null,
+      lastSignInAt: u.last_sign_in_at ?? null,
+      returnedAfterDays,
+      engagement,
       userId: u.id,
       name: name || (u.email ?? "Unknown"),
       firstName: firstNameOf(name, u.email ?? null),

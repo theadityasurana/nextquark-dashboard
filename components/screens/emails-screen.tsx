@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Mail, Save, RefreshCw, Send, Info } from "lucide-react"
 import { toast } from "sonner"
+import { PageHeader, underlineTabsList, underlineTabsTrigger } from "@/components/ui/dashboard"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 
 function InfoTip({ text }: { text: string }) {
@@ -410,25 +411,23 @@ export function EmailsScreen() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Email Manager</h1>
-        <p className="text-sm text-muted-foreground">Manage email templates and monitor sent emails</p>
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        title="Email"
+        description="Templates, campaigns and reminders sent to users, plus the delivery logs."
+      />
 
-      <Tabs id="email-manager-tabs" defaultValue="templates" className="space-y-4">
-        <div className="-mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
-          <TabsList className="flex h-auto gap-1 w-max">
-            <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
-            <TabsTrigger value="campaigns" className="text-xs">Campaigns</TabsTrigger>
-            <TabsTrigger value="profile-reminders" className="text-xs">Profile Reminders</TabsTrigger>
-            <TabsTrigger value="logs" className="text-xs">Outbound Logs</TabsTrigger>
-            <TabsTrigger value="inbound-logs" className="text-xs">Inbound Logs</TabsTrigger>
-            <TabsTrigger value="settings" className="text-xs">SMTP</TabsTrigger>
-          </TabsList>
-        </div>
+      <Tabs id="email-manager-tabs" defaultValue="templates" className="gap-6">
+        <TabsList className={underlineTabsList}>
+          <TabsTrigger value="templates" className={underlineTabsTrigger}>Templates</TabsTrigger>
+          <TabsTrigger value="campaigns" className={underlineTabsTrigger}>Campaigns</TabsTrigger>
+          <TabsTrigger value="profile-reminders" className={underlineTabsTrigger}>Profile reminders</TabsTrigger>
+          <TabsTrigger value="logs" className={underlineTabsTrigger}>Sent</TabsTrigger>
+          <TabsTrigger value="inbound-logs" className={underlineTabsTrigger}>Inbound</TabsTrigger>
+          <TabsTrigger value="settings" className={underlineTabsTrigger}>SMTP</TabsTrigger>
+        </TabsList>
 
-        <TabsContent value="templates" className="space-y-4">
+        <TabsContent value="templates" className="flex flex-col gap-4">
           <Card>
             <CardContent className="flex items-center justify-between py-4">
               <div className="space-y-0.5">
@@ -447,18 +446,22 @@ export function EmailsScreen() {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">Templates <InfoTip text="These are the HTML email templates stored in your database. Welcome and Application Submitted emails are sent automatically via Supabase DB triggers. All other templates are used by campaigns you trigger manually from this dashboard." /></CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {templates.map((template) => (
-                  <Button
-                    key={template.id}
-                    variant={selectedTemplate?.id === template.id ? "secondary" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setSelectedTemplate(template)}
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    {template.name}
-                  </Button>
-                ))}
+              <CardContent className="flex flex-col gap-0.5 px-3">
+                {templates.length === 0 && <div className="flex flex-col gap-2 px-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 rounded-md bg-muted shimmer" />)}</div>}
+                {templates.map((template) => {
+                  const active = selectedTemplate?.id === template.id
+                  return (
+                    <button
+                      key={template.id}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors ${active ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"}`}
+                      onClick={() => setSelectedTemplate(template)}
+                    >
+                      <Mail className={`h-4 w-4 shrink-0 ${active ? "text-primary" : ""}`} />
+                      <span className="flex-1 truncate">{template.name}</span>
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${template.is_active ? "bg-success" : "bg-muted-foreground/40"}`} title={template.is_active ? "Active" : "Inactive"} />
+                    </button>
+                  )
+                })}
               </CardContent>
             </Card>
 
@@ -516,7 +519,7 @@ export function EmailsScreen() {
           </div>
         </TabsContent>
 
-        <TabsContent value="campaigns" className="space-y-4">
+        <TabsContent value="campaigns" className="flex flex-col gap-4">
           {/* Selective Campaigns */}
           <div className="grid gap-4 md:grid-cols-2">
             {/* Inactivity Nudge */}

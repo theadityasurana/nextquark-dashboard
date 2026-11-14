@@ -20,10 +20,27 @@ import { stepLabel } from "@/lib/run-timeline"
 import { runCost, runSeconds, formatCost, KERNEL_RATES } from "@/lib/run-cost"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { PortalHealthStrip } from "@/components/portal-health-strip"
-import { PageHeader, Panel, PanelHeader, MiniStat, Toolbar, SearchField, TableHead, EmptyState, Pagination, Avatar } from "@/components/ui/dashboard"
+import { PerformanceDialog } from "@/components/performance-dialog"
+import { PageHeader, Panel, PanelHeader, MiniStat, Toolbar, SearchField, TableHead, EmptyState, Pagination, Avatar, TableSkeleton } from "@/components/ui/dashboard"
+import useSWR from "swr"
+
+type QueueResponse = {
+  rows: LiveApplicationQueue[]
+  total: number
+  counts: Record<string, number>
+  freePending: number
+  eligiblePending: number
+}
+const queueFetcher = async (url: string) => {
+  const res = await fetch(url)
+  const body = await res.json()
+  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
+  return body
+}
 import {
   Search, Eye, Trash2, Loader, KeyRound, ShieldAlert, ExternalLink,
-  Receipt, XCircle, CircleSlash, TriangleAlert, Info, Crown, Play
+  Receipt, XCircle, CircleSlash, TriangleAlert, Info, Crown, Play,
+  BarChart3,
 } from "lucide-react"
 
 const ATS_PATTERNS: { name: string; pattern: RegExp }[] = [
@@ -58,14 +75,11 @@ function InfoTip({ text }: { text: string }) {
 }
 
 // Kept in memory only, for the moment between leaving this tab and coming back.
-let lastSeenApplications: LiveApplicationQueue[] = []
 
 export function QueueScreen() {
   const [selectedApp, setSelectedApp] = useState<LiveApplicationQueue | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
-  const [applications, setApplications] = useState<LiveApplicationQueue[]>(lastSeenApplications)
-  useEffect(() => { lastSeenApplications = applications }, [applications])
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [confirmDeleteAllPending, setConfirmDeleteAllPending] = useState(false)
   // Per-application streaming state — replaces the single isStreaming boolean
@@ -84,6 +98,7 @@ export function QueueScreen() {
   const [resolvingCaptcha, setResolvingCaptcha] = useState<Record<string, boolean>>({})
   const [realtimeConnected, setRealtimeConnected] = useState(true)
   const [queuePage, setQueuePage] = useState(1)
+  const [performanceOpen, setPerformanceOpen] = useState(false)
   const [selectedCandidateFilter, setSelectedCandidateFilter] = useState<string>("")
 
   const QUEUE_PER_PAGE = 25
@@ -181,63 +196,61 @@ export function QueueScreen() {
     }
   }, [addLog])
 
-  // ─── Realtime data loading ────────────────────────────────────────────────
+  // ─── Data loading ─────────────────────────────────────────────────────────
+  // One page, filtered and counted in Postgres. Realtime only tells us that
+  // something changed; we then refetch this page (coalesced), never the table.
+
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300); return () => clearTimeout(t) }, [searchQuery])
+  const queueKey = `/api/live-queue?page=${queuePage}&limit=${QUEUE_PER_PAGE}&tab=${activeTab}` +
+    (debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : "") +
+    (selectedCandidateFilter ? `&user=${selectedCandidateFilter}` : "") +
+    (premiumOnly ? "&premiumOnly=1" : "")
+  const { data: queueResp, isLoading: queueLoading, isValidating: queueValidating, mutate: mutateQueue } = useSWR<QueueResponse>(queueKey, queueFetcher, {
+    keepPreviousData: true,
+    revalidateOnFocus: false,
+  })
+  const { data: candidates = [], mutate: mutateCandidates } = useSWR<{ user_id: string; name: string; pending: number }[]>(
+    "/api/live-queue?candidates=1", queueFetcher, { revalidateOnFocus: false })
+  const applications: LiveApplicationQueue[] = queueResp?.rows ?? []
+  const counts = queueResp?.counts ?? {}
+  const refreshQueue = useCallback(() => { void mutateQueue(); void mutateCandidates() }, [mutateQueue, mutateCandidates])
+  const setApplications = (fn: (prev: LiveApplicationQueue[]) => LiveApplicationQueue[]) => {
+    void mutateQueue(prev => prev ? { ...prev, rows: fn(prev.rows) } : prev, { revalidate: false })
+  }
 
   useEffect(() => {
-    const loadApplications = async () => {
-      try {
-        const response = await fetch('/api/live-queue')
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          setApplications(data)
-          setQueuePage(p => {
-            const maxPage = Math.max(1, Math.ceil(data.length / QUEUE_PER_PAGE))
-            return p > maxPage ? maxPage : p
-          })
-        }
-      } catch (err) {
-        console.error('Failed to fetch applications:', err)
-      }
-    }
-
-    loadApplications()
-
     const { createClient } = require('@/lib/supabase/client')
     const supabase = createClient()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const schedule = () => {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; if (!document.hidden) refreshQueue() }, 1_500)
+    }
 
-    // Apply each change directly. Refetching the whole queue per event meant a
-    // 240 KB download for every status write of every running application.
     const channel = supabase
       .channel('live-queue-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, (payload: any) => {
-        if (payload.eventType === 'DELETE') {
-          setApplications(prev => prev.filter(a => a.id !== payload.old?.id))
-        } else if (payload.eventType === 'INSERT') {
-          setApplications(prev => prev.some(a => a.id === payload.new.id) ? prev : [payload.new, ...prev])
-        } else {
-          setApplications(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a))
-        }
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, schedule)
       .subscribe((status: string) => {
         setRealtimeConnected(status === 'SUBSCRIBED')
-        // Catch up on anything missed while the socket was down.
-        if (status === 'SUBSCRIBED') loadApplications()
+        if (status === 'SUBSCRIBED') schedule()
       })
 
-    // A safety net for dropped events, not the sync mechanism.
-    const resync = setInterval(loadApplications, 60_000)
+    // Safety net for dropped events: one page, only while the tab is visible.
+    const resync = setInterval(() => { if (!document.hidden) refreshQueue() }, 60_000)
 
     return () => {
+      if (timer) clearTimeout(timer)
       supabase.removeChannel(channel)
       clearInterval(resync)
     }
-  }, [])
+  }, [refreshQueue])
 
   const handleDeleteAllPending = async () => {
     try {
       await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deleteAllPending: true }) })
-      setApplications(prev => prev.filter(a => a.status !== 'pending'))
       setConfirmDeleteAllPending(false)
+      refreshQueue()
     } catch (err) { console.error('Failed to delete all pending:', err) }
   }
 
@@ -246,9 +259,7 @@ export function QueueScreen() {
     setCompletingFreePending(true)
     try {
       await fetch('/api/live-queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completeFreePending: true }) })
-      setApplications(prev => prev.map(a =>
-        a.status === 'pending' && !a.is_premium ? { ...a, status: 'completed' as const } : a
-      ))
+      refreshQueue()
     } catch (err) { console.error('Failed to complete free pending:', err) }
     finally { setCompletingFreePending(false) }
   }
@@ -261,82 +272,53 @@ export function QueueScreen() {
         delete abortControllersRef.current[id]
       }
       await fetch('/api/live-queue', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
-      setApplications(applications.filter(app => app.id !== id))
+      setApplications(prev => prev.filter(app => app.id !== id))
       setDeleteId(null)
+      refreshQueue()
     } catch (err) { console.error('Failed to delete:', err) }
   }
 
   // ─── Derived state (Fix #14: stats derived from applications, no separate state) ──
 
-  const pending        = applications.filter(a => a.status === "pending")
-  const processing     = applications.filter(a => a.status === "processing")
-  const completed      = applications.filter(a => a.status === "completed")
-  const failed         = applications.filter(a => a.status === "failed")
-  const awaitingOtp    = applications.filter(a => a.status === "awaiting_otp")
-  const awaitingCaptcha = applications.filter(a => a.status === "awaiting_captcha")
-  const blocked        = applications.filter(a => a.status === "blocked")
-  const premiumApps    = applications.filter(a => a.is_premium)
-  // Live = actively streaming SSE right now OR in an active/paused state
-  const liveApps       = applications.filter(a =>
-    streamingApps.has(a.id) ||
-    a.status === "processing" ||
-    a.status === "awaiting_otp" ||
-    a.status === "awaiting_captcha"
-  )
+  const n = (k: string) => counts[k] ?? 0
+  const liveCount = Math.max(n('live'), streamingApps.size)
   const stats = {
-    totalApps: applications.length,
-    successful: completed.length,
-    failed: failed.length,
-    inProgress: processing.length + awaitingOtp.length + awaitingCaptcha.length,
+    totalApps: n('all'),
+    successful: n('completed'),
+    failed: n('failed'),
+    inProgress: n('live'),
   }
+  // Eligible pending apps (respecting Premium only) not already streaming here.
+  const waitingForSlot = Math.max(0, (queueResp?.eligiblePending ?? 0) - streamingApps.size)
 
-  // Pending apps that are eligible given the current premiumOnly toggle
-  const eligiblePending = premiumOnly ? pending.filter(a => a.is_premium) : pending
-  // How many eligible pending apps are waiting for a slot (not yet streaming)
-  const waitingForSlot = eligiblePending.filter(a => !streamingApps.has(a.id)).length
-
-  const filteredApps = applications.filter(app => {
-    if (activeTab === "live") { if (!liveApps.some(a => a.id === app.id)) return false }
-    else if (activeTab === "premium") { if (!app.is_premium) return false }
-    else if (activeTab !== "all" && app.status !== activeTab) return false
-    if (selectedCandidateFilter && app.user_id !== selectedCandidateFilter) return false
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const fullName = `${app.first_name} ${app.last_name}`.toLowerCase()
-      return fullName.includes(q) || app.company_name.toLowerCase().includes(q) || app.job_title.toLowerCase().includes(q)
-    }
-    return true
-  })
-
-  const totalFilteredApps = filteredApps.length
+  const totalFilteredApps = queueResp?.total ?? 0
   const totalQueuePages = Math.max(1, Math.ceil(totalFilteredApps / QUEUE_PER_PAGE))
-  // Fix #8: clamp page in render too, in case state update hasn't flushed yet
   const safePage = Math.min(queuePage, totalQueuePages)
-  const paginatedApps = filteredApps.slice((safePage - 1) * QUEUE_PER_PAGE, safePage * QUEUE_PER_PAGE)
+  const paginatedApps = applications
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const freePending = pending.filter(a => !a.is_premium).length
+  const freePending = queueResp?.freePending ?? 0
   const statFilters: { label: string; value: number; dot?: string; tab: string }[] = [
-    { label: 'Total',      value: applications.length, tab: 'all' },
-    { label: 'Premium',    value: premiumApps.length,  dot: 'bg-warning',          tab: 'premium' },
-    { label: 'Pending',    value: pending.length,      dot: 'bg-muted-foreground', tab: 'pending' },
-    { label: 'Processing', value: processing.length,   dot: 'bg-chart-2',          tab: 'processing' },
-    { label: 'Completed',  value: completed.length,    dot: 'bg-success',          tab: 'completed' },
-    { label: 'Failed',     value: failed.length,       dot: 'bg-destructive',      tab: 'failed' },
-    { label: 'Blocked',    value: blocked.length,      dot: 'bg-orange-500',       tab: 'blocked' },
+    { label: 'Total',      value: n('all'), tab: 'all' },
+    { label: 'Premium',    value: n('premium'),  dot: 'bg-warning',          tab: 'premium' },
+    { label: 'Pending',    value: n('pending'),      dot: 'bg-muted-foreground', tab: 'pending' },
+    { label: 'Processing', value: n('processing'),   dot: 'bg-chart-2',          tab: 'processing' },
+    { label: 'Completed',  value: n('completed'),    dot: 'bg-success',          tab: 'completed' },
+    { label: 'Failed',     value: n('failed'),       dot: 'bg-destructive',      tab: 'failed' },
+    { label: 'Blocked',    value: n('blocked'),      dot: 'bg-orange-500',       tab: 'blocked' },
   ]
   const tabs: { value: string; label: string; count: number }[] = [
-    { value: 'all', label: 'All', count: applications.length },
-    { value: 'live', label: 'Live', count: liveApps.length },
-    { value: 'premium', label: 'Premium', count: premiumApps.length },
-    { value: 'pending', label: 'Pending', count: pending.length },
-    { value: 'processing', label: 'Processing', count: processing.length },
-    { value: 'completed', label: 'Completed', count: completed.length },
-    { value: 'failed', label: 'Failed', count: failed.length },
-    { value: 'awaiting_otp', label: 'OTP', count: awaitingOtp.length },
-    { value: 'awaiting_captcha', label: 'CAPTCHA', count: awaitingCaptcha.length },
-    { value: 'blocked', label: 'Blocked', count: blocked.length },
+    { value: 'all', label: 'All', count: n('all') },
+    { value: 'live', label: 'Live', count: liveCount },
+    { value: 'premium', label: 'Premium', count: n('premium') },
+    { value: 'pending', label: 'Pending', count: n('pending') },
+    { value: 'processing', label: 'Processing', count: n('processing') },
+    { value: 'completed', label: 'Completed', count: n('completed') },
+    { value: 'failed', label: 'Failed', count: n('failed') },
+    { value: 'awaiting_otp', label: 'OTP', count: n('awaiting_otp') },
+    { value: 'awaiting_captcha', label: 'CAPTCHA', count: n('awaiting_captcha') },
+    { value: 'blocked', label: 'Blocked', count: n('blocked') },
   ]
   const selectTab = (v: string) => { setActiveTab(v); setQueuePage(1); setSelectedCandidateFilter("") }
 
@@ -359,16 +341,19 @@ export function QueueScreen() {
         description="Every application Iris is submitting, in real time."
         actions={
           <>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPerformanceOpen(true)}>
+              <BarChart3 className="h-3.5 w-3.5" /> Performance
+            </Button>
             {freePending > 0 && (
               <Button variant="outline" size="sm" className="gap-1.5" disabled={completingFreePending} onClick={handleCompleteFreePending}>
                 {completingFreePending ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Crown className="h-3.5 w-3.5 text-warning" />}
                 Complete free pending · {freePending}
               </Button>
             )}
-            {pending.length > 0 && (
+            {n('pending') > 0 && (
               <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => setConfirmDeleteAllPending(true)}>
                 <Trash2 className="h-3.5 w-3.5" />
-                Delete pending · {pending.length}
+                Delete pending · {n('pending')}
               </Button>
             )}
           </>
@@ -425,7 +410,7 @@ export function QueueScreen() {
               onChange={(e) => setPrefs({ maxConcurrent: Number(e.target.value) })}
               className="w-full cursor-pointer accent-primary"
             />
-            <p className="text-xs text-muted-foreground">{processing.length} of {maxConcurrent} slots in use</p>
+            <p className="text-xs text-muted-foreground">{n('processing')} of {maxConcurrent} slots in use</p>
           </div>
         </div>
       </Panel>
@@ -442,7 +427,7 @@ export function QueueScreen() {
                 onClick={() => selectTab(t.value)}
                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-3 text-[13px] font-medium transition-colors ${activeTab === t.value ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
               >
-                {t.value === 'live' && liveApps.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-chart-2" />}
+                {t.value === 'live' && liveCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-chart-2" />}
                 {t.value === 'premium' && <Crown className="h-3 w-3 text-warning" />}
                 {t.label}
                 <span className={`rounded-full px-1.5 text-[10.5px] tabular-nums ${activeTab === t.value ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>{t.count}</span>
@@ -462,13 +447,11 @@ export function QueueScreen() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__" className="text-xs">All candidates</SelectItem>
-              {[...new Map(applications.map(a => [a.user_id, a])).values()]
-                .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`))
-                .map(a => (
-                  <SelectItem key={a.user_id} value={a.user_id} className="text-xs">
-                    {a.first_name} {a.last_name} ({applications.filter(x => x.user_id === a.user_id && x.status === 'pending').length} pending)
-                  </SelectItem>
-                ))}
+              {candidates.map(c => (
+                <SelectItem key={c.user_id} value={c.user_id} className="text-xs">
+                  {c.name || "Unnamed"} ({c.pending} pending)
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <span className="text-xs text-muted-foreground tabular-nums sm:ml-auto">{totalFilteredApps.toLocaleString()} results</span>
@@ -484,10 +467,12 @@ export function QueueScreen() {
           { label: "", className: "w-14 shrink-0" },
         ]} />
 
-        {paginatedApps.length === 0 ? (
+        {queueLoading && !queueResp ? (
+          <TableSkeleton rows={10} />
+        ) : paginatedApps.length === 0 ? (
           <EmptyState icon={Search} title="No applications here" description="Nothing matches this filter right now." />
         ) : (
-        <div className="divide-y divide-border">
+        <div className={`divide-y divide-border transition-opacity ${queueValidating && queueResp ? "opacity-60" : ""}`}>
         {paginatedApps.map((app) => {
           const fullName = `${app.first_name} ${app.last_name}`
           const createdDate = new Date(app.created_at).toISOString().slice(0, 16).replace('T', ' ')
@@ -588,11 +573,13 @@ export function QueueScreen() {
         )}
       </Panel>
 
+      <PerformanceDialog open={performanceOpen} onOpenChange={setPerformanceOpen} />
+
       {/* Delete all pending confirmation */}
       <AlertDialog open={confirmDeleteAllPending} onOpenChange={setConfirmDeleteAllPending}>
         <AlertDialogContent>
           <AlertDialogTitle>Delete All Pending</AlertDialogTitle>
-          <AlertDialogDescription>This will permanently delete all {pending.length} pending applications. This action cannot be undone.</AlertDialogDescription>
+          <AlertDialogDescription>This will permanently delete all {n('pending')} pending applications. This action cannot be undone.</AlertDialogDescription>
           <div className="flex gap-3 justify-end">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAllPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete All</AlertDialogAction>
@@ -635,7 +622,7 @@ export function QueueScreen() {
               }}
               isStreaming={streamingApps.has(selectedApp.id)}
               recordingUrl={null}
-              canStart={liveApps.length < maxConcurrent && !streamingApps.has(selectedApp.id)}
+              canStart={liveCount < maxConcurrent && !streamingApps.has(selectedApp.id)}
               onStatusChange={(id, status) => {
                 setApplications(prev => prev.map(a => a.id === id ? { ...a, status } : a))
                 setSelectedApp(prev => prev?.id === id ? { ...prev, status } : prev)
@@ -722,8 +709,7 @@ export function QueueScreen() {
                     <button
                       className="text-[10px] text-primary hover:underline text-left mt-0.5"
                       onClick={() => {
-                        const full = applications.find(a => a.id === app.id)
-                        if (full) setSelectedApp(full)
+                        setSelectedApp(applications.find(a => a.id === app.id) ?? app)
                       }}
                     >
                       View details →

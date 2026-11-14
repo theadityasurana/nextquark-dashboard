@@ -98,3 +98,13 @@ export function clearServerCache(): void {
   entries.clear()
   inFlight.clear()
 }
+
+/** Drop cached values whose key starts with the prefix (after a write). */
+export function invalidateCached(prefix: string): void {
+  for (const k of [...entries.keys()]) if (k.startsWith(prefix)) entries.delete(k)
+}
+
+/** Run `fn` over cached values whose key starts with the prefix (to patch them in place). */
+export function forEachCached<T>(prefix: string, fn: (value: T) => void): void {
+  for (const [k, e] of entries) if (k.startsWith(prefix)) fn(e.body as T)
+}

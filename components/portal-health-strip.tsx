@@ -47,7 +47,7 @@ export function PortalHealthStrip() {
     }
     load()
     // A breaker's countdown ticks in minutes; 30s is plenty.
-    const interval = setInterval(load, 30_000)
+    const interval = setInterval(() => { if (!document.hidden) load() }, 60_000)
     return () => {
       cancelled = true
       clearInterval(interval)

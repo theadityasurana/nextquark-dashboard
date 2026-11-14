@@ -30,7 +30,6 @@ const navGroups: { title: string; items: NavItem[] }[] = [
     items: [
       { label: "Overview",   href: "/",          icon: LayoutDashboard },
       { label: "Live Queue", href: "/queue",     icon: Zap },
-      { label: "AI Agents",  href: "/agents",    icon: Bot },
       { label: "Jobs",       href: "/jobs",      icon: Briefcase },
       { label: "Companies",  href: "/companies", icon: Building2 },
       { label: "Users",      href: "/users",     icon: Users },
@@ -42,17 +41,14 @@ const navGroups: { title: string; items: NavItem[] }[] = [
       { label: "Revenue",          href: "/pricing",   icon: DollarSign },
       { label: "Marketing",        href: "/marketing", icon: TrendingUp },
       { label: "Sales & Outreach", href: "/outreach",  icon: MessageCircle },
-      { label: "Email",            href: "/emails",        icon: Mail },
-      { label: "Notifications",    href: "/notifications", icon: BellRing },
+      { label: "Messaging",        href: "/emails",    icon: Mail },
     ],
   },
   {
     title: "System",
     items: [
-      { label: "App Control", href: "/app-control", icon: SlidersHorizontal },
-      // Logs is what happened, Learning is what the system kept from it.
-      { label: "Learning",    href: "/learning",    icon: Brain },
-      { label: "Logs",        href: "/logs",        icon: ScrollText },
+      // What the system kept from past runs (answer bank, portal lessons).
+      { label: "Learning", href: "/learning", icon: Brain },
     ],
   },
 ]
@@ -60,6 +56,8 @@ const navGroups: { title: string; items: NavItem[] }[] = [
 const allNavItems = [...navGroups.flatMap((g) => g.items), { label: "Settings", href: "/settings", icon: Settings }]
 
 function isActivePath(pathname: string, href: string) {
+  // App Control's editor pages live under /app-control but belong to Settings.
+  if (href === "/settings" && pathname.startsWith("/app-control")) return true
   return pathname === href || (href !== "/" && pathname.startsWith(href + "/"))
 }
 
@@ -246,7 +244,7 @@ function SidebarContent({ collapsed, onToggle, onSearch, onNavigate }: { collaps
       <div className="border-t border-sidebar-border p-3 flex flex-col gap-0.5 shrink-0">
         <ProviderToggle collapsed={collapsed} />
         <ThemeToggle collapsed={collapsed} />
-        <NavLink item={{ label: "Settings", href: "/settings", icon: Settings }} collapsed={collapsed} active={pathname === "/settings"} onNavigate={onNavigate} />
+        <NavLink item={{ label: "Settings", href: "/settings", icon: Settings }} collapsed={collapsed} active={isActivePath(pathname, "/settings")} onNavigate={onNavigate} />
         <div className={cn("mt-2 flex items-center gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-2", collapsed && "justify-center border-0 bg-transparent p-0")}>
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-chart-5 text-[11px] font-semibold text-white">
             AS
@@ -276,7 +274,7 @@ function useSystemStatus(): HealthState {
     let alive = true
     const load = () => fetch("/api/system-health").then(r => r.json()).then(d => { if (alive) setStatus(d.overallStatus ?? null) }).catch(() => {})
     load()
-    const id = setInterval(load, 120_000)
+    const id = setInterval(() => { if (!document.hidden) load() }, 120_000)
     const onHealth = (e: Event) => setStatus((e as CustomEvent).detail ?? null)
     window.addEventListener("iris:health", onHealth)
     return () => { alive = false; clearInterval(id); window.removeEventListener("iris:health", onHealth) }
@@ -323,7 +321,10 @@ function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
           </CommandGroup>
         ))}
         <CommandGroup heading="Actions">
-          <CommandItem value="settings" onSelect={() => go("/settings")}><Settings className="h-4 w-4" /> Settings</CommandItem>
+          <CommandItem value="settings general" onSelect={() => go("/settings")}><Settings className="h-4 w-4" /> Settings</CommandItem>
+          <CommandItem value="app control remote config" onSelect={() => go("/settings?tab=app-control")}><SlidersHorizontal className="h-4 w-4" /> App control</CommandItem>
+          <CommandItem value="logs" onSelect={() => go("/settings?tab=logs")}><ScrollText className="h-4 w-4" /> Logs</CommandItem>
+          <CommandItem value="push notifications" onSelect={() => go("/emails?tab=notifications")}><BellRing className="h-4 w-4" /> Push notifications</CommandItem>
           <CommandItem value="toggle theme dark light" onSelect={() => { toggle(); onOpenChange(false) }}><Sun className="h-4 w-4" /> Toggle theme</CommandItem>
         </CommandGroup>
       </CommandList>
@@ -379,7 +380,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </Button>
             )}
             <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] min-w-0">
-              <span className="text-muted-foreground hidden sm:inline">{group?.title ?? "Iris"}</span>
+              <span className="text-muted-foreground hidden sm:inline">{group?.title ?? (current?.href === "/settings" ? "System" : "Iris")}</span>
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 hidden sm:inline" />
               <span className="font-medium text-foreground truncate">{current?.label ?? "Dashboard"}</span>
             </nav>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import useSWR from "swr"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,7 +22,32 @@ import {
   Upload, Building2, MapPin, Users, Linkedin, FileText, ImageIcon, Briefcase, X, Edit2, Save, Zap, ChevronsUpDown, Gift, Check, Trash2, AlertTriangle, Clock
 } from "lucide-react"
 import { SyncProgressBar } from "@/components/sync-progress-bar"
-import { PageHeader, Panel, StatCard, KpiGrid, Meter, TableHead, EmptyState, SearchField, Pagination } from "@/components/ui/dashboard"
+import { PageHeader, Panel, StatCard, KpiGrid, Meter, TableHead, EmptyState, SearchField, Pagination, TableSkeleton } from "@/components/ui/dashboard"
+
+const jsonFetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
+  return res.json()
+}
+
+function mapCompanyRow(c: Record<string, unknown>): Company {
+  const logoUrl = c.logo_url as string | undefined
+  return {
+    id: c.id as string, name: c.name as string,
+    logoInitial: (c.logo_initial as string) || (c.name as string)?.charAt(0) || "C",
+    logoUrl: logoUrl && logoUrl.trim() ? logoUrl : undefined,
+    website: (c.website as string) || "", careersUrl: (c.careers_url as string) || "",
+    linkedinUrl: c.linkedin_url as string | undefined, description: c.description as string | undefined,
+    industry: (c.industry as string) || "Technology", size: (c.size as string) || "Unknown",
+    location: (c.location as string | string[]) || "Remote", portalType: (c.portal_type as string) || "Custom",
+    portalStatus: (c.portal_status as string) || "active", totalJobs: (c.total_jobs as number) || 0,
+    appsToday: (c.apps_today as number) || 0, successRate: Number(c.success_rate) || 0,
+    avgTime: (c.avg_time as string) || "-", addedAt: (c.added_at as string) || "",
+    benefits: (c.benefits as string[]) || [], atsType: c.ats_type as string | undefined,
+    atsCompanyId: c.ats_company_id as string | undefined, lastSyncedAt: c.last_synced_at as string | undefined,
+    syncStatus: (c.sync_status as string | undefined) || "never",
+  } as any
+}
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -33,7 +59,6 @@ function timeAgo(isoString: string): string {
 }
 
 export function CompaniesScreen() {
-  const { companies, jobs, addCompany, refreshJobs, refreshCompanies, isLoading } = useData()
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
@@ -53,6 +78,20 @@ export function CompaniesScreen() {
   const [companyJobsExpanded, setCompanyJobsExpanded] = useState<Record<string, boolean>>({})
   const COMPANY_JOBS_LIMIT = 5
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { addCompany, refreshJobs } = useData()
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300); return () => clearTimeout(t) }, [searchQuery])
+  // One page at a time from the server (search runs in Postgres), not every company.
+  const listKey = `/api/companies?page=${companiesPage}&limit=${COMPANIES_PER_PAGE}${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}`
+  const { data: listResp, isLoading: listLoading, mutate: mutateList } = useSWR<{ data: Record<string, unknown>[]; total: number }>(listKey, jsonFetcher, { keepPreviousData: true, revalidateOnFocus: false })
+  const { data: stats, mutate: mutateStats } = useSWR<{ total: number; atsLinked: number; syncFailures: number; jobsTracked: number }>("/api/companies?stats=1", jsonFetcher, { revalidateOnFocus: false })
+  const companies: Company[] = (listResp?.data ?? []).map(mapCompanyRow)
+  const refreshCompanies = useCallback(() => Promise.all([mutateList(), mutateStats()]), [mutateList, mutateStats])
+  // The open company's jobs, fetched for that company only.
+  const { data: companyJobsResp } = useSWR<{ data: Record<string, unknown>[]; total: number }>(
+    selectedCompany ? `/api/jobs?companyId=${selectedCompany.id}&limit=100` : null, jsonFetcher, { revalidateOnFocus: false })
+  const selectedCompanyJobs = (companyJobsResp?.data ?? []).map((j) => ({ id: j.id as string, title: j.title as string, location: j.location as string, status: j.status as string, companyId: j.company_id as string, jobType: j.job_type as string, salary: j.salary_range as string, portalUrl: j.portal_url as string } as any))
+  const selectedCompanyJobTotal = companyJobsResp?.total ?? selectedCompanyJobs.length
 
   // Sync all state
   const [isSyncingAll, setIsSyncingAll] = useState(false)
@@ -102,22 +141,11 @@ export function CompaniesScreen() {
     logoUrl: "",
   })
 
-  const filteredCompanies = companies.filter((company) => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return company.name.toLowerCase().includes(q) || company.industry.toLowerCase().includes(q)
-  })
-
-  const totalFilteredCompanies = filteredCompanies.length
+  const totalFilteredCompanies = listResp?.total ?? 0
   const totalPages = Math.ceil(totalFilteredCompanies / COMPANIES_PER_PAGE)
-  const paginatedCompanies = filteredCompanies.slice(
-    (companiesPage - 1) * COMPANIES_PER_PAGE,
-    companiesPage * COMPANIES_PER_PAGE
-  )
+  const paginatedCompanies = companies
 
-  const getCompanyJobs = (companyId: string) => {
-    return jobs.filter((job) => job.companyId === companyId)
-  }
+  const getCompanyJobs = (_companyId: string) => selectedCompanyJobs
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -250,10 +278,10 @@ export function CompaniesScreen() {
     }
   }
 
-  const atsLinked = companies.filter((c: any) => c.atsType).length
-  const syncFailures = companies.filter((c: any) => c.syncStatus === "failed").length
-  const jobsTracked = companies.reduce((n, c) => n + (Number(c.totalJobs) || 0), 0)
-  const appsToday = companies.reduce((n, c) => n + (Number(c.appsToday) || 0), 0)
+  const totalCompanies = stats?.total ?? 0
+  const atsLinked = stats?.atsLinked ?? 0
+  const syncFailures = stats?.syncFailures ?? 0
+  const jobsTracked = stats?.jobsTracked ?? 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -274,12 +302,12 @@ export function CompaniesScreen() {
       />
 
       <KpiGrid>
-        <StatCard label="Companies" value={companies.length} icon={Building2} footnote="in the catalogue" />
+        <StatCard label="Companies" value={stats ? totalCompanies : "—"} icon={Building2} footnote="in the catalogue" />
         <StatCard label="ATS-synced" value={atsLinked} icon={Zap}
-          footnote={`${companies.length ? Math.round((atsLinked / companies.length) * 100) : 0}% of companies auto-sync jobs`}>
-          <Meter value={atsLinked} max={Math.max(1, companies.length)} />
+          footnote={`${totalCompanies ? Math.round((atsLinked / totalCompanies) * 100) : 0}% of companies auto-sync jobs`}>
+          <Meter value={atsLinked} max={Math.max(1, totalCompanies)} />
         </StatCard>
-        <StatCard label="Applications today" value={appsToday} icon={Briefcase} footnote={`${jobsTracked.toLocaleString()} open jobs tracked`} />
+        <StatCard label="Jobs tracked" value={stats ? jobsTracked : "—"} icon={Briefcase} footnote="open roles across all companies" />
         <StatCard label="Sync failures" value={syncFailures} icon={AlertTriangle}
           delta={syncFailures === 0 ? "All clear" : "Needs attention"} deltaTone={syncFailures === 0 ? "positive" : "negative"}
           footnote="last sync attempt failed" />
@@ -315,7 +343,9 @@ export function CompaniesScreen() {
           { label: "", className: "w-4" },
         ]} />
 
-        {paginatedCompanies.length === 0 ? (
+        {listLoading && !listResp ? (
+          <TableSkeleton rows={10} />
+        ) : paginatedCompanies.length === 0 ? (
           <EmptyState icon={Building2} title="No companies found" description={searchQuery ? "Try a different search." : "Add your first company to get started."} />
         ) : (
           <div className="divide-y divide-border">
@@ -883,7 +913,7 @@ export function CompaniesScreen() {
                       Jobs at {selectedCompany.name}
                     </h3>
                     <Badge variant="secondary" className="bg-secondary text-secondary-foreground text-[10px]">
-                      {getCompanyJobs(selectedCompany.id).length} jobs
+                      {selectedCompanyJobTotal} jobs
                     </Badge>
                   </div>
                   {getCompanyJobs(selectedCompany.id).length > 0 ? (
@@ -923,7 +953,7 @@ export function CompaniesScreen() {
                         >
                           {companyJobsExpanded[selectedCompany.id]
                             ? "Show Less"
-                            : `Show All ${getCompanyJobs(selectedCompany.id).length} Jobs`}
+                            : `Show all ${selectedCompanyJobs.length} jobs`}
                         </Button>
                       )}
                     </div>
@@ -938,7 +968,7 @@ export function CompaniesScreen() {
 
                 <div className="flex items-center gap-2 pt-2 border-t border-border">
                   <Button size="sm" variant="outline" className="text-xs gap-1.5 text-destructive hover:bg-destructive/10" onClick={async () => {
-                    if (!confirm(`Delete "${selectedCompany.name}" and all ${getCompanyJobs(selectedCompany.id).length} associated jobs? This cannot be undone.`)) return
+                    if (!confirm(`Delete "${selectedCompany.name}" and all ${selectedCompanyJobTotal} associated jobs? This cannot be undone.`)) return
                     setIsSaving(true)
                     try {
                       const res = await fetch(`/api/companies?id=${selectedCompany.id}`, { method: "DELETE" })

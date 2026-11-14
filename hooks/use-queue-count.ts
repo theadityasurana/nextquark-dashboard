@@ -13,32 +13,38 @@ export function useQueueCount() {
 
   useEffect(() => {
     const supabase = createClient()
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-    // Initial fetch
-    supabase
-      .from('live_application_queue')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-      .then(({ count }) => setPendingCount(count ?? 0))
+    const load = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      supabase
+        .from('live_application_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .then(({ count }) => setPendingCount(count ?? 0))
+    }
+    load()
 
-    // Realtime subscription — fires on any INSERT, UPDATE, or DELETE
+    // A running application writes its row many times a minute. Coalesce those
+    // into one count per 5s instead of one count per write per open tab.
+    const schedule = () => {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; load() }, 5_000)
+    }
+
     const channel = supabase
       .channel('queue-count')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'live_application_queue' },
-        () => {
-          // Re-fetch the count when anything changes in the table
-          supabase
-            .from('live_application_queue')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'pending')
-            .then(({ count }) => setPendingCount(count ?? 0))
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_application_queue' }, schedule)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    const onVisible = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   return pendingCount

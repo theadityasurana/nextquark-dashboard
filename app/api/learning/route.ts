@@ -31,11 +31,14 @@ async function load(request: Request) {
         .select("id, domain, content, version, score, status, times_used, created_at, updated_at")
         .order("domain", { ascending: true })
         .order("version", { ascending: false }),
+      // Just the most-reused answers. Sorting the whole table to take 500 rows hit
+      // Postgres's statement timeout; reused rows are a small slice of it.
       supabase
         .from("application_answers")
         .select("question, answer, state, scope_kind, times_used, is_sensitive, updated_at")
+        .gt("times_used", 1)
         .order("times_used", { ascending: false })
-        .limit(500),
+        .limit(12),
       supabase
         .from("live_application_queue")
         .select("company_name, job_url, status, processing_time_ms, error_message, confirmation_id, created_at")
@@ -77,19 +80,19 @@ async function load(request: Request) {
       .sort((a, b) => b.totalUses - a.totalUses)
 
     // ─── Answer bank ───
+    // Totals as counts (indexed by state), not by reading rows.
+    const states = ["confirmed", "inferred", "missing", "sensitive"] as const
+    const [totalAnswers, reusedAnswers, ...stateCounts] = await Promise.all([
+      supabase.from("application_answers").select("id", { count: "estimated", head: true }),
+      supabase.from("application_answers").select("id", { count: "exact", head: true }).gt("times_used", 1),
+      ...states.map((st) => supabase.from("application_answers").select("id", { count: "exact", head: true }).eq("state", st)),
+    ])
     const answerStats = {
-      total: answers.length,
-      byState: answers.reduce<Record<string, number>>((acc, a) => {
-        const k = a.state || "unknown"
-        acc[k] = (acc[k] ?? 0) + 1
-        return acc
-      }, {}),
-      // Reuse is the whole value of the bank: an answer used five times is four
-      // model calls that never happened.
-      reusedTotal: answers.reduce((n, a) => n + Math.max(0, (a.times_used ?? 0) - 1), 0),
+      total: totalAnswers.count ?? 0,
+      byState: Object.fromEntries(states.map((st, i) => [st, stateCounts[i].count ?? 0])),
+      // Reuse is the whole value of the bank: each reused answer saved at least one model call.
+      reusedTotal: reusedAnswers.count ?? 0,
       topReused: answers
-        .filter((a) => (a.times_used ?? 0) > 0)
-        .slice(0, 12)
         .map((a) => ({
           question: a.question,
           answer: a.is_sensitive ? "•••••" : a.answer,
@@ -162,12 +165,17 @@ async function load(request: Request) {
         .gte("timestamp", since)
         .or("message.ilike.%[Result]%,message.ilike.%NOT FILLED%,message.ilike.%Post-submit validation%,message.ilike.%last-resort answer%,message.ilike.%[Refill] summary%")
         .order("timestamp", { ascending: false })
-        .limit(5000),
-      admin.from("live_application_queue").select("status"),
-      admin.from("removed_applications").select("reason"),
+        .limit(2000),
+      // Status totals as head-only counts (the old select("status") pulled every
+      // row and stopped at 1000), and only the last 7 days of removal reasons.
+      Promise.all(["pending", "processing", "completed", "failed", "blocked", "awaiting_otp", "awaiting_captcha"].map(async (st) => {
+        const { count } = await admin.from("live_application_queue").select("id", { count: "exact", head: true }).eq("status", st)
+        return { status: st, count: count ?? 0 }
+      })).then((data) => ({ data })),
+      admin.from("removed_applications").select("reason").gte("removed_at", since).limit(1000),
     ])
     const queue: Record<string, number> = {}
-    for (const row of queueRows ?? []) queue[row.status] = (queue[row.status] ?? 0) + 1
+    for (const row of queueRows ?? []) if (row.count) queue[row.status] = row.count
     const removedReasons: Record<string, number> = {}
     for (const row of removed ?? []) {
       const reason = String(row.reason).replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 70)

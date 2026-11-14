@@ -36,7 +36,8 @@ const COST_PER_APP  = 0.02
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 function fmtUSD(v: number) {
-  return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const abs = Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return v < 0 ? `−$${abs}` : `$${abs}`
 }
 function fmtINR(v: number) {
   return `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`

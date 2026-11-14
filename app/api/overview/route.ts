@@ -2,6 +2,18 @@ import { cachedRoute } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { unstable_cache } from 'next/cache'
 
+/** Pages a query past PostgREST's 1000-row cap (capped at 50k rows). */
+async function pageAll<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<{ data: T[] }> {
+  const rows: T[] = []
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data, error } = await page(from, from + 999)
+    if (error) throw new Error(error.message)
+    rows.push(...((data ?? []) as T[]))
+    if (!data || data.length < 1000) break
+  }
+  return { data: rows }
+}
+
 function getTimeRange(range: string): string {
   const now = new Date()
   switch (range) {
@@ -120,24 +132,32 @@ async function load(request: Request) {
         return { data: rows }
       })(),
 
-      // Company breakdown
-      supabase
+      // Company breakdown (paged: a 30-day window easily passes 1000 rows)
+      pageAll<{ company_name: string | null; status: string }>((from, to) => supabase
         .from('live_application_queue')
         .select('company_name, status')
-        .gte('created_at', getTimeRange(companyRange)),
+        .gte('created_at', getTimeRange(companyRange))
+        .order('id')
+        .range(from, to)),
 
       // Agent status
       supabase
         .from('live_application_queue')
         .select('id, company_name, job_title, first_name, last_name, status, started_at')
         .gte('created_at', getTimeRange(agentRange))
-        .in('status', ['processing', 'completed']),
+        .in('status', ['processing', 'completed'])
+        // Only running rows plus a few recent finished ones are shown.
+        .order('status', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(100),
 
       // Portal health
       supabase
         .from('portal_metrics')
         .select('portal_type, status, response_time_ms')
-        .gte('timestamp', getTimeRange('24h')),
+        .gte('timestamp', getTimeRange('24h'))
+        .order('timestamp', { ascending: false })
+        .limit(1000),
 
       // Top users — kept for potential future use but userActivity is now computed live
       supabase
@@ -147,10 +167,12 @@ async function load(request: Request) {
         .limit(5),
 
       // Job insights — only what's needed for the map
-      supabase
+      pageAll<{ job_id: string | null; job_title: string | null; company_name: string | null; status: string }>((from, to) => supabase
         .from('live_application_queue')
         .select('job_id, job_title, company_name, status')
-        .gte('created_at', getTimeRange(jobRange)),
+        .gte('created_at', getTimeRange(jobRange))
+        .order('id')
+        .range(from, to)),
 
       // Right-swipe counts for job insights
       supabase
@@ -168,10 +190,8 @@ async function load(request: Request) {
         .order('synced_at', { ascending: false })
         .limit(200),
 
-      // Company names for sync activity
-      supabase
-        .from('companies')
-        .select('id, name, logo_initial'),
+      // Company names for sync activity are looked up below, for just those ids.
+      Promise.resolve({ data: [] as { id: string; name: string; logo_initial: string | null }[] }),
 
       // Recent logs
       supabase
@@ -339,7 +359,8 @@ async function load(request: Request) {
     const rightSwipeMap = new Map((jobs || []).map(j => [j.id, j.right_swipes || 0]))
     const jobMap = new Map<string, { title: string; company: string; count: number; completed: number }>()
     ;(jobAppsRaw || []).forEach(app => {
-      const cur = jobMap.get(app.job_id) || { title: app.job_title, company: app.company_name, count: 0, completed: 0 }
+      if (!app.job_id) return
+      const cur = jobMap.get(app.job_id) || { title: app.job_title ?? 'Unknown', company: app.company_name ?? 'Unknown', count: 0, completed: 0 }
       cur.count++
       if (app.status === 'completed') cur.completed++
       jobMap.set(app.job_id, cur)
@@ -357,7 +378,12 @@ async function load(request: Request) {
       .slice(0, 5)
 
     // ── Sync activity ──
-    const companyNameMap = new Map((syncCompanies || []).map(c => [c.id, { name: c.name, initial: c.logo_initial || c.name?.charAt(0)?.toUpperCase() || '?' }]))
+    // Only the companies that appear in the sync results (the full table is ~2.7k rows).
+    const syncIds = [...new Set((syncResults || []).map((r: any) => r.company_id).filter(Boolean))]
+    const { data: namedCompanies } = syncIds.length
+      ? await supabase.from('companies').select('id, name, logo_initial').in('id', syncIds)
+      : { data: syncCompanies }
+    const companyNameMap = new Map((namedCompanies || []).map(c => [c.id, { name: c.name, initial: c.logo_initial || c.name?.charAt(0)?.toUpperCase() || '?' }]))
     let totalAdded = 0, totalDeleted = 0, totalUpdated = 0
     const syncByCompany = new Map<string, { name: string; initial: string; added: number; updated: number; deleted: number; syncedAt: string }>()
     const seenCompanyIds = new Set<string>()

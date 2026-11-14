@@ -1,3 +1,4 @@
+import { cachedRoute } from "@/lib/server-cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 import { planOf, periodOf, regionOf, subscriptionState, monthlyRevenue } from "@/lib/plans"
@@ -7,7 +8,7 @@ import { planOf, periodOf, regionOf, subscriptionState, monthlyRevenue } from "@
 // and fell back to rows with neither, so store fees were never counted.
 // Region comes from pricing_region; store from which purchase id is stored.
 
-export async function GET() {
+async function load(): Promise<Response> {
   const supabase = createAdminClient()
   const rows: any[] = []
   const PAGE = 1000
@@ -41,4 +42,9 @@ export async function GET() {
     platform: r.google_play_purchase_token ? "android" : r.razorpay_subscription_id ? "razorpay" : null,
     monthly_revenue: monthlyRevenue(r),
   })))
+}
+
+// Shared across requests: this reads whole tables, and several tabs/devices ask at once.
+export function GET(request: Request) {
+  return cachedRoute(request, 120_000, load)
 }

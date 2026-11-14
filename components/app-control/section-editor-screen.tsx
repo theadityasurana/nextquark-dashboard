@@ -101,7 +101,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
   const ctx = useMemo(() => sampleContext(rowsWithDraft), [rowsWithDraft])
 
   if (!def) {
-    return <div className="text-sm text-muted-foreground">Unknown section <code className="font-mono">{sectionKey}</code>. <Link href="/app-control" className="text-primary underline">Back to App Control</Link></div>
+    return <div className="text-sm text-muted-foreground">Unknown section <code className="font-mono">{sectionKey}</code>. <Link href="/settings?tab=app-control" className="text-primary underline">Back to App Control</Link></div>
   }
 
   if (loadError) {
@@ -146,7 +146,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
   return (
     <div className="flex flex-col gap-5 max-w-6xl">
       <div className="flex flex-col gap-3">
-        <Link href="/app-control" onClick={leave} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"><ArrowLeft className="h-3 w-3" />App Control</Link>
+        <Link href="/settings?tab=app-control" onClick={leave} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"><ArrowLeft className="h-3 w-3" />App Control</Link>
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

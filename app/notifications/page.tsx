@@ -1,5 +1,5 @@
-import { NotificationsScreen } from '@/components/screens/notifications-screen'
+import { redirect } from "next/navigation"
 
 export default function NotificationsPage() {
-  return <NotificationsScreen />
+  redirect("/emails?tab=notifications")
 }

@@ -110,6 +110,8 @@ export function useApi<T>(url: string | null) {
     data: swr.data,
     error: swr.error as Error | undefined,
     isLoading: swr.isLoading && swr.data === undefined,
+    /** The URL changed (e.g. a new range) and its data hasn't arrived; `data` is the previous one. */
+    isSwitching: swr.isLoading && swr.data !== undefined,
     isUpdating: swr.isValidating,
     refresh,
   }

@@ -16,6 +16,7 @@ import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { AnalyticsScreen } from "@/components/screens/analytics-screen"
 import {
   PageHeader, Panel, PanelHeader, StatCard, Sparkline, Meter, TableHead, EmptyState, Segmented, Avatar,
+  ChartSkeleton, TableSkeleton,
 } from "@/components/ui/dashboard"
 
 const TT = {
@@ -55,7 +56,7 @@ export function OverviewScreen() {
   const { prefs, setPrefs } = useUIPreferences()
   const { chartRange, companyRange, agentRange, jobRange } = prefs
 
-  const { data, isLoading: loading, refresh: fetchData } = useApi<any>(
+  const { data, isLoading: loading, isSwitching: switching, refresh: fetchData } = useApi<any>(
     `/api/overview?chartRange=${chartRange}&companyRange=${companyRange}&agentRange=${agentRange}&jobRange=${jobRange}`,
   )
 
@@ -155,7 +156,7 @@ export function OverviewScreen() {
               <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
                 <div>
                   <p className="text-[13px] font-medium text-muted-foreground">Applications</p>
-                  <p className="num mt-1 text-2xl font-semibold">{rangeTotal.toLocaleString()}</p>
+                  {switching ? <div className="mt-2 h-7 w-24 rounded bg-muted shimmer" /> : <p className="num mt-1 text-2xl font-semibold">{rangeTotal.toLocaleString()}</p>}
                   <p className="mt-0.5 text-xs text-muted-foreground">in the {RANGE_LABEL[chartRange] ?? chartRange}</p>
                 </div>
                 <Segmented
@@ -165,6 +166,7 @@ export function OverviewScreen() {
                 />
               </div>
               <div className="h-64 px-2 pb-4 pt-6">
+                {switching ? <ChartSkeleton /> : (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={applicationsChart} margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                     <defs>
@@ -180,6 +182,7 @@ export function OverviewScreen() {
                     <Area type="monotone" dataKey="count" name="Applications" stroke="var(--chart-1)" strokeWidth={2} fill="url(#ag)" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} />
                   </AreaChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </Panel>
 
@@ -265,7 +268,7 @@ export function OverviewScreen() {
                     options={[{ value: "24h", label: "24H" }, { value: "7d", label: "7D" }, { value: "30d", label: "30D" }]} />
                 }
               />
-              {topCompanies.length > 0 ? (
+              {switching ? <TableSkeleton rows={5} /> : topCompanies.length > 0 ? (
                 <div className="divide-y divide-border">
                   {topCompanies.map((c: any, i: number) => (
                     <div key={i} className="flex flex-col gap-2 px-5 py-3">
@@ -349,7 +352,7 @@ export function OverviewScreen() {
                 actions={<Segmented value={jobRange} onChange={(v) => setPrefs({ jobRange: v })}
                   options={[{ value: "24h", label: "24H" }, { value: "7d", label: "7D" }, { value: "30d", label: "30D" }]} />}
               />
-              {jobInsights && jobInsights.length > 0 ? (
+              {switching ? <TableSkeleton rows={5} /> : jobInsights && jobInsights.length > 0 ? (
                 <div className="divide-y divide-border">
                   {jobInsights.map((j: any, i: number) => (
                     <div key={j.jobId} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/40">
@@ -378,7 +381,7 @@ export function OverviewScreen() {
                 actions={<Segmented value={agentRange} onChange={(v) => setPrefs({ agentRange: v })}
                   options={[{ value: "1h", label: "1H" }, { value: "24h", label: "24H" }, { value: "7d", label: "7D" }]} />}
               />
-              {activeAgents.length > 0 ? (
+              {switching ? <TableSkeleton rows={4} /> : activeAgents.length > 0 ? (
                 <div className="divide-y divide-border">
                   {activeAgents.map((a: any) => (
                     <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/40">

@@ -140,16 +140,15 @@ export function DesktopNotifier() {
 
   useEffect(() => {
     if (!active) return
+    // With push working, the admin-notify cron already announces signups,
+    // upgrades and health changes; polling them here too only repeats them and
+    // adds load. Fallback polling also pauses while the tab is hidden.
+    if (pushOk) return
     void pollHealth()
-    const b = setInterval(pollHealth, HEALTH_EVERY_MS)
-    // With push working the server announces signups/upgrades; polling them
-    // here too would just repeat them.
-    let a: ReturnType<typeof setInterval> | undefined
-    if (!pushOk) {
-      void pollEvents()
-      a = setInterval(pollEvents, EVENTS_EVERY_MS)
-    }
-    return () => { clearInterval(b); if (a) clearInterval(a) }
+    void pollEvents()
+    const b = setInterval(() => { if (!document.hidden) void pollHealth() }, HEALTH_EVERY_MS)
+    const a = setInterval(() => { if (!document.hidden) void pollEvents() }, EVENTS_EVERY_MS)
+    return () => { clearInterval(b); clearInterval(a) }
   }, [active, pushOk, pollEvents, pollHealth])
 
   const onClick = async () => {
