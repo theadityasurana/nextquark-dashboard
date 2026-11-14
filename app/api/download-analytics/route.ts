@@ -9,6 +9,15 @@ const PAGE = 1000
 const MAX_ROWS = 5000
 const MAX_ROWS_ALL_TIME = 30000
 
+async function fetchExactCounts(supabase: ReturnType<typeof createAdminClient>, since30: string, since7: Date, todayStart: Date) {
+  const [r30, r7, rToday] = await Promise.all([
+    supabase.from("download_link_visits").select("*", { count: "exact", head: true }).gt("created_at", since30),
+    supabase.from("download_link_visits").select("*", { count: "exact", head: true }).gt("created_at", since7.toISOString()),
+    supabase.from("download_link_visits").select("*", { count: "exact", head: true }).gte("created_at", todayStart.toISOString()),
+  ])
+  return { d30: r30.count ?? 0, d7: r7.count ?? 0, today: rToday.count ?? 0 }
+}
+
 type VisitRow = {
   id: string
   created_at: string
@@ -101,7 +110,8 @@ async function load(request: Request) {
       from += PAGE
     }
 
-    const kpis = { today: 0, d7: 0, d30: 0, total: rows.length, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
+    const exactCounts = await fetchExactCounts(supabase, since30, since7, todayStart)
+    const kpis = { today: exactCounts.today, d7: exactCounts.d7, d30: exactCounts.d30, total: allTime ? rows.length : exactCounts.d30, gps_pins: 0, ip_pins: 0, gps_geocode: 0, gps_only: 0, ip_place: 0 }
     const pins: DownloadVisitPin[] = []
     const clusterMap = new Map<string, { lat: number; lng: number; scans: number; sample_campaign: string | null }>()
     const posterMap = new Map<string, { scans: number; first_seen: string; last_seen: string }>()
@@ -119,9 +129,6 @@ async function load(request: Request) {
 
     for (const row of rows) {
       const created = new Date(row.created_at)
-      if (created >= todayStart) kpis.today++
-      if (created >= since7) kpis.d7++
-      if (row.created_at > since30) kpis.d30++
 
       hourCounts[hourInIst(row.created_at)]++
 

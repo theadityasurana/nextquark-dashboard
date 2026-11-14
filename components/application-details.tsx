@@ -53,6 +53,20 @@ export function ApplicationDetails({
   const [dbLogs, setDbLogs] = useState<LogEntry[]>([])
   const [tab, setTab] = useState<DetailTab>("run")
   const [savingStatus, setSavingStatus] = useState(false)
+  const [fullProfile, setFullProfile] = useState<LiveApplicationQueue | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  useEffect(() => {
+    if (tab !== "profile" || fullProfile) return
+    setProfileLoading(true)
+    fetch(`/api/live-queue/${application.id}`)
+      .then(r => r.json())
+      .then(data => { if (data && !data.error) setFullProfile(data) })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false))
+  }, [tab, application.id, fullProfile])
+
+  const app = (tab === "profile" && fullProfile) ? fullProfile : application
   
   // Fetch logs from database
   useEffect(() => {
@@ -328,8 +342,265 @@ export function ApplicationDetails({
 
       {/* ── Profile tab ── */}
       <div className={`px-4 sm:px-6 py-4 sm:py-5 flex-col gap-5 ${tab === "profile" ? "flex" : "hidden"}`}>
+        {profileLoading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        ) : (
+        <>
         {/* User Header */}
         <div className="rounded-lg border border-border p-5 bg-foreground/5">
+          <div className="text-center mb-4 pb-3 border-b border-border">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary mx-auto mb-2">
+              {application.first_name[0]}{application.last_name[0]}
+            </div>
+            <h3 className="text-lg font-bold">{fullName}</h3>
+            <p className="text-sm text-muted-foreground">{app.headline}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {app.phone} | {app.location}
+            </p>
+            <div className="flex items-center justify-center gap-3 mt-2">
+              {app.linkedin_url && (
+                <a href={app.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                  {app.linkedin_url}
+                </a>
+              )}
+              {app.github_url && (
+                <a href={app.github_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                  {app.github_url}
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Professional Summary */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-1.5">Professional Summary</h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">{app.bio}</p>
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Personal Information */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Personal Information</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-1.5 text-sm">
+              <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" /> Gender</span>
+              <span className="font-medium sm:col-span-2">{app.gender || 'Not specified'}</span>
+              <span className="text-muted-foreground flex items-center gap-1"><Heart className="h-3 w-3" /> Ethnicity</span>
+              <span className="font-medium sm:col-span-2">{app.ethnicity}</span>
+              <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Disability</span>
+              <span className="font-medium sm:col-span-2">{app.disability_status}</span>
+              <span className="text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Veteran Status</span>
+              <span className="font-medium sm:col-span-2">{app.veteran_status}</span>
+              {app.work_authorization_status && (
+                <>
+                  <span className="text-muted-foreground flex items-center gap-1"><FileText className="h-3 w-3" /> Work Authorization</span>
+                  <span className="font-medium sm:col-span-2">{app.work_authorization_status}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Work Experience */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Work Experience</h4>
+            {(app.experience ?? []).map((exp) => (
+              <div key={exp.id} className="mb-3">
+                <div className="flex justify-between">
+                  <span className="text-xs font-semibold">{exp.title} - {exp.company}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {exp.startDate} - {exp.isCurrent ? 'Present' : exp.endDate}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{exp.description}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {exp.jobLocation} • {exp.employmentType} • {exp.workMode}
+                </p>
+                {exp.skills?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {exp.skills.map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-[9px] h-4">{skill}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Education */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Education</h4>
+            {(app.education ?? []).map((edu) => (
+              <div key={edu.id} className="mb-2">
+                <div className="flex justify-between">
+                  <span className="text-xs font-semibold">{edu.degree} in {edu.field} - {edu.institution}</span>
+                  <span className="text-[10px] text-muted-foreground">{edu.startDate} - {edu.endDate}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Certifications */}
+          {(app.certifications ?? []).length > 0 && (
+            <>
+              <div className="mb-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Certifications</h4>
+                {(app.certifications ?? []).map((cert) => (
+                  <div key={cert.id} className="mb-3 rounded-lg bg-accent/30 p-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-xs font-semibold">{cert.name}</span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{cert.issuingOrganization}</p>
+                      </div>
+                      {cert.credentialUrl && (
+                        <a href={cert.credentialUrl} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="ghost" className="h-6 text-[10px]">
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                    {cert.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {cert.skills.map((skill) => (
+                          <Badge key={skill} variant="outline" className="text-[9px] h-4">{skill}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Separator className="my-3" />
+            </>
+          )}
+
+          {/* Achievements */}
+          {(app.achievements ?? []).length > 0 && (
+            <>
+              <div className="mb-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Achievements</h4>
+                {(app.achievements ?? []).map((ach) => (
+                  <div key={ach.id} className="mb-3 rounded-lg bg-accent/30 p-3">
+                    <div className="flex items-start justify-between">
+                      <span className="text-xs font-semibold">{ach.title}</span>
+                      <span className="text-[10px] text-muted-foreground">{ach.date}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{ach.issuer}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">{ach.description}</p>
+                  </div>
+                ))}
+              </div>
+              <Separator className="my-3" />
+            </>
+          )}
+
+          {/* Job Preferences */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Job Preferences</h4>
+            <div className="space-y-2">
+              <div>
+                <span className="text-[10px] text-muted-foreground">Job Types:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(app.job_preferences ?? []).map((pref) => (
+                    <Badge key={pref} variant="secondary" className="text-[9px] h-4">{pref}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground">Work Mode:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(app.work_mode_preferences ?? []).map((mode) => (
+                    <Badge key={mode} variant="secondary" className="text-[9px] h-4">{mode}</Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Salary Expectations */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Salary Expectations</h4>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">
+                {app.salary_currency} {app.salary_min ? `${app.salary_min.toLocaleString()} - ` : ''}
+                {app.salary_max?.toLocaleString() ?? 'N/A'}
+              </span>
+            </div>
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Skills */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-2">Skills</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {((app.top_skills?.length > 0 ? app.top_skills : app.skills) ?? []).map((skill) => (
+                <Badge key={skill} variant="secondary" className="text-[10px] bg-accent text-accent-foreground">{skill}</Badge>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="my-3" />
+
+          {/* Application Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            {[
+              { label: "Total Apps", value: stats.totalApps },
+              { label: "Successful", value: stats.successful },
+              { label: "Failed", value: stats.failed },
+              { label: "In Progress", value: stats.inProgress },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg bg-accent/50 p-3 text-center">
+                <p className="text-lg font-bold">{s.value}</p>
+                <p className="text-[10px] text-muted-foreground">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Resume Download */}
+        <div className="rounded-lg border border-border p-5 bg-foreground/5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" /> Resume
+            </h4>
+            <a href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/resumes/${app.resume_url}`} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="text-xs gap-1.5 h-7">
+                <FileText className="h-3 w-3" /> Download PDF
+              </Button>
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">Resume will be automatically uploaded during application process</p>
+        </div>
+
+        {/* Cover Letter */}
+        {app.cover_letter && (
+          <div className="rounded-lg border border-border p-5">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" /> Cover Letter
+            </h4>
+            <div className="rounded-lg bg-accent/30 p-4">
+              {app.cover_letter.split('\n').map((line, i) => (
+                <p key={i} className={`text-sm leading-relaxed text-muted-foreground ${line === '' ? 'h-3' : ''}`}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+        </>
+        )}
+      </div>
           <div className="text-center mb-4 pb-3 border-b border-border">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary mx-auto mb-2">
               {application.first_name[0]}{application.last_name[0]}

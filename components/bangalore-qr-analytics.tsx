@@ -338,6 +338,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         </div>
       </div>
 
+      {range !== "all" && (
       <ChartCard
         title="Global scan map"
         sub="Auto-zooms to your data. Heat = clusters; pins: green = GPS, purple = IP."
@@ -381,6 +382,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
           }}
         />
       </ChartCard>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Scans by hour (IST)" sub="when people open the download page">
