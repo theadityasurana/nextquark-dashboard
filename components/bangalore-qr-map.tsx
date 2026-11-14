@@ -46,6 +46,7 @@ export function BangaloreQrMap({
   const elRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import("leaflet").Map | null>(null)
   const layersRef = useRef<import("leaflet").LayerGroup | null>(null)
+  const tilesRef = useRef<import("leaflet").TileLayer | null>(null)
   const drawPinsRef = useRef<(() => void) | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
@@ -77,7 +78,7 @@ export function BangaloreQrMap({
         } catch {
           /* OSM fallback */
         }
-        L.tileLayer(tiles.url, {
+        tilesRef.current = L.tileLayer(tiles.url, {
           attribution: tiles.attribution,
           subdomains: tiles.subdomains,
           maxZoom: tiles.maxZoom,
@@ -134,14 +135,17 @@ export function BangaloreQrMap({
         }
       } else {
         // Every pin is drawn as its own tiny dot. Pins that share a spot on
-        // screen (same city or IP location) fan out in a small spiral so all
-        // of them are visible even fully zoomed out; redrawn on each zoom.
+        // screen (same city or IP location) are packed into a small disc on
+        // that spot. The disc is capped (it grows a little as you zoom in), so
+        // thousands of Bangalore scans read as one dense blob over Bangalore
+        // rather than a ring spreading across the region. Redrawn on zoom.
         const map = mapRef.current!
         const drawPins = () => {
           layers.clearLayers()
           const zoom = map.getZoom()
           const screen = pins.map((p) => map.project([p.lat, p.lng], zoom))
-          const spread = spreadPins(screen.map((pt) => ({ x: pt.x, y: pt.y })), 8, 5)
+          const maxRadius = 6 + zoom * 1.25 // ≈ 8.5px world view → ≈ 21px street level
+          const spread = spreadPins(screen.map((pt) => ({ x: pt.x, y: pt.y })), 8, 4, maxRadius)
           pins.forEach((pin, i) => {
             const at = map.unproject([spread[i].x, spread[i].y], zoom)
             addPin(pin, at)
@@ -164,11 +168,13 @@ export function BangaloreQrMap({
               ? `<br/><span style="opacity:.85">Approximate (network)</span>`
               : ""
           L.circleMarker(at, {
-            radius: 2.5,
+            radius: 2,
             color: pin.location_source === "gps" ? "#065f46" : "#4c1d95",
-            weight: 0.6,
+            weight: 0.4,
             fillColor: pin.location_source === "gps" ? "#10b981" : "#8b5cf6",
-            fillOpacity: 0.95,
+            // Slightly translucent so overlapping dots build up colour: denser
+            // spots look darker instead of every blob looking the same.
+            fillOpacity: 0.7,
           })
             .bindTooltip(
               `<div style="font-size:12px"><strong>${escapeHtml(loc)}</strong>${placeLineHtml}${approx}${campaignLine}<br/>${escapeHtml(formatIst(pin.created_at))} IST<br/>${escapeHtml(pin.device_type || "unknown")}</div>`,
@@ -208,6 +214,7 @@ export function BangaloreQrMap({
       mapRef.current?.remove()
       mapRef.current = null
       layersRef.current = null
+      tilesRef.current = null
     }
   }, [])
 
@@ -236,6 +243,27 @@ export function BangaloreQrMap({
     }
   }, [])
 
+  // Whenever the map box changes size (entering/leaving full screen, window
+  // resize, sidebar collapse) Leaflet has to re-measure and fetch tiles for the
+  // new area, otherwise only the vector dots show on a blank background.
+  useEffect(() => {
+    const el = elRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    let frame = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const map = mapRef.current
+        if (!map || el.clientWidth === 0 || el.clientHeight === 0) return
+        map.invalidateSize({ animate: false })
+        tilesRef.current?.redraw()
+        drawPinsRef.current?.()
+      })
+    })
+    ro.observe(el)
+    return () => { cancelAnimationFrame(frame); ro.disconnect() }
+  }, [])
+
   useEffect(() => {
     document.body.style.overflow = fullscreen ? "hidden" : ""
     // Leaflet must re-measure after the container finishes resizing.
@@ -243,6 +271,7 @@ export function BangaloreQrMap({
     // (native fullscreen animation done) so tiles always load.
     const invalidate = () => {
       mapRef.current?.invalidateSize({ animate: false })
+      tilesRef.current?.redraw()
       drawPinsRef.current?.()
     }
     invalidate()
@@ -255,7 +284,7 @@ export function BangaloreQrMap({
   return (
     <div
       ref={wrapRef}
-      className={fullscreen ? "fixed inset-0 z-[2000] bg-background" : "relative"}
+      className={fullscreen ? "fixed inset-0 z-[2000] h-[100dvh] w-screen bg-background" : "relative"}
     >
       <div
         ref={elRef}

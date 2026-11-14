@@ -1,25 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendEmail, getTemplate, renderTemplate, getUserEmails } from '@/lib/email-service'
 
-async function sendNewUserPushNotification(firstName: string, email: string) {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    await fetch(`${baseUrl}/api/notifications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'send',
-        title: 'New User Joined! 🎉',
-        message: `${firstName || email} just signed up on NextQuark`,
-        url: '/users',
-        tag: 'new-user',
-      }),
-    })
-  } catch {
-    // Non-critical — don't fail the webhook
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json()
@@ -32,8 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No email found' }, { status: 400 })
     }
 
-    // Fire push notification to admin (non-blocking)
-    sendNewUserPushNotification(record.first_name || '', record.email)
+    // Admin "new signup" push is sent by /api/cron/admin-notify (every minute).
 
     const template = await getTemplate('welcome')
     if (!template) {

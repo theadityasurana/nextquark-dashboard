@@ -1,4 +1,4 @@
-const CACHE_NAME = 'iris-v2'
+const CACHE_NAME = 'iris-v3'
 
 const STATIC_ASSETS = [
   '/',
@@ -40,14 +40,17 @@ self.addEventListener('fetch', (event) => {
 // Push notification handler
 self.addEventListener('push', (event) => {
   if (!event.data) return
-  const data = event.data.json()
+  let data
+  try { data = event.data.json() } catch { data = { title: 'Iris', body: event.data.text() } }
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
+    self.registration.showNotification(data.title || 'Iris', {
+      body: data.body || data.message || '',
       icon: '/applogo.png',
       badge: '/applogo.png',
       tag: data.tag || 'iris',
-      data: data.url ? { url: data.url } : undefined,
+      // Outage alerts stay on screen until dismissed.
+      requireInteraction: !!data.urgent,
+      data: { url: data.url || '/' },
     })
   )
 })

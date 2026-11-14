@@ -19,6 +19,21 @@ describe("spreadPins", () => {
     expect(Math.max(...out.map((p) => dist(p, { x: 400, y: 300 })))).toBeLessThan(60)
   })
 
+  it("packs thousands of pins on one spot inside maxRadius instead of a huge ring", () => {
+    const pts = Array.from({ length: 3000 }, () => ({ x: 400, y: 300 }))
+    const out = spreadPins(pts, 8, 5, 12)
+    const far = Math.max(...out.map((p) => dist(p, { x: 400, y: 300 })))
+    expect(far).toBeLessThanOrEqual(12.0001)
+    // still a filled blob, not every dot stacked on the centre
+    expect(far).toBeGreaterThan(10)
+  })
+
+  it("small groups keep their normal spacing under maxRadius", () => {
+    const pts = Array.from({ length: 4 }, () => ({ x: 0, y: 0 }))
+    const capped = spreadPins(pts, 8, 5, 12)
+    expect(capped).toEqual(spreadPins(pts, 8, 5))
+  })
+
   it("keeps the input order, one output per input", () => {
     const pts = [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 500, y: 500 }]
     const out = spreadPins(pts)

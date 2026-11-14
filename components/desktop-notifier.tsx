@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Bell, BellOff, BellRing } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ensurePushSubscription, removePushSubscription } from "@/lib/push-client"
 
 /**
- * Native macOS/desktop notifications while the dashboard is open in Chrome
- * (any tab, including a background one):
+ * Native macOS/desktop notifications through Chrome:
  *   - a new user signs up
  *   - a user starts a paid plan
  *   - Supabase health turns degraded / down (and when it recovers)
  *
- * Polls rather than relying on web push: push needs persisted subscriptions
- * and a server trigger, and a Supabase outage can't announce itself.
+ * Primary path is web push from /api/cron/admin-notify (pg_cron, every
+ * minute), so alerts arrive with the dashboard closed, as long as Chrome is
+ * running. If push can't be set up, this falls back to polling from the open
+ * tab. Health is polled from the tab too, which also catches the case where
+ * the dashboard API itself is unreachable; same tag, so no duplicates.
  */
 
 const EVENTS_EVERY_MS = 60_000
@@ -61,6 +64,7 @@ async function show(title: string, body: string, opts: { tag: string; url: strin
 export function DesktopNotifier() {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default")
   const [muted, setMuted] = useState(false)
+  const [pushOk, setPushOk] = useState(false)
   const healthFailures = useRef(0)
 
   useEffect(() => {
@@ -74,6 +78,14 @@ export function DesktopNotifier() {
   }, [])
 
   const active = permission === "granted" && !muted
+
+  // Keep the server's copy of this browser's push subscription fresh.
+  useEffect(() => {
+    if (!active) { setPushOk(false); return }
+    let cancelled = false
+    void ensurePushSubscription().then((ok) => { if (!cancelled) setPushOk(ok) })
+    return () => { cancelled = true }
+  }, [active])
 
   const pollEvents = useCallback(async () => {
     const cursor = lsGet(K_CURSOR)
@@ -128,12 +140,17 @@ export function DesktopNotifier() {
 
   useEffect(() => {
     if (!active) return
-    void pollEvents()
     void pollHealth()
-    const a = setInterval(pollEvents, EVENTS_EVERY_MS)
     const b = setInterval(pollHealth, HEALTH_EVERY_MS)
-    return () => { clearInterval(a); clearInterval(b) }
-  }, [active, pollEvents, pollHealth])
+    // With push working the server announces signups/upgrades; polling them
+    // here too would just repeat them.
+    let a: ReturnType<typeof setInterval> | undefined
+    if (!pushOk) {
+      void pollEvents()
+      a = setInterval(pollEvents, EVENTS_EVERY_MS)
+    }
+    return () => { clearInterval(b); if (a) clearInterval(a) }
+  }, [active, pushOk, pollEvents, pollHealth])
 
   const onClick = async () => {
     if (permission === "unsupported" || permission === "denied") return
@@ -149,6 +166,7 @@ export function DesktopNotifier() {
     const next = !muted
     setMuted(next)
     lsSet(K_MUTED, next ? "1" : "0")
+    if (next) await removePushSubscription() // pause = stop server push too
     if (!next) await show("Notifications on", "Signups, paid upgrades and Supabase health alerts are back on.", { tag: "notify-test", url: "/" })
   }
 
@@ -158,7 +176,8 @@ export function DesktopNotifier() {
     permission === "denied" ? "Notifications blocked: allow them for this site in Chrome's site settings"
     : permission === "default" ? "Turn on desktop notifications"
     : muted ? "Desktop notifications paused (click to resume)"
-    : "Desktop notifications on (click to pause)"
+    : pushOk ? "Desktop notifications on, even with this tab closed (click to pause)"
+    : "Desktop notifications on while this tab is open (click to pause)"
 
   const Icon = permission === "granted" && !muted ? BellRing : permission === "default" ? Bell : BellOff
 

@@ -15,7 +15,12 @@ export interface Px {
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)) // ≈ 137.5°
 
-export function spreadPins(points: Px[], cell = 8, spacing = 5): Px[] {
+/**
+ * `maxRadius` caps how far any pin moves from its group's centre. Big groups
+ * (thousands of scans in one city) get packed tighter so they read as a dense
+ * blob on that spot instead of a ring spilling across the region.
+ */
+export function spreadPins(points: Px[], cell = 8, spacing = 5, maxRadius = Infinity): Px[] {
   const buckets = new Map<string, number[]>()
   points.forEach((p, i) => {
     const key = `${Math.round(p.x / cell)}:${Math.round(p.y / cell)}`
@@ -29,8 +34,9 @@ export function spreadPins(points: Px[], cell = 8, spacing = 5): Px[] {
     if (idx.length < 2) continue
     const cx = idx.reduce((s, i) => s + points[i].x, 0) / idx.length
     const cy = idx.reduce((s, i) => s + points[i].y, 0) / idx.length
+    const step = Math.min(spacing, maxRadius / Math.sqrt(idx.length - 1))
     idx.forEach((pointIndex, k) => {
-      const r = spacing * Math.sqrt(k)
+      const r = step * Math.sqrt(k)
       const a = k * GOLDEN_ANGLE
       out[pointIndex] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }
     })

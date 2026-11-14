@@ -340,7 +340,10 @@
 
   /* Smooth fade-in animation */
   .animate-fade-in {
-    animation: fadeIn 400ms ease-out both;
+    /* backwards, not both: "both" leaves transform applied after the
+       animation, which makes this wrapper the containing block for every
+       position:fixed child (full-screen map overlay ends up page-sized). */
+    animation: fadeIn 400ms ease-out backwards;
   }
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }

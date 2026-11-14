@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
+import { sendAdminPush } from "@/lib/admin-push"
 
 function getAdminClient() {
   return createClient(
@@ -38,19 +39,11 @@ export async function GET(request: NextRequest) {
   if (updatedCount > 0) parts.push(`${updatedCount} updated`)
   if (deletedCount > 0) parts.push(`${deletedCount} deleted`)
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-  const res = await fetch(`${baseUrl}/api/notifications`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "send",
-      title: "Job Activity Summary",
-      message: `Last 24h: ${parts.join(", ")}`,
-      url: "/jobs",
-      tag: "job-summary",
-    }),
+  const data = await sendAdminPush({
+    title: "Job Activity Summary",
+    body: `Last 24h: ${parts.join(", ")}`,
+    url: "/jobs",
+    tag: "job-summary",
   })
-
-  const data = await res.json()
   return NextResponse.json({ ok: true, ...data })
 }

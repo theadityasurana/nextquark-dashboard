@@ -1,48 +1,46 @@
 import { NextRequest, NextResponse } from "next/server"
-import webpush from "web-push"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { sendAdminPush } from "@/lib/admin-push"
 
-// In-memory store (persists across requests in the same process)
-// For production, store in Supabase instead
-const subscriptions: Set<string> = new Set()
-
-function initVapid() {
-  webpush.setVapidDetails(
-    process.env.VAPID_EMAIL!,
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!
-  )
-}
-
+/**
+ * Admin browser push subscriptions, persisted in admin_push_subscriptions so
+ * they survive serverless restarts (the old in-memory Set lost them).
+ */
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const body = await req.json().catch(() => ({}))
+  const supabase = createAdminClient()
 
-  // Subscribe
   if (body.action === "subscribe") {
-    initVapid()
-    subscriptions.add(JSON.stringify(body.subscription))
+    const sub = body.subscription
+    if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+      return NextResponse.json({ error: "Invalid subscription" }, { status: 400 })
+    }
+    const { error } = await supabase.from("admin_push_subscriptions").upsert(
+      {
+        endpoint: sub.endpoint,
+        subscription: { endpoint: sub.endpoint, keys: sub.keys },
+        user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "endpoint" },
+    )
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   }
 
-  // Send notification (called internally)
+  if (body.action === "unsubscribe") {
+    if (!body.endpoint) return NextResponse.json({ error: "endpoint required" }, { status: 400 })
+    await supabase.from("admin_push_subscriptions").delete().eq("endpoint", body.endpoint)
+    return NextResponse.json({ ok: true })
+  }
+
+  // Sending to every admin browser is server-side only.
   if (body.action === "send") {
-    initVapid()
-    const { title, message, url, tag } = body
-    const payload = JSON.stringify({ title, body: message, url, tag })
-    const results = await Promise.allSettled(
-      Array.from(subscriptions).map(async (sub) => {
-        try {
-          await webpush.sendNotification(JSON.parse(sub), payload)
-        } catch (err: any) {
-          // Remove expired/invalid subscriptions
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            subscriptions.delete(sub)
-          }
-          throw err
-        }
-      })
-    )
-    const sent = results.filter((r) => r.status === "fulfilled").length
-    return NextResponse.json({ ok: true, sent, total: subscriptions.size })
+    if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const result = await sendAdminPush({ title: body.title, body: body.message ?? body.body ?? "", url: body.url, tag: body.tag })
+    return NextResponse.json({ ok: true, ...result })
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 })
