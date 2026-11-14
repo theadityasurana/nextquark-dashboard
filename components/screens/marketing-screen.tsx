@@ -85,7 +85,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
+    <div className="min-w-0 panel overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-border">
         <p className="text-sm font-medium">{title}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
@@ -97,7 +97,7 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+    <div className="min-w-0 panel p-4">
       <p className="text-xs font-medium text-muted-foreground mb-3">{label}</p>
       <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
@@ -259,7 +259,7 @@ export function MarketingScreen() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Marketing</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Marketing</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">User acquisition, global download QR, signup trends & onboarding funnel</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">

@@ -79,7 +79,7 @@ export function UsersScreen() {
     <div className="flex flex-col gap-4 sm:gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Users</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage registered users from Supabase Authentication and app data</p>
         </div>
         <div className="flex items-center gap-2">

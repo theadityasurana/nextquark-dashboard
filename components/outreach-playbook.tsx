@@ -37,7 +37,7 @@ export function ReplyPlaybook({ initialName = "" }: { initialName?: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-lg border border-border bg-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="panel p-4 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <p className="text-sm font-medium">Find what they replied, copy the follow-up, then follow the arrow to the next step.</p>
           <p className="text-xs text-muted-foreground mt-1">

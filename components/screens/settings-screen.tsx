@@ -131,7 +131,7 @@ export function SettingsScreen() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage automation provider and API credentials</p>
       </div>
 

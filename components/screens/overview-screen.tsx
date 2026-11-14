@@ -1,54 +1,52 @@
 "use client"
 
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { StatusBadge } from "@/components/status-badge"
 import {
-  RefreshCw, TrendingUp, CheckCircle2, XCircle, Clock, Activity,
-  Plus, Minus, RotateCcw
+  RefreshCw, CheckCircle2, Clock, Activity, ArrowUpRight, Building2, Users, Briefcase,
+  Bot, Globe, DatabaseZap, Inbox, Target,
 } from "lucide-react"
+import Link from "next/link"
 import { SystemHealthPanel } from "@/components/system-health-panel"
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { useState } from "react"
 import { useApi } from "@/lib/api-cache"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AnalyticsScreen } from "@/components/screens/analytics-screen"
+import {
+  PageHeader, Panel, PanelHeader, StatCard, Sparkline, Meter, TableHead, EmptyState, Segmented, Avatar,
+} from "@/components/ui/dashboard"
 
 const TT = {
   backgroundColor: "var(--popover)",
   border: "1px solid var(--border)",
-  borderRadius: "6px",
-  fontSize: 11,
+  borderRadius: "8px",
+  fontSize: 12,
   color: "var(--popover-foreground)",
-  padding: "6px 10px",
+  padding: "8px 12px",
+  boxShadow: "var(--shadow-pop)",
 }
 
-function Kpi({ label, value, sub, icon: Icon }: {
-  label: string; value: string | number; sub: string
-  icon: React.ElementType; accent?: string
-}) {
+const RANGE_LABEL: Record<string, string> = { "1h": "last hour", "24h": "last 24 hours", "7d": "last 7 days", "30d": "last 30 days" }
+
+function greeting() {
+  const h = new Date().getHours()
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"
+}
+
+function OverviewSkeleton() {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+    <div className="flex flex-col gap-6">
+      <div className="h-14 w-72 rounded-lg bg-muted/60 shimmer" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-36 shimmer" />)}
       </div>
-      <div>
-        <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">
-          {typeof value === "number" ? value.toLocaleString() : value}
-        </p>
-        <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="panel h-80 lg:col-span-2 shimmer" />
+        <div className="panel h-80 shimmer" />
       </div>
     </div>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-medium text-muted-foreground/60 mb-3">{children}</p>
   )
 }
 
@@ -63,347 +61,386 @@ export function OverviewScreen() {
 
   const handleRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false) }
 
-  if (loading || !data) return (
-    <div className="flex items-center justify-center h-96">
-      <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-    </div>
-  )
+  if (loading || !data) return <OverviewSkeleton />
 
   const { stats, recentApps, topCompanies, agents, portalHealth, userActivity, jobInsights, syncActivity, applicationsChart } = data
   const activeAgents = agents.filter((a: any) => a.status === "active")
+  const rangeTotal = (applicationsChart || []).reduce((n: number, p: any) => n + (p.count || 0), 0)
+  const resolved = stats.completedAll + stats.failedAll
+  const successRate = resolved > 0 ? (stats.completedAll / resolved) * 100 : 0
+  const todayResolved = (stats.completedToday ?? 0) + (stats.failedToday ?? 0)
+  const outcome = [
+    { name: "Completed", value: stats.completedAll, color: "var(--success)" },
+    { name: "Failed", value: stats.failedAll, color: "var(--destructive)" },
+    { name: "Other", value: Math.max(0, stats.totalAll - resolved), color: "var(--chart-1)" },
+  ].filter((o) => o.value > 0)
+  const maxCompanyApps = Math.max(1, ...topCompanies.map((c: any) => c.appsToday || 0))
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
 
   return (
     <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow={today}
+        title={`${greeting()}, Aditya`}
+        description="Here's what's happening across Iris today."
+        actions={
+          <>
+            <Button size="sm" variant="outline" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button size="sm" asChild className="gap-1.5">
+              <Link href="/queue">Open live queue <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+            </Button>
+          </>
+        }
+      />
 
-      {/* ── Page header ── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Real-time metrics and analytics</p>
-        </div>
-        <Button size="sm" variant="outline" className="gap-2 h-8 text-xs" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
-
-      {/* ── Tabs ── */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="bg-transparent border-0 p-0 h-auto gap-0 border-b border-border w-full rounded-none justify-start">
-          {["overview", "analytics"].map((t) => (
-            <TabsTrigger
-              key={t}
-              value={t}
-              className="rounded-none border-0 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-4 pb-3 pt-0 h-auto text-sm font-medium capitalize transition-colors"
-            >
-              {t}
-            </TabsTrigger>
-          ))}
+      <Tabs defaultValue="overview" className="w-full gap-6">
+        <TabsList>
+          <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
+          <TabsTrigger value="analytics" className="px-4">Analytics</TabsTrigger>
         </TabsList>
 
-        {/* ─────────────── Overview tab ─────────────── */}
-        <TabsContent value="overview" className="mt-8 flex flex-col gap-8">
+        <TabsContent value="overview" className="flex flex-col gap-6">
+
+          {/* KPI row */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Total applications"
+              value={stats.totalAll}
+              icon={Activity}
+              delta={`+${stats.totalToday.toLocaleString()} today`}
+              deltaTone={stats.totalToday > 0 ? "positive" : "neutral"}
+            >
+              <div className="h-10 -mx-1"><Sparkline id="total" data={applicationsChart} /></div>
+            </StatCard>
+            <StatCard
+              label="Submitted today"
+              value={stats.totalToday}
+              icon={Clock}
+              footnote={
+                <span className="flex items-center gap-3 tabular-nums">
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-success" />{(stats.completedToday ?? 0).toLocaleString()} completed</span>
+                  <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-destructive" />{(stats.failedToday ?? 0).toLocaleString()} failed</span>
+                </span>
+              }
+            >
+              <Meter value={stats.completedToday ?? 0} max={Math.max(1, todayResolved)} tone="success" />
+            </StatCard>
+            <StatCard
+              label="Success rate"
+              value={`${successRate.toFixed(1)}%`}
+              icon={Target}
+              delta={successRate >= 90 ? "Healthy" : successRate >= 75 ? "Watch" : "At risk"}
+              deltaTone={successRate >= 90 ? "positive" : successRate >= 75 ? "neutral" : "negative"}
+              footnote={`${stats.completedAll.toLocaleString()} of ${resolved.toLocaleString()} resolved runs`}
+            >
+              <Meter value={successRate} tone={successRate >= 90 ? "success" : successRate >= 75 ? "warning" : "destructive"} />
+            </StatCard>
+            <StatCard
+              label="Processing now"
+              value={stats.activeNow}
+              icon={Bot}
+              live={stats.activeNow > 0}
+              footnote={`${activeAgents.length} active agent${activeAgents.length === 1 ? "" : "s"} · ${Number(stats.totalJobs || 0).toLocaleString()} jobs indexed`}
+            >
+              <Meter value={activeAgents.length} max={Math.max(1, agents.length)} />
+            </StatCard>
+          </div>
+
+          {/* Chart + outcome mix */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Panel className="lg:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
+                <div>
+                  <p className="text-[13px] font-medium text-muted-foreground">Applications</p>
+                  <p className="num mt-1 text-2xl font-semibold">{rangeTotal.toLocaleString()}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">in the {RANGE_LABEL[chartRange] ?? chartRange}</p>
+                </div>
+                <Segmented
+                  value={chartRange}
+                  onChange={(v) => setPrefs({ chartRange: v })}
+                  options={[{ value: "1h", label: "1H" }, { value: "24h", label: "24H" }, { value: "7d", label: "7D" }, { value: "30d", label: "30D" }]}
+                />
+              </div>
+              <div className="h-64 px-2 pb-4 pt-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={applicationsChart} margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis dataKey="time" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} tickMargin={8} />
+                    <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
+                    <Tooltip contentStyle={TT} cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1, strokeDasharray: "3 3" }} />
+                    <Area type="monotone" dataKey="count" name="Applications" stroke="var(--chart-1)" strokeWidth={2} fill="url(#ag)" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+
+            <Panel className="flex flex-col">
+              <PanelHeader title="Outcome mix" description="All-time application results" />
+              <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-5">
+                <div className="relative h-40 w-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={outcome} dataKey="value" innerRadius={54} outerRadius={72} paddingAngle={2} stroke="none" startAngle={90} endAngle={-270}>
+                        {outcome.map((o) => <Cell key={o.name} fill={o.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={TT} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="num text-xl font-semibold">{successRate.toFixed(0)}%</span>
+                    <span className="text-[11px] text-muted-foreground">success</span>
+                  </div>
+                </div>
+                <div className="w-full space-y-2.5">
+                  {outcome.map((o) => (
+                    <div key={o.name} className="flex items-center justify-between text-[13px]">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <span className="h-2.5 w-2.5 rounded-sm" style={{ background: o.color }} />{o.name}
+                      </span>
+                      <span className="num font-medium">{o.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+          </div>
 
           <SystemHealthPanel />
 
-          {/* KPI row */}
-          <div>
-            <SectionLabel>Key Metrics</SectionLabel>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Kpi label="Total"     value={stats.totalAll}     sub="all time"     icon={Activity}     accent="bg-primary/10 text-primary" />
-              <Kpi label="Today"     value={stats.totalToday}   sub="applications" icon={Clock}        accent="bg-blue-500/10 text-blue-400" />
-              <Kpi label="Active"    value={stats.activeNow}    sub="processing"   icon={TrendingUp}   accent="bg-yellow-500/10 text-yellow-400" />
-              <Kpi label="Completed" value={stats.completedAll} sub="all time"     icon={CheckCircle2} accent="bg-green-500/10 text-green-400" />
-              <Kpi label="Failed"    value={stats.failedAll}    sub="all time"     icon={XCircle}      accent="bg-destructive/10 text-destructive" />
-            </div>
-          </div>
-
-          {/* Chart + Top Companies */}
-          <div>
-            <SectionLabel>Activity</SectionLabel>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-              {/* Chart — 2/3 width */}
-              <div className="lg:col-span-2 rounded-lg border border-border bg-card overflow-hidden">
-                <div className="flex items-center justify-between px-5 pt-4 pb-0">
-                  <p className="text-sm font-medium">Applications over time</p>
-                  <Select value={chartRange} onValueChange={(v) => setPrefs({ chartRange: v })}>
-                    <SelectTrigger className="h-7 w-28 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1h">Last hour</SelectItem>
-                      <SelectItem value="24h">Last 24h</SelectItem>
-                      <SelectItem value="7d">Last 7 days</SelectItem>
-                      <SelectItem value="30d">Last 30 days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="h-52 px-2 pb-3 pt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={applicationsChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={28} />
-                      <Tooltip contentStyle={TT} cursor={{ stroke: "oklch(0.35 0.01 265)", strokeWidth: 1 }} />
-                      <Area type="monotone" dataKey="count" stroke="var(--chart-1)" strokeWidth={1.5} fill="url(#ag)" dot={false} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Top Companies — 1/3 width */}
-              <div className="rounded-lg border border-border bg-card">
-                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border">
-                  <p className="text-sm font-medium">Top companies</p>
-                  <Select value={companyRange} onValueChange={(v) => setPrefs({ companyRange: v })}>
-                    <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="24h">24h</SelectItem>
-                      <SelectItem value="7d">7d</SelectItem>
-                      <SelectItem value="30d">30d</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="divide-y divide-border/40">
-                  {topCompanies.length > 0 ? topCompanies.map((c: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 px-5 py-3">
-                      <span className="text-[10px] text-muted-foreground/50 w-3 shrink-0 font-mono">{i + 1}</span>
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/60 text-[10px] font-semibold shrink-0">{c.logoInitial}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{c.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{c.appsToday} apps</p>
-                      </div>
-                      <span className="text-xs font-semibold text-green-400 shrink-0">{c.successRate}%</span>
-                    </div>
-                  )) : (
-                    <p className="text-xs text-muted-foreground px-5 py-8 text-center">No data for this range</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Live stream */}
-          <div>
-            <SectionLabel>Live stream</SectionLabel>
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
-                  </span>
-                  <span className="text-xs font-medium">Recent applications</span>
-                </div>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">last 10</Badge>
-              </div>
+          {/* Recent applications + top companies */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Panel className="lg:col-span-2">
+              <PanelHeader
+                title="Recent applications"
+                description="Latest 10 submissions across all users"
+                actions={<Button size="sm" variant="ghost" asChild className="h-7 gap-1 text-xs text-muted-foreground"><Link href="/queue">View all <ArrowUpRight className="h-3 w-3" /></Link></Button>}
+              />
               {recentApps.length > 0 ? (
-                <div className="divide-y divide-border/30">
-                  {recentApps.map((app: any) => (
-                    <div key={app.id} className="flex items-center gap-4 px-5 py-2.5 hover:bg-accent/20 transition-colors">
-                      <span className="text-[10px] text-muted-foreground/50 font-mono w-12 shrink-0 tabular-nums">
-                        {app.startedAt !== "-" ? app.startedAt : app.createdAt}
-                      </span>
-                      <span className="text-xs font-medium w-28 shrink-0 truncate">{app.userName}</span>
-                      <span className="text-[11px] text-muted-foreground flex-1 truncate hidden sm:block">
-                        {app.companyName} · {app.jobTitle}
-                      </span>
-                      <StatusBadge status={app.status} />
+                <>
+                  <TableHead columns={[
+                    { label: "Candidate", className: "w-44 shrink-0" },
+                    { label: "Company · Role", className: "flex-1 hidden sm:block" },
+                    { label: "Time", className: "w-24 shrink-0 hidden md:block text-right" },
+                    { label: "Status", className: "w-28 shrink-0 text-right" },
+                  ]} />
+                  <div className="divide-y divide-border">
+                    {recentApps.map((app: any) => (
+                      <div key={app.id} className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-muted/40">
+                        <div className="flex w-44 shrink-0 items-center gap-2.5 min-w-0">
+                          <Avatar name={app.userName} />
+                          <span className="truncate text-[13px] font-medium">{app.userName}</span>
+                        </div>
+                        <div className="hidden min-w-0 flex-1 sm:block">
+                          <p className="truncate text-[13px]">{app.companyName}</p>
+                          <p className="truncate text-xs text-muted-foreground">{app.jobTitle}</p>
+                        </div>
+                        <span className="hidden w-24 shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-muted-foreground md:block">
+                          {app.startedAt !== "-" ? app.startedAt : app.createdAt}
+                        </span>
+                        <div className="flex w-28 shrink-0 justify-end"><StatusBadge status={app.status} /></div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <EmptyState icon={Inbox} title="No recent applications" description="New submissions will appear here in real time." />
+              )}
+            </Panel>
+
+            <Panel>
+              <PanelHeader
+                title="Top companies"
+                description="By applications submitted"
+                actions={
+                  <Segmented value={companyRange} onChange={(v) => setPrefs({ companyRange: v })}
+                    options={[{ value: "24h", label: "24H" }, { value: "7d", label: "7D" }, { value: "30d", label: "30D" }]} />
+                }
+              />
+              {topCompanies.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {topCompanies.map((c: any, i: number) => (
+                    <div key={i} className="flex flex-col gap-2 px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted/60 text-[11px] font-semibold">{c.logoInitial}</div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium">{c.name}</p>
+                          <p className="text-[11px] text-muted-foreground tabular-nums">{c.appsToday} applications</p>
+                        </div>
+                        <span className="num shrink-0 text-[13px] font-medium text-success">{c.successRate}%</span>
+                      </div>
+                      <Meter value={c.appsToday} max={maxCompanyApps} className="h-1" />
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground px-5 py-8 text-center">No recent applications</p>
+                <EmptyState icon={Building2} title="No data for this range" />
               )}
-            </div>
+            </Panel>
           </div>
 
           {/* Portal health + Users */}
-          <div>
-            <SectionLabel>Infrastructure & Users</SectionLabel>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="px-5 py-3 border-b border-border">
-                  <p className="text-xs font-medium">Portal health</p>
-                </div>
-                {portalHealth && portalHealth.length > 0 ? (
-                  <div className="divide-y divide-border/30">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Panel>
+              <PanelHeader title="Portal health" description="Response time and failure rate by ATS" icon={Globe} />
+              {portalHealth && portalHealth.length > 0 ? (
+                <>
+                  <TableHead columns={[
+                    { label: "Portal", className: "flex-1" },
+                    { label: "Avg latency", className: "w-24 text-right" },
+                    { label: "Failure", className: "w-20 text-right" },
+                    { label: "Status", className: "w-24 text-right" },
+                  ]} />
+                  <div className="divide-y divide-border">
                     {portalHealth.map((p: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between px-5 py-2.5 hover:bg-accent/20 transition-colors">
-                        <div className="flex items-center gap-2.5">
-                          <StatusBadge status={p.status} />
-                          <span className="text-xs font-medium">{p.portalType}</span>
-                        </div>
-                        <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-                          <span className="tabular-nums">{p.avgResponseTime}ms avg</span>
-                          <span className={Number(p.failureRate) > 10 ? "text-destructive font-medium" : "tabular-nums"}>
-                            {p.failureRate}% fail
-                          </span>
-                        </div>
+                      <div key={i} className="flex items-center gap-4 px-5 py-2.5 transition-colors hover:bg-muted/40">
+                        <span className="flex-1 truncate text-[13px] font-medium">{p.portalType}</span>
+                        <span className="w-24 text-right text-xs tabular-nums text-muted-foreground">{p.avgResponseTime}ms</span>
+                        <span className={`w-20 text-right text-xs tabular-nums ${Number(p.failureRate) > 10 ? "font-medium text-destructive" : "text-muted-foreground"}`}>{p.failureRate}%</span>
+                        <div className="flex w-24 justify-end"><StatusBadge status={p.status} /></div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-5 py-8 text-center">No portal data yet</p>
-                )}
-              </div>
+                </>
+              ) : (
+                <EmptyState icon={Globe} title="No portal data yet" />
+              )}
+            </Panel>
 
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="px-5 py-3 border-b border-border">
-                  <p className="text-xs font-medium">Most active users</p>
-                </div>
-                {userActivity && userActivity.length > 0 ? (
-                  <div className="divide-y divide-border/30">
-                    {userActivity.map((u: any, i: number) => (
-                      <div key={u.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-accent/20 transition-colors">
-                        <span className="text-[10px] text-muted-foreground/50 font-mono w-3 shrink-0">{i + 1}</span>
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/60 text-[9px] font-semibold shrink-0">
-                          {u.name?.charAt(0) || "?"}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{u.name}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{u.email}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs font-semibold tabular-nums">{u.totalApps}</p>
-                          <p className="text-[10px] text-green-400 tabular-nums">{u.successRate}%</p>
-                        </div>
+            <Panel>
+              <PanelHeader title="Most active users" description="Ranked by total applications" icon={Users} />
+              {userActivity && userActivity.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {userActivity.map((u: any, i: number) => (
+                    <div key={u.id} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/40">
+                      <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{i + 1}</span>
+                      <Avatar name={u.name} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium">{u.name}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{u.email}</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-5 py-8 text-center">No user data yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Jobs + Agents */}
-          <div>
-            <SectionLabel>Jobs & Agents</SectionLabel>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                  <p className="text-xs font-medium">Most applied jobs</p>
-                  <Select value={jobRange} onValueChange={(v) => setPrefs({ jobRange: v })}>
-                    <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="24h">24h</SelectItem>
-                      <SelectItem value="7d">7d</SelectItem>
-                      <SelectItem value="30d">30d</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {jobInsights && jobInsights.length > 0 ? (
-                  <div className="divide-y divide-border/30">
-                    {jobInsights.map((j: any, i: number) => (
-                      <div key={j.jobId} className="flex items-center gap-3 px-5 py-2.5 hover:bg-accent/20 transition-colors">
-                        <span className="text-[10px] text-muted-foreground/50 font-mono w-3 shrink-0">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{j.title}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{j.company}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs font-semibold tabular-nums">{j.applications} apps</p>
-                          <p className="text-[10px] text-muted-foreground tabular-nums">{j.rightSwipes} swipes</p>
-                        </div>
+                      <div className="shrink-0 text-right">
+                        <p className="num text-[13px] font-semibold">{u.totalApps}</p>
+                        <p className="text-[11px] tabular-nums text-success">{u.successRate}%</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-5 py-8 text-center">No data for this range</p>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                  <p className="text-xs font-medium">AI agents</p>
-                  <div className="flex items-center gap-2">
-                    <Select value={agentRange} onValueChange={(v) => setPrefs({ agentRange: v })}>
-                      <SelectTrigger className="h-7 w-20 text-xs border-border bg-transparent"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1h">1h</SelectItem>
-                        <SelectItem value="24h">24h</SelectItem>
-                        <SelectItem value="7d">7d</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 tabular-nums">{activeAgents.length} active</Badge>
-                  </div>
-                </div>
-                {activeAgents.length > 0 ? (
-                  <div className="divide-y divide-border/30">
-                    {activeAgents.map((a: any) => (
-                      <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-accent/20 transition-colors">
-                        <span className="relative flex h-1.5 w-1.5 shrink-0">
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
-                        </span>
-                        <span className="text-xs font-mono font-medium w-20 shrink-0">{a.id}</span>
-                        <span className="text-[11px] text-muted-foreground truncate flex-1">{a.currentJob}</span>
-                        <StatusBadge status={a.status} />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-5 py-8 text-center">No active agents</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Sync activity */}
-          <div>
-            <SectionLabel>Sync activity</SectionLabel>
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              {/* Totals strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-border/40 border-b border-border">
-                {[
-                  { label: "Companies synced", value: syncActivity?.totals?.companiesSynced ?? 0, color: "text-primary" },
-                  { label: "Jobs added",        value: syncActivity?.totals?.added ?? 0,            color: "text-green-400" },
-                  { label: "Jobs updated",      value: syncActivity?.totals?.updated ?? 0,          color: "text-blue-400" },
-                  { label: "Jobs deleted",      value: syncActivity?.totals?.deleted ?? 0,          color: "text-destructive" },
-                ].map((s) => (
-                  <div key={s.label} className="flex flex-col gap-1 px-5 py-4">
-                    <p className={`text-xl font-semibold tabular-nums leading-none ${s.color}`}>{s.value.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-              {/* Per-company table */}
-              {syncActivity?.byCompany?.length > 0 ? (
-                <div className="divide-y divide-border/30">
-                  <div className="hidden sm:grid grid-cols-4 px-5 py-2 text-xs font-medium text-muted-foreground/50">
-                    <span className="col-span-1">Company</span>
-                    <span className="text-center text-green-400/70">Added</span>
-                    <span className="text-center text-blue-400/70">Updated</span>
-                    <span className="text-center text-destructive/70">Deleted</span>
-                  </div>
-                  {syncActivity.byCompany.map((c: any) => (
-                    <div key={c.name} className="grid grid-cols-2 sm:grid-cols-4 items-center px-5 py-2.5 hover:bg-accent/20 transition-colors gap-y-1">
-                      <div className="flex items-center gap-2 col-span-2 sm:col-span-1 min-w-0">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent/60 text-[9px] font-semibold">{c.initial}</div>
-                        <span className="text-xs font-medium truncate">{c.name}</span>
-                      </div>
-                      <span className="text-xs font-semibold text-green-400 text-center tabular-nums">{c.added > 0 ? `+${c.added}` : "—"}</span>
-                      <span className="text-xs font-semibold text-blue-400 text-center tabular-nums">{c.updated > 0 ? c.updated : "—"}</span>
-                      <span className="text-xs font-semibold text-destructive text-center tabular-nums">{c.deleted > 0 ? `-${c.deleted}` : "—"}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground px-5 py-8 text-center">No sync data yet</p>
+                <EmptyState icon={Users} title="No user data yet" />
               )}
-            </div>
+            </Panel>
           </div>
+
+          {/* Jobs + Agents */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Panel>
+              <PanelHeader
+                title="Most applied jobs"
+                icon={Briefcase}
+                actions={<Segmented value={jobRange} onChange={(v) => setPrefs({ jobRange: v })}
+                  options={[{ value: "24h", label: "24H" }, { value: "7d", label: "7D" }, { value: "30d", label: "30D" }]} />}
+              />
+              {jobInsights && jobInsights.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {jobInsights.map((j: any, i: number) => (
+                    <div key={j.jobId} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/40">
+                      <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium">{j.title}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{j.company}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="num text-[13px] font-semibold">{j.applications}</p>
+                        <p className="text-[11px] tabular-nums text-muted-foreground">{j.rightSwipes} swipes</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={Briefcase} title="No data for this range" />
+              )}
+            </Panel>
+
+            <Panel>
+              <PanelHeader
+                title="AI agents"
+                description={`${activeAgents.length} running`}
+                icon={Bot}
+                actions={<Segmented value={agentRange} onChange={(v) => setPrefs({ agentRange: v })}
+                  options={[{ value: "1h", label: "1H" }, { value: "24h", label: "24H" }, { value: "7d", label: "7D" }]} />}
+              />
+              {activeAgents.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {activeAgents.map((a: any) => (
+                    <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/40">
+                      <span className="w-20 shrink-0 font-mono text-xs font-medium">{a.id}</span>
+                      <span className="flex-1 truncate text-xs text-muted-foreground">{a.currentJob}</span>
+                      <StatusBadge status={a.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={Bot} title="No active agents" description="Agents appear here while they're filling applications." />
+              )}
+            </Panel>
+          </div>
+
+          {/* Sync activity */}
+          <Panel>
+            <PanelHeader title="Job sync activity" description="ATS company sync results" icon={DatabaseZap} />
+            <div className="grid grid-cols-2 divide-border border-b border-border sm:grid-cols-4 sm:divide-x">
+              {[
+                { label: "Companies synced", value: syncActivity?.totals?.companiesSynced ?? 0, dot: "bg-chart-1" },
+                { label: "Jobs added",       value: syncActivity?.totals?.added ?? 0,           dot: "bg-success" },
+                { label: "Jobs updated",     value: syncActivity?.totals?.updated ?? 0,         dot: "bg-chart-2" },
+                { label: "Jobs removed",     value: syncActivity?.totals?.deleted ?? 0,         dot: "bg-destructive" },
+              ].map((s) => (
+                <div key={s.label} className="flex flex-col gap-1.5 px-5 py-4">
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground"><span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{s.label}</span>
+                  <span className="num text-xl font-semibold">{s.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            {syncActivity?.byCompany?.length > 0 ? (
+              <>
+                <TableHead className="hidden sm:flex" columns={[
+                  { label: "Company", className: "flex-1" },
+                  { label: "Added", className: "w-20 text-right" },
+                  { label: "Updated", className: "w-20 text-right" },
+                  { label: "Removed", className: "w-20 text-right" },
+                ]} />
+                <div className="divide-y divide-border">
+                  {syncActivity.byCompany.map((c: any) => (
+                    <div key={c.name} className="flex items-center gap-4 px-5 py-2.5 transition-colors hover:bg-muted/40">
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/60 text-[10px] font-semibold">{c.initial}</div>
+                        <span className="truncate text-[13px] font-medium">{c.name}</span>
+                      </div>
+                      <span className="w-20 text-right text-xs tabular-nums text-success">{c.added > 0 ? `+${c.added}` : "—"}</span>
+                      <span className="w-20 text-right text-xs tabular-nums text-muted-foreground">{c.updated > 0 ? c.updated : "—"}</span>
+                      <span className="w-20 text-right text-xs tabular-nums text-destructive">{c.deleted > 0 ? `−${c.deleted}` : "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <EmptyState icon={DatabaseZap} title="No sync data yet" />
+            )}
+          </Panel>
 
         </TabsContent>
 
         {/* ─────────────── Analytics tab ─────────────── */}
-        <TabsContent value="analytics" className="mt-8">
+        <TabsContent value="analytics">
           <AnalyticsScreen />
         </TabsContent>
       </Tabs>

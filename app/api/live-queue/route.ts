@@ -14,17 +14,28 @@ const QUEUE_COLUMNS = [
 export async function GET() {
   try {
     const supabase = createAdminClient()
-    const { data, error } = await supabase
-      .from('live_application_queue')
-      .select(QUEUE_COLUMNS)
-      .order('created_at', { ascending: false })
+    // Paged: PostgREST caps one select at 1000 rows, which froze every queue
+    // count (Total, Done, Failed…) at 1000. id breaks created_at ties so pages
+    // never skip or repeat a row.
+    const rows: unknown[] = []
+    for (let from = 0; from < 50_000; from += 1000) {
+      const { data, error } = await supabase
+        .from('live_application_queue')
+        .select(QUEUE_COLUMNS)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + 999)
 
-    if (error) {
-      console.error('Supabase error:', error)
-      return Response.json({ error: error.message }, { status: 500 })
+      if (error) {
+        console.error('Supabase error:', error)
+        return Response.json({ error: error.message }, { status: 500 })
+      }
+      if (!data?.length) break
+      rows.push(...data)
+      if (data.length < 1000) break
     }
 
-    return Response.json(data || [])
+    return Response.json(rows)
   } catch (err) {
     console.error('Fetch error:', err)
     return Response.json({ error: 'Failed to fetch' }, { status: 500 })

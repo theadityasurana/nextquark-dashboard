@@ -322,7 +322,7 @@ export function QueueScreen() {
       {/* ── Header + stats row ── */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Live Application Queue</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Live Application Queue</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Real-time monitoring of all application submissions</p>
         </div>
         {/* Header actions — wrap onto extra lines on narrow screens */}
@@ -382,18 +382,18 @@ export function QueueScreen() {
           { label: 'Failed',     value: failed.length,          dot: 'bg-destructive' },
           { label: 'Blocked',    value: blocked.length,         dot: 'bg-orange-500' },
         ].map(s => (
-          <div key={s.label} className="flex flex-col gap-1 rounded-lg border border-border bg-card px-3 py-2.5">
+          <div key={s.label} className="flex flex-col gap-2 panel px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />}
               {s.label}
             </span>
-            <span className="text-lg font-semibold leading-none tabular-nums">{s.value.toLocaleString()}</span>
+            <span className="num text-2xl font-semibold leading-none">{s.value.toLocaleString()}</span>
           </div>
         ))}
       </div>
 
       {/* ── Dispatch controls (toggles + start) ── */}
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="flex flex-col gap-3 panel p-3">
         <p className="text-xs font-medium text-muted-foreground">Dispatch Controls</p>
         <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2">
 

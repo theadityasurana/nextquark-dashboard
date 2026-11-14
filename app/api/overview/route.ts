@@ -20,16 +20,7 @@ const getCachedStats = unstable_cache(
     const supabase = createAdminClient()
     const today = new Date().toISOString().split('T')[0]
 
-    const [
-      { count: totalAll },
-      { count: totalToday },
-      { count: activeNow },
-      { count: completedAll },
-      { count: completedToday },
-      { count: failedAll },
-      { count: failedToday },
-      { count: totalJobs },
-    ] = await Promise.all([
+    const results = await Promise.all([
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }),
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).gte('created_at', today),
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).eq('status', 'processing'),
@@ -39,6 +30,23 @@ const getCachedStats = unstable_cache(
       supabase.from('live_application_queue').select('*', { count: 'exact', head: true }).eq('status', 'failed').gte('created_at', today),
       supabase.from('jobs').select('*', { count: 'estimated', head: true }),
     ])
+
+    // A failed count comes back as { count: null, error }. Throw instead of
+    // reading it as 0: unstable_cache would otherwise store a dashboard of
+    // zeros and keep serving it until the next revalidation.
+    const failed = results.find((r) => r.error || r.count === null)
+    if (failed) throw new Error(`overview stats query failed: ${failed.error?.message ?? 'null count'}`)
+
+    const [
+      { count: totalAll },
+      { count: totalToday },
+      { count: activeNow },
+      { count: completedAll },
+      { count: completedToday },
+      { count: failedAll },
+      { count: failedToday },
+      { count: totalJobs },
+    ] = results
 
     const t = totalAll || 0
     const c = completedAll || 0
@@ -92,11 +100,25 @@ async function load(request: Request) {
         .order('created_at', { ascending: false })
         .limit(10),
 
-      // Chart data — only timestamp needed for bucketing
-      supabase
-        .from('live_application_queue')
-        .select('created_at')
-        .gte('created_at', getTimeRange(chartRange)),
+      // Chart data — only timestamp needed for bucketing. Paged: PostgREST caps
+      // a single select at 1000 rows, which silently flattened 7d/30d charts.
+      (async () => {
+        const since = getTimeRange(chartRange)
+        const rows: { id: string; created_at: string }[] = []
+        for (let from = 0; from < 50_000; from += 1000) {
+          const { data, error } = await supabase
+            .from('live_application_queue')
+            .select('id, created_at')
+            .gte('created_at', since)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, from + 999)
+          if (error || !data?.length) break
+          rows.push(...data)
+          if (data.length < 1000) break
+        }
+        return { data: rows }
+      })(),
 
       // Company breakdown
       supabase

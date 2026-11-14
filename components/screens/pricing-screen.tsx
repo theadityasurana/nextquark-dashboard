@@ -82,7 +82,7 @@ function KpiCard({ label, value, sub, accent }: {
   label: string; value: React.ReactNode; sub?: string; accent?: string
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div className="panel p-4">
       <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
       <p className={`text-[24px] font-semibold tracking-tight leading-none ${accent ?? ""}`}>{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
@@ -215,7 +215,7 @@ export function PricingScreen() {
 
       {/* Header — no region toggle, page always shows both */}
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Revenue</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Revenue</h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">Subscription analytics across all regions and plans</p>
       </div>
 
@@ -247,7 +247,7 @@ export function PricingScreen() {
       <div>
         <SectionLabel>Plan breakdown · INTL (USD)</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Subscribers per plan</p>
             </div>
@@ -265,7 +265,7 @@ export function PricingScreen() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Monthly revenue per plan (USD)</p>
             </div>
@@ -290,7 +290,7 @@ export function PricingScreen() {
       <div>
         <SectionLabel>Plan breakdown · IN (INR)</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Subscribers per plan</p>
             </div>
@@ -308,7 +308,7 @@ export function PricingScreen() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Monthly revenue per plan (INR)</p>
             </div>
@@ -334,7 +334,7 @@ export function PricingScreen() {
         <SectionLabel>Distribution</SectionLabel>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Plan distribution (all regions)</p>
             </div>
@@ -352,7 +352,7 @@ export function PricingScreen() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Platform split</p>
             </div>
@@ -370,7 +370,7 @@ export function PricingScreen() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-1 border-b border-border">
               <p className="text-sm font-medium">Billing period split</p>
             </div>
@@ -405,7 +405,7 @@ export function PricingScreen() {
       {/* ── Margin waterfall (USD only) ── */}
       <div>
         <SectionLabel>Margin waterfall · INTL (USD)</SectionLabel>
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="panel overflow-hidden">
           <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-border/40">
             {[
               { label: "Gross Revenue",  value: fmtUSD(mrrUSD),                         sub: "INTL MRR" },
@@ -457,7 +457,7 @@ export function PricingScreen() {
       {/* ── Pricing reference — separate INTL / IN tabs ── */}
       <div>
         <SectionLabel>Pricing reference</SectionLabel>
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="panel overflow-hidden">
           <Tabs defaultValue="intl">
             <div className="px-5 pt-3 pb-0 border-b border-border flex items-center justify-between">
               <p className="text-sm font-medium">Plan pricing</p>
@@ -479,7 +479,7 @@ export function PricingScreen() {
       {/* ── Paid subscribers table ── */}
       <div>
         <SectionLabel>Paid subscribers</SectionLabel>
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="panel overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <p className="text-sm font-medium">All paid subscribers</p>
             <Badge variant="secondary" className="text-[10px]">{paid} total</Badge>

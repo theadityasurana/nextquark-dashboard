@@ -304,7 +304,7 @@ export function JobsScreen() {
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Jobs</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">Manage all job listings across all companies</p>
           </div>
           <Badge variant="secondary" className="shrink-0 mt-1">{totalJobs} total</Badge>
@@ -492,7 +492,7 @@ export function JobsScreen() {
                 className="grid grid-cols-1 md:grid-cols-[80px_1fr_2fr_80px_100px_1fr_40px] gap-2 md:gap-4 px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer items-center"
                 onClick={() => { setSelectedJob(job); setIsEditing(false) }}
               >
-                <span className="text-xs font-mono text-muted-foreground">#{job.id}</span>
+                <span className="block max-w-full truncate text-xs font-mono text-muted-foreground" title={job.id}>#{job.id}</span>
                 <div className="flex items-center gap-2">
                   {company?.logoUrl ? (
                     <img src={company.logoUrl} alt={job.companyName} className="h-6 w-6 rounded object-cover shrink-0" crossOrigin="anonymous" onError={(e) => { e.currentTarget.style.display = 'none' }} />

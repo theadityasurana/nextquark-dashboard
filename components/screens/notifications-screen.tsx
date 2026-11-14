@@ -374,7 +374,7 @@ export function NotificationsScreen() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Notification Manager</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Notification Manager</h1>
           <p className="text-sm text-muted-foreground">Compose and broadcast push notifications to your users</p>
         </div>
         <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 self-start sm:self-auto">
@@ -424,7 +424,7 @@ export function NotificationsScreen() {
                         <button
                           key={tpl.title}
                           onClick={() => handleTemplateSelect(tpl)}
-                          className="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors group"
+                          className="flex flex-col gap-0.5 panel px-3 py-2.5 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors group"
                         >
                           <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">{tpl.title}</span>
                           <span className="text-[11px] text-muted-foreground line-clamp-1">{tpl.body}</span>
@@ -548,7 +548,7 @@ export function NotificationsScreen() {
                         <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
                       )}
                       {userDropdownOpen && userSearchResults.length > 0 && (
-                        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+                        <div className="absolute z-50 top-full mt-1 w-full panel shadow-lg overflow-hidden">
                           {userSearchResults.map((u) => (
                             <button
                               key={u.id}
@@ -567,7 +567,7 @@ export function NotificationsScreen() {
                         </div>
                       )}
                       {userDropdownOpen && !targetUserLoading && userSearchQuery.length >= 2 && userSearchResults.length === 0 && (
-                        <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border bg-card shadow-lg px-3 py-3">
+                        <div className="absolute z-50 top-full mt-1 w-full panel shadow-lg px-3 py-3">
                           <p className="text-xs text-muted-foreground">No users found for "{userSearchQuery}"</p>
                         </div>
                       )}

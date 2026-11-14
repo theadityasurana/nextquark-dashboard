@@ -168,7 +168,7 @@ export function AnalyticsScreen() {
               { label: "Jobs listed",  value: jobCount     },
               { label: "Applications", value: fApps.length },
             ].map((s) => (
-              <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+              <div key={s.label} className="panel p-4">
                 <p className="text-xs font-medium text-muted-foreground mb-3">{s.label}</p>
                 <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{s.value.toLocaleString()}</p>
                 {filter !== "all" && <p className="text-[10px] text-muted-foreground mt-1.5 truncate">{filter}</p>}
@@ -180,7 +180,7 @@ export function AnalyticsScreen() {
         {/* Peak hours chart */}
         <div>
           <SectionLabel>Trends</SectionLabel>
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="panel overflow-hidden">
             <div className="px-5 pt-4 pb-0">
               <p className="text-sm font-medium">Peak application hours</p>
             </div>
@@ -202,7 +202,7 @@ export function AnalyticsScreen() {
           <div>
             <SectionLabel>By company</SectionLabel>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="panel overflow-hidden">
                 <div className="px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-medium">Applications by company</p>
                 </div>
@@ -226,7 +226,7 @@ export function AnalyticsScreen() {
                 <Pg page={swipesPage} total={totalSwipesPages} onChange={setSwipesPage} />
               </div>
 
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="panel overflow-hidden">
                 <div className="px-5 pt-4 pb-3 border-b border-border">
                   <p className="text-sm font-medium">Top 5 distribution</p>
                 </div>
@@ -262,7 +262,7 @@ export function AnalyticsScreen() {
           <div className="flex flex-col gap-8">
 
             {/* App header */}
-            <div className="rounded-lg border border-border bg-card p-5">
+            <div className="panel p-5">
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 shrink-0">
                   <Smartphone className="h-7 w-7 text-primary" />
@@ -288,7 +288,7 @@ export function AnalyticsScreen() {
                   { label: "Total Ratings",  value: ios.totalRatings?.toLocaleString() ?? "—",            sub: "all time" },
                   { label: "Total Releases", value: ios.totalVersions,                                    sub: "versions shipped" },
                 ].map(s => (
-                  <div key={s.label} className="rounded-lg border border-border bg-card p-4">
+                  <div key={s.label} className="panel p-4">
                     <p className="text-xs font-medium text-muted-foreground mb-3">{s.label}</p>
                     <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{s.value}</p>
                     <p className="text-[10px] text-muted-foreground mt-1.5">{s.sub}</p>
@@ -303,7 +303,7 @@ export function AnalyticsScreen() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                 {/* Star breakdown */}
-                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="panel overflow-hidden">
                   <div className="px-5 pt-4 pb-3 border-b border-border flex items-center justify-between">
                     <p className="text-sm font-medium">Rating breakdown</p>
                     <div className="flex items-center gap-1">
@@ -320,7 +320,7 @@ export function AnalyticsScreen() {
                 </div>
 
                 {/* Territory breakdown */}
-                <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="panel overflow-hidden">
                   <div className="px-5 pt-4 pb-3 border-b border-border flex items-center gap-2">
                     <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                     <p className="text-sm font-medium">Reviews by territory</p>
@@ -349,7 +349,7 @@ export function AnalyticsScreen() {
             {/* Version history */}
             <div>
               <SectionLabel>Version History</SectionLabel>
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="panel overflow-hidden">
                 <div className="hidden sm:grid grid-cols-[80px_1fr_120px] px-5 py-2.5 border-b border-border text-xs font-semibold text-muted-foreground/50">
                   <span>Version</span>
                   <span>Release Type</span>
@@ -375,7 +375,7 @@ export function AnalyticsScreen() {
             {/* Reviews */}
             <div>
               <SectionLabel>Customer Reviews</SectionLabel>
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="panel overflow-hidden">
                 {ios.reviews?.length > 0 ? (
                   <div className="divide-y divide-border/30">
                     {ios.reviews.map((r: any, i: number) => (

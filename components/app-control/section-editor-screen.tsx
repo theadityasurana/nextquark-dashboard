@@ -150,7 +150,7 @@ export function SectionEditor({ sectionKey }: { sectionKey: string }) {
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">{def.name}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">{def.name}</h1>
               {!deepEqual(r.value, r.default_value) && <Badge className="text-[10px] bg-primary/15 text-primary border border-primary/25">Modified</Badge>}
               {def.highImpact && <Badge variant="outline" className="text-[10px] border-warning/40 text-warning">high impact</Badge>}
             </div>

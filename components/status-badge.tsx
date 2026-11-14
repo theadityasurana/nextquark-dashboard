@@ -28,10 +28,9 @@ export function StatusBadge({ status, className }: { status: StatusType; classNa
 
   return (
     <span className={cn(
-      "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
-      // Colour lives in the dot only; the pill itself stays neutral so a
-      // screen full of statuses doesn't turn into a wall of tinted chips.
-      "border-border bg-transparent text-foreground/90",
+      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-4 whitespace-nowrap",
+      // Soft tint + coloured text: readable at a glance in dense tables.
+      config.bgColor, config.textColor, config.borderColor,
       className
     )}>
       <span className={cn("inline-flex h-1.5 w-1.5 shrink-0 rounded-full", config.dotColor)} />

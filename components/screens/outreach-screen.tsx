@@ -226,7 +226,7 @@ export function OutreachScreen() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Sales &amp; Outreach</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; Outreach</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Personal WhatsApp notes from you to recent signups: intro, their activity, a feedback ask, and what they&apos;re looking for.
           </p>
@@ -278,7 +278,7 @@ export function OutreachScreen() {
           { label: "Contacted", value: stats.done },
           { label: "Have a phone", value: stats.withPhone },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-border bg-card px-4 py-3">
+          <div key={s.label} className="panel px-4 py-3">
             <p className="text-xs text-muted-foreground">{s.label}</p>
             <p className="text-2xl font-semibold tabular-nums mt-1">{s.value}</p>
           </div>

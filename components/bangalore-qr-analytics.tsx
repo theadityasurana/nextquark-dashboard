@@ -45,7 +45,7 @@ const QR_URL = "https://download.nextquark.in/"
 
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card overflow-hidden">
+    <div className="min-w-0 panel overflow-hidden">
       <div className="px-5 pt-4 pb-3 border-b border-border">
         <p className="text-sm font-medium">{title}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
@@ -57,7 +57,7 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+    <div className="min-w-0 panel p-4">
       <p className="text-xs font-medium text-muted-foreground mb-3">{label}</p>
       <p className="text-2xl font-semibold tabular-nums tracking-tight leading-none">{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground mt-1.5">{sub}</p>}
@@ -241,7 +241,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         </p>
       </div>
 
-      <div className="min-w-0 rounded-lg border border-border bg-card p-4">
+      <div className="min-w-0 panel p-4">
         <p className="text-xs font-medium text-muted-foreground mb-2">QR URL</p>
         <div className="flex items-center gap-3 min-w-0">
           <code className="text-sm sm:text-base font-mono truncate flex-1">{QR_URL}</code>
@@ -473,7 +473,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
       </ChartCard>
 
       {showAdvanced && (
-        <details className="rounded-lg border border-border bg-card">
+        <details className="panel">
           <summary className="px-5 py-3 text-sm font-medium cursor-pointer">
             Advanced: tagged campaigns (?c=)
           </summary>

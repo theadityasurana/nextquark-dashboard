@@ -43,7 +43,7 @@ export function AppControlOverview() {
     <div className="flex flex-col gap-6 max-w-6xl">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">App Control</h1>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">App Control</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Control what Iris app users see, without shipping an app update.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -52,7 +52,7 @@ export function AppControlOverview() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-card/50 p-3 text-xs text-muted-foreground flex gap-2.5">
+      <div className="panel/50 p-3 text-xs text-muted-foreground flex gap-2.5">
         <Smartphone className="h-4 w-4 shrink-0 text-primary mt-px" />
         <p>
           Users see changes within about <strong className="text-foreground">5 minutes</strong> (limits apply immediately).

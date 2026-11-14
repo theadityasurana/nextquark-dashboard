@@ -90,7 +90,7 @@ export function SyncProgressBar({ sessionId, mode = "sync", onComplete, onDismis
     : (session?.done ?? 0) - (session?.failed ?? 0)
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+    <div className="panel p-4 flex flex-col gap-3">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
