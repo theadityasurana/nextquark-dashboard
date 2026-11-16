@@ -148,7 +148,8 @@ export async function loadOutreachRows(supabase: SupabaseClient, days: number): 
     }
   })
 
-  return rows.sort((a, b) => b.jobsApplied - a.jobsApplied || b.jobsSwiped - a.jobsSwiped || b.signedUpAt.localeCompare(a.signedUpAt))
+  // Newest signups first.
+  return rows.sort((a, b) => b.signedUpAt.localeCompare(a.signedUpAt))
 }
 
 export function toProfile(row: OutreachRow, extra: { experienceLevel?: string | null; userType?: string | null; topSkills?: string[] } = {}): OutreachProfile {

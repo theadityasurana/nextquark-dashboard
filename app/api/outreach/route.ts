@@ -33,7 +33,6 @@ export async function GET(request: Request) {
         : filter === "done" ? r.contacted
         : filter === "returning" ? isReturning(r)
         : !r.contacted)
-    if (filter === "returning") rows = [...rows].sort((a, b) => b.engagement - a.engagement)
     if (q) {
       const qd = q.replace(/\s/g, "")
       rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.email ?? "").toLowerCase().includes(q) || (r.phone?.display ?? "").replace(/\s/g, "").includes(qd))
