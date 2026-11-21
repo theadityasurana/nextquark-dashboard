@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { SystemHealthPanel } from "@/components/system-health-panel"
+import { ActiveUsersIndicator } from "@/components/active-users-indicator"
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { useState } from "react"
 import { useApi } from "@/lib/api-cache"
@@ -86,6 +87,7 @@ export function OverviewScreen() {
         description="Here's what's happening across Iris today."
         actions={
           <>
+            <ActiveUsersIndicator />
             <Button size="sm" variant="outline" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
