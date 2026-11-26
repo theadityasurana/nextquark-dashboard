@@ -19,16 +19,21 @@ export function useExperimentGroups(userIds: (string | null | undefined)[]) {
   return data ?? {}
 }
 
-/** "B · Paywall" / "A · Free swipes"; nothing for people not in the test. */
+/**
+ * B · Paywall: in the test, first application free then pay.
+ * A · 10 free credits: in the test's free group, or signed up before the test (everyone else).
+ */
 export function GroupBadge({ group, className = "" }: { group?: Group; className?: string }) {
-  if (!group) return null
   const paywall = group === "paywall"
+  const title = paywall
+    ? "Group B (A/B test): first application free, then pay"
+    : group === "control" ? "Group A (A/B test): the usual 10 free credits" : "Not in the A/B test: the usual 10 free credits"
   return (
     <span
-      title={paywall ? "A/B test group B: first application free, then pay" : "A/B test group A: the usual free swipes"}
+      title={title}
       className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${paywall ? "bg-violet-500/15 text-violet-600 dark:text-violet-300" : "border border-border text-muted-foreground"} ${className}`}
     >
-      {paywall ? "B · Paywall" : "A · Free swipes"}
+      {paywall ? "B · Paywall" : "A · 10 free credits"}
     </span>
   )
 }

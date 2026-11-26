@@ -215,7 +215,7 @@ export function UsersScreen() {
               { label: "Verified", className: "w-24" },
               { label: "Last sign in", className: "w-28 text-right" },
               { label: "Joined", className: "w-28 text-right" },
-              { label: "A/B group", className: "w-28" },
+              { label: "Plan group", className: "w-32" },
               { label: "Actions", className: "w-[190px]" },
               { label: "", className: "w-4" },
             ]} />
@@ -256,7 +256,7 @@ export function UsersScreen() {
                     </span>
                     <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.last_sign_in_at)}>{relative(user.last_sign_in_at)}</span>
                     <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.created_at)}>{relative(user.created_at)}</span>
-                    <span className="w-28"><GroupBadge group={groups[user.id]} />{!groups[user.id] && <span className="hidden text-xs text-muted-foreground/60 md:inline">–</span>}</span>
+                    <span className="w-32"><GroupBadge group={groups[user.id]} /></span>
                     <span className="w-[190px]"><UserAdminActions userId={user.id} email={user.email} onDeleted={() => refreshAuth()} /></span>
                     <ChevronRight className="hidden h-4 w-4 text-muted-foreground/50 group-hover:text-foreground md:block" />
                   </div>
