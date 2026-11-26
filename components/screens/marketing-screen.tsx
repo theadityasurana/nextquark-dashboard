@@ -7,12 +7,13 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
-import { RefreshCw, UserPlus, CalendarDays, MailCheck, Rocket } from "lucide-react"
+import { RefreshCw, UserPlus, CalendarDays, MailCheck, Rocket, Download } from "lucide-react"
 import {
-  PageHeader, Panel, PanelHeader, Section, StatCard, KpiGrid, Meter, Segmented, Sparkline,
+  PageHeader, Panel, PanelHeader, Section, StatCard, KpiGrid, Meter, Segmented, Sparkline, Pagination,
   chartTooltip, axisTick, gridStroke, SERIES,
 } from "@/components/ui/dashboard"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { BangaloreQrAnalytics } from "@/components/bangalore-qr-analytics"
 
 const TT_STYLE = chartTooltip
@@ -83,10 +84,21 @@ interface AuthUser {
 
 type TimeRange = "30d" | "all"
 
+interface EmailMarketingData {
+  exhausted: { id: string; first_name: string | null; last_name: string | null; email: string }[]
+  incomplete: { id: string; first_name: string | null; last_name: string | null; email: string }[]
+}
+
 export function MarketingScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [qrRefreshKey, setQrRefreshKey] = useState(0)
   const [timeRange, setTimeRange] = useState<TimeRange>("30d")
+  const [mainTab, setMainTab] = useState("analytics")
+  const [emailTab, setEmailTab] = useState("exhausted")
+  const [exhaustedPage, setExhaustedPage] = useState(1)
+  const [incompletePage, setIncompletePage] = useState(1)
+  const [marking, setMarking] = useState(false)
+  const EMAIL_PAGE_SIZE = 50
 
   // No demo fallbacks anywhere below: on failure the page says so instead of
   // showing invented numbers.
@@ -101,10 +113,12 @@ export function MarketingScreen() {
     return users.filter(u => new Date(u.created_at) >= cutoff)
   }, [users, timeRange])
 
+  const { data: emailData, isLoading: emailLoading, refresh: reloadEmail } = useApi<EmailMarketingData>("/api/users?email_marketing=1")
+
   const handleRefresh = async () => {
     setRefreshing(true)
     setQrRefreshKey((k) => k + 1)
-    await reloadUsers()
+    await Promise.all([reloadUsers(), reloadEmail()])
     setRefreshing(false)
   }
 
@@ -236,13 +250,101 @@ export function MarketingScreen() {
         description="Acquisition, signup trends, activation and link & QR traffic."
         actions={
           <>
-            <Segmented value={timeRange} onChange={setTimeRange} options={[{ value: "30d", label: "Last 30 days" }, { value: "all", label: "All time" }]} />
+            {mainTab === "analytics" && <Segmented value={timeRange} onChange={setTimeRange} options={[{ value: "30d", label: "Last 30 days" }, { value: "all", label: "All time" }]} />}
             <Button size="sm" variant="outline" className="gap-2" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Refresh
             </Button>
           </>
         }
       />
+
+      <Tabs value={mainTab} onValueChange={setMainTab}>
+        <TabsList className="bg-muted/50">
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="email-marketing">Email Marketing</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="email-marketing" className="mt-6">
+          <Panel>
+            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+              <Tabs value={emailTab} onValueChange={(v) => { setEmailTab(v); setExhaustedPage(1); setIncompletePage(1) }}>
+                <TabsList className="bg-muted/50">
+                  <TabsTrigger value="exhausted">Out of free swipes{emailData ? ` (${emailData.exhausted.length})` : ""}</TabsTrigger>
+                  <TabsTrigger value="incomplete">Incomplete signup{emailData ? ` (${emailData.incomplete.length})` : ""}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Button
+                size="sm" variant="outline" className="gap-2 shrink-0"
+                disabled={emailLoading || !emailData || marking}
+                onClick={async () => {
+                  const rows = emailTab === "exhausted" ? (emailData?.exhausted ?? []) : (emailData?.incomplete ?? [])
+                  if (!rows.length) return
+                  const label = emailTab === "exhausted" ? "out-of-swipes" : "incomplete-signup"
+                  const csv = [["First Name", "Last Name", "Email"], ...rows.map(u => [u.first_name ?? "", u.last_name ?? "", u.email])]
+                    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")
+                  const a = document.createElement("a")
+                  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+                  a.download = `email-marketing-${label}-${new Date().toISOString().slice(0, 10)}.csv`
+                  a.click()
+                  setMarking(true)
+                  try {
+                    await fetch("/api/users?email_marketing=mark", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ids: rows.map(u => u.id) }),
+                    })
+                    await reloadEmail()
+                  } finally {
+                    setMarking(false)
+                  }
+                }}
+              >
+                <Download className="h-3.5 w-3.5" /> {marking ? "Marking…" : "Export CSV"}
+              </Button>
+            </div>
+
+            {emailLoading ? (
+              <div className="divide-y divide-border">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-10 mx-5 my-2 rounded bg-muted shimmer" />)}</div>
+            ) : (() => {
+              const rows = emailTab === "exhausted" ? (emailData?.exhausted ?? []) : (emailData?.incomplete ?? [])
+              const page = emailTab === "exhausted" ? exhaustedPage : incompletePage
+              const setPage = emailTab === "exhausted" ? setExhaustedPage : setIncompletePage
+              const totalPages = Math.max(1, Math.ceil(rows.length / EMAIL_PAGE_SIZE))
+              const slice = rows.slice((page - 1) * EMAIL_PAGE_SIZE, page * EMAIL_PAGE_SIZE)
+              const offset = (page - 1) * EMAIL_PAGE_SIZE
+              return !rows.length ? (
+                <p className="px-5 py-6 text-sm text-muted-foreground">No users in this segment yet.</p>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 border-b border-border px-5 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="w-8 shrink-0">#</span>
+                    <span className="w-36 shrink-0">First Name</span>
+                    <span className="w-36 shrink-0">Last Name</span>
+                    <span>Email</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {slice.map((u, i) => (
+                      <div key={i} className="flex items-center gap-4 px-5 py-2.5 text-sm">
+                        <span className="w-8 shrink-0 tabular-nums text-muted-foreground">{offset + i + 1}</span>
+                        <span className="w-36 shrink-0">{u.first_name || <span className="italic text-muted-foreground">—</span>}</span>
+                        <span className="w-36 shrink-0">{u.last_name || <span className="italic text-muted-foreground">—</span>}</span>
+                        <span className="text-muted-foreground">{u.email}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    onPage={setPage}
+                    summary={`${offset + 1}–${Math.min(page * EMAIL_PAGE_SIZE, rows.length)} of ${rows.length.toLocaleString()}`}
+                  />
+                </>
+              )
+            })()}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="mt-6">
 
       {loading ? (
         <div className="flex flex-col gap-6">
@@ -464,6 +566,8 @@ export function MarketingScreen() {
       <Section title="Link & QR visits" description="Traffic to irisjobs.live, download.nextquark.in and the QR code">
         <BangaloreQrAnalytics refreshKey={qrRefreshKey} range={timeRange} />
       </Section>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

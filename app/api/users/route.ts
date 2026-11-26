@@ -1,4 +1,4 @@
-import { cachedRoute, cachedValue } from "@/lib/server-cache"
+import { cachedRoute, cachedValue, invalidateCached } from "@/lib/server-cache"
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
@@ -18,7 +18,7 @@ async function collectIds(supabase: ReturnType<typeof createAdminClient>, table:
   return ids
 }
 
-type FunnelProfile = { id: string; is_onboarding_complete: boolean | null; heard_about_us: string | null }
+type FunnelProfile = { id: string; is_onboarding_complete: boolean | null; heard_about_us: string | null; first_name: string | null; last_name: string | null; subscription_type: string | null; em_exported_at: string | null }
 
 async function collectProfiles(supabase: ReturnType<typeof createAdminClient>): Promise<Map<string, FunnelProfile>> {
   const profiles = new Map<string, FunnelProfile>()
@@ -26,7 +26,7 @@ async function collectProfiles(supabase: ReturnType<typeof createAdminClient>): 
   for (let from = 0; ; from += size) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, is_onboarding_complete, heard_about_us')
+      .select('id, is_onboarding_complete, heard_about_us, first_name, last_name, subscription_type, em_exported_at')
       .order('id')
       .range(from, from + size - 1)
     if (error) throw new Error(`profiles: ${error.message}`)
@@ -83,6 +83,11 @@ export async function GET(request: Request) {
     return cachedRoute(request, 5 * 60_000, () => loadFunnel(supabase))
   }
 
+  if (sp.get('email_marketing') === '1') {
+    return cachedRoute(request, 5 * 60_000, () => loadEmailMarketing(supabase))
+  }
+
+
   try {
     const users = await allAuthUsers(supabase)
     const page = Math.max(1, Number(sp.get('page')) || 1)
@@ -122,6 +127,32 @@ export async function GET(request: Request) {
   }
 }
 
+async function loadEmailMarketing(supabase: ReturnType<typeof createAdminClient>) {
+  try {
+    const [allUsers, profiles, appliedIds] = await Promise.all([
+      allAuthUsers(supabase),
+      collectProfiles(supabase),
+      collectIds(supabase, 'live_application_queue', 'user_id'),
+    ])
+    const exhausted: { id: string; first_name: string | null; last_name: string | null; email: string }[] = []
+    const incomplete: { id: string; first_name: string | null; last_name: string | null; email: string }[] = []
+    for (const user of allUsers) {
+      const profile = profiles.get(user.id)
+      if (profile?.em_exported_at) continue
+      const isFree = !profile || profile.subscription_type !== 'premium'
+      if (isFree && appliedIds.has(user.id)) {
+        exhausted.push({ id: user.id, first_name: profile?.first_name ?? null, last_name: profile?.last_name ?? null, email: user.email || '' })
+      }
+      if (!profile || !profile.is_onboarding_complete) {
+        incomplete.push({ id: user.id, first_name: profile?.first_name ?? null, last_name: profile?.last_name ?? null, email: user.email || '' })
+      }
+    }
+    return NextResponse.json({ exhausted, incomplete })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 })
+  }
+}
+
 async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
   try {
     const [allUsers, profiles, appliedIds] = await Promise.all([
@@ -146,5 +177,37 @@ async function loadFunnel(supabase: ReturnType<typeof createAdminClient>) {
     )
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load funnel data' }, { status: 500 })
+  }
+}
+
+/** POST /api/users?email_marketing=mark  { ids: string[] }
+ *  Stamps em_exported_at on each profile so they won't appear in future exports. */
+export async function POST(request: Request) {
+  const sp = new URL(request.url).searchParams
+  if (sp.get('email_marketing') !== 'mark') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+  try {
+    const { ids } = await request.json() as { ids: string[] }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    }
+    const supabase = createAdminClient()
+    const now = new Date().toISOString()
+    // Batch in chunks of 500 to stay within PostgREST limits
+    const size = 500
+    for (let i = 0; i < ids.length; i += size) {
+      const chunk = ids.slice(i, i + size)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ em_exported_at: now })
+        .in('id', chunk)
+        .is('em_exported_at', null)
+      if (error) throw new Error(error.message)
+    }
+    invalidateCached('/api/users?email_marketing=1')
+    return NextResponse.json({ marked: ids.length })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 })
   }
 }
