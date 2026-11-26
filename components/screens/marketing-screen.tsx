@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { GeoSections, LiveNowSection } from "@/components/marketing-geo"
+import { AudienceSection, LiveNowSection, TrafficSection } from "@/components/marketing-geo"
 import { useApi } from "@/lib/api-cache"
 import { heardAboutLabel, percentOf } from "@/lib/marketing"
 import {
@@ -346,26 +346,21 @@ export function MarketingScreen() {
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-6">
-      <div className="mb-10 flex flex-col gap-10">
-        <LiveNowSection />
-        <GeoSections range={timeRange} />
-      </div>
-
-      {loading ? (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-36 shimmer" />)}
-          </div>
-          <div className="panel h-80 shimmer" />
-        </div>
-      ) : (
-        <>
+      <nav className="sticky top-0 z-20 -mx-1 mb-6 flex flex-wrap gap-1.5 bg-background/85 px-1 py-2 backdrop-blur" aria-label="Marketing sections">
+        {[["mk-overview", "Overview"], ["mk-live", "Live"], ["mk-audience", "Audience"], ["mk-acquisition", "Acquisition"], ["mk-growth", "Growth"], ["mk-activation", "Activation"], ["mk-visits", "Visits & QR"]].map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">{label}</a>
+        ))}
+      </nav>
+      <div className="flex flex-col gap-12">
+        <div id="mk-overview" className="scroll-mt-16 flex flex-col gap-4">
       {loadError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           Couldn&apos;t load signup data: {loadError}. Charts below are empty until it loads — hit Refresh to retry.
         </div>
       )}
 
+          {loading ? <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="panel h-36 shimmer" />)}</div> : (
+            <>
       <KpiGrid>
         <StatCard
           label={timeRange === "all" ? "Total signups" : "Signups · 30 days"}
@@ -386,94 +381,19 @@ export function MarketingScreen() {
         </StatCard>
       </KpiGrid>
 
-      <Section title="Signups" description={timeRange === "all" ? "Every day since launch" : "Daily signups over the last 30 days"}>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Panel className="lg:col-span-2">
-            <PanelHeader title="Daily new signups" description={`${filteredUsers.length.toLocaleString()} in range · peak ${Math.max(0, ...dailySignups.map(d => d.count))} in a day`} />
-            <div className="h-72 px-3 pb-3 pt-5">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailySignups} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke={gridStroke} vertical={false} />
-                  <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={24} />
-                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
-                  <Tooltip
-                    cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null
-                      const d = payload[0].payload
-                      return (
-                        <div style={TT_STYLE}>
-                          <p className="text-xs text-muted-foreground">{d.dow}, {d.fullDate}</p>
-                          <p className="mt-0.5 text-sm font-semibold">{d.count} <span className="text-xs font-normal text-muted-foreground">signups</span></p>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Bar dataKey="count" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Panel>
-          <Panel>
-            <PanelHeader title="Weekly signups" description={timeRange === "all" ? "New users per week" : "Last 5 weeks"} />
-            <div className="px-5 pt-4">
-              <p className="num text-2xl font-semibold">{lastWeek.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">this week{wow !== null && <span className={wow >= 0 ? " text-success" : " text-destructive"}> · {wow >= 0 ? "+" : ""}{wow}%</span>}</p>
-            </div>
-            <div className="h-48 px-3 pb-3 pt-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weeklyGrowth} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="wk" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={gridStroke} vertical={false} />
-                  <XAxis dataKey="week" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={16} />
-                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
-                  <Tooltip content={<LineTooltip />} cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }} />
-                  <Area type="monotone" dataKey="signups" stroke="var(--chart-1)" strokeWidth={2} fill="url(#wk)" dot={false} activeDot={{ r: 4, stroke: "var(--card)", strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Panel>
+            </>
+          )}
         </div>
-      </Section>
 
-      <Section title="Activation funnel" description="Where new users drop off between signup and their first application">
-        <Panel>
-          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
-            {funnelData.map((step, i) => {
-              const ofTotal = percentOf(step.value, funnelData[0].value)
-              const dropPct = i > 0 ? percentOf(funnelData[i - 1].value - step.value, funnelData[i - 1].value) : null
-              return (
-                <div key={step.name} className="flex flex-col gap-3 px-5 py-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">{i + 1}</span>
-                      {step.name}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="num text-2xl font-semibold">{dash(step.value.toLocaleString())}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">{ofTotal}%</span>
-                  </div>
-                  <div className="h-16 w-full overflow-hidden rounded-md bg-muted/60">
-                    <div className="h-full w-full origin-bottom rounded-md bg-primary transition-transform duration-500"
-                      style={{ transform: `scaleY(${Math.max(0.02, Number(ofTotal) / 100)})`, opacity: 1 - i * 0.14 }} />
-                  </div>
-                  <span className={`text-[11px] tabular-nums ${dropPct === null ? "text-muted-foreground" : "text-destructive"}`}>
-                    {dropPct === null ? "Starting point" : `−${dropPct}% from previous step`}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </Panel>
-      </Section>
+        <div id="mk-live" className="scroll-mt-16"><LiveNowSection /></div>
 
-      <Section title="Acquisition" description="How people found Iris and how they signed up">
+        <div id="mk-audience" className="scroll-mt-16"><AudienceSection range={timeRange} /></div>
+
+        <div id="mk-acquisition" className="scroll-mt-16 flex flex-col gap-10">
+          <TrafficSection range={timeRange} />
+          {!loading && (
+            <>
+      <Section title="How people signed up" description="What they told us in onboarding, and how they created their account">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Panel>
             <PanelHeader title="Where did you hear about us?" description={`${referralTotal.toLocaleString()} survey responses`} />
@@ -529,6 +449,68 @@ export function MarketingScreen() {
         </div>
       </Section>
 
+            </>
+          )}
+        </div>
+
+        <div id="mk-growth" className="scroll-mt-16 flex flex-col gap-10">
+          {loading ? <div className="panel h-80 shimmer" /> : (
+            <>
+      <Section title="Signups" description={timeRange === "all" ? "Every day since launch" : "Daily signups over the last 30 days"}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Panel className="lg:col-span-2">
+            <PanelHeader title="Daily new signups" description={`${filteredUsers.length.toLocaleString()} in range · peak ${Math.max(0, ...dailySignups.map(d => d.count))} in a day`} />
+            <div className="h-72 px-3 pb-3 pt-5">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailySignups} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={24} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                  <Tooltip
+                    cursor={{ fill: "color-mix(in oklch, var(--foreground) 5%, transparent)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      const d = payload[0].payload
+                      return (
+                        <div style={TT_STYLE}>
+                          <p className="text-xs text-muted-foreground">{d.dow}, {d.fullDate}</p>
+                          <p className="mt-0.5 text-sm font-semibold">{d.count} <span className="text-xs font-normal text-muted-foreground">signups</span></p>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Bar dataKey="count" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+          <Panel>
+            <PanelHeader title="Weekly signups" description={timeRange === "all" ? "New users per week" : "Last 5 weeks"} />
+            <div className="px-5 pt-4">
+              <p className="num text-2xl font-semibold">{lastWeek.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">this week{wow !== null && <span className={wow >= 0 ? " text-success" : " text-destructive"}> · {wow >= 0 ? "+" : ""}{wow}%</span>}</p>
+            </div>
+            <div className="h-48 px-3 pb-3 pt-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={weeklyGrowth} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="wk" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="week" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} minTickGap={16} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                  <Tooltip content={<LineTooltip />} cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }} />
+                  <Area type="monotone" dataKey="signups" stroke="var(--chart-1)" strokeWidth={2} fill="url(#wk)" dot={false} activeDot={{ r: 4, stroke: "var(--card)", strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        </div>
+      </Section>
+
       <Section title="Signup timing" description="When people sign up — the busiest slot is highlighted">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Panel>
@@ -565,12 +547,55 @@ export function MarketingScreen() {
           </Panel>
         </div>
       </Section>
-        </>
-      )}
+            </>
+          )}
+        </div>
 
+        <div id="mk-activation" className="scroll-mt-16">
+          {!loading && (
+            <>
+      <Section title="Activation funnel" description="Where new users drop off between signup and their first application">
+        <Panel>
+          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
+            {funnelData.map((step, i) => {
+              const ofTotal = percentOf(step.value, funnelData[0].value)
+              const dropPct = i > 0 ? percentOf(funnelData[i - 1].value - step.value, funnelData[i - 1].value) : null
+              return (
+                <div key={step.name} className="flex flex-col gap-3 px-5 py-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">{i + 1}</span>
+                      {step.name}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="num text-2xl font-semibold">{dash(step.value.toLocaleString())}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{ofTotal}%</span>
+                  </div>
+                  <div className="h-16 w-full overflow-hidden rounded-md bg-muted/60">
+                    <div className="h-full w-full origin-bottom rounded-md bg-primary transition-transform duration-500"
+                      style={{ transform: `scaleY(${Math.max(0.02, Number(ofTotal) / 100)})`, opacity: 1 - i * 0.14 }} />
+                  </div>
+                  <span className={`text-[11px] tabular-nums ${dropPct === null ? "text-muted-foreground" : "text-destructive"}`}>
+                    {dropPct === null ? "Starting point" : `−${dropPct}% from previous step`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </Panel>
+      </Section>
+
+            </>
+          )}
+        </div>
+
+        <div id="mk-visits" className="scroll-mt-16">
       <Section title="Link & QR visits" description="Traffic to irisjobs.live, download.nextquark.in and the QR code">
         <BangaloreQrAnalytics refreshKey={qrRefreshKey} range={timeRange} />
       </Section>
+        </div>
+      </div>
         </TabsContent>
       </Tabs>
     </div>

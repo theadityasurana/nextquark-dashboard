@@ -16,8 +16,11 @@ const byName: Map<string, string> = (() => {
   const m = new Map<string, string>()
   if (!names) return m
   const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  // Reserved / grouping codes Intl also names ("UK" → United Kingdom would clash with GB).
+  const NOT_COUNTRIES = new Set(["UK", "EU", "EZ", "UN", "QO", "XA", "XB", "AC", "CP", "DG", "EA", "IC", "TA", "CQ"])
   for (const a of A) for (const b of A) {
     const code = a + b
+    if (NOT_COUNTRIES.has(code)) continue
     try {
       const n = names.of(code)
       if (n && n !== code) m.set(n.toLowerCase(), code)
@@ -27,17 +30,19 @@ const byName: Map<string, string> = (() => {
 })()
 
 const ALIASES: Record<string, string> = {
-  usa: "US", us: "US", "u.s.": "US", "u.s.a.": "US", america: "US", "united states of america": "US",
+  in: "IN", usa: "US", us: "US", "u.s.": "US", "u.s.a.": "US", america: "US", "united states of america": "US",
   uk: "GB", "u.k.": "GB", england: "GB", scotland: "GB", wales: "GB", britain: "GB", "great britain": "GB",
   uae: "AE", "u.a.e.": "AE", emirates: "AE", bharat: "IN", "republic of korea": "KR", "south korea": "KR", korea: "KR",
-  russia: "RU", vietnam: "VN", "czech republic": "CZ", holland: "NL", "ivory coast": "CI", turkey: "TR", "türkiye": "TR",
+  russia: "RU", "россия": "RU", vietnam: "VN", italia: "IT", espana: "ES", "españa": "ES", deutschland: "DE", palestine: "PS", ksa: "SA", "hong kong": "HK", "czech republic": "CZ", holland: "NL", "ivory coast": "CI", turkey: "TR", "türkiye": "TR",
 }
 
 const INDIAN_STATES = ["andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh", "goa", "gujarat", "haryana", "himachal pradesh",
   "jharkhand", "karnataka", "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya", "mizoram", "nagaland", "odisha", "orissa",
   "punjab", "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura", "uttar pradesh", "uttarakhand", "west bengal", "delhi", "new delhi",
-  "jammu and kashmir", "ladakh", "chandigarh", "puducherry", "ncr", "uttar"]
-const US_STATES = ["al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id", "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn",
+  "jammu and kashmir", "ladakh", "chandigarh", "puducherry", "ncr", "uttar",
+  // common Indian state abbreviations ("Bengaluru, KA")
+  "ka", "mh", "tn", "dl", "up", "hr", "ts", "kl", "wb", "gj", "rj", "mp", "br", "jk", "pb", "uk"]
+const US_STATES = ["al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id", "il", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn",
   "ms", "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv",
   "wi", "wy", "dc", "california", "texas", "new york", "florida", "washington", "massachusetts", "illinois", "new jersey", "georgia", "virginia"]
 

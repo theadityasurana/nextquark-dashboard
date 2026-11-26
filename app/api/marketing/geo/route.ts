@@ -4,6 +4,14 @@ import { WORLD_COUNTRIES, cityOf, countryName, resolveCountry } from '@/lib/geo'
 
 export const dynamic = 'force-dynamic'
 
+// "irisjobs.live", "nextquark.in." → "nextquark.in", Cloudflare preview builds grouped, blanks labelled.
+function cleanHost(h: string | null): string {
+  const v = String(h || '').trim().toLowerCase().replace(/^["'\s]+|["'\s]+$/g, '').replace(/\.+$/, '').replace(/^www\./, '')
+  if (!v || v === '—' || !v.includes('.')) return 'Not recorded'
+  if (v.endsWith('.pages.dev')) return 'Preview builds (pages.dev)'
+  return v
+}
+
 type SourceRow = { source: string; host: string; campaign: string | null; country: string | null; city: string | null; visits: number }
 
 async function load(range: string) {
@@ -36,9 +44,14 @@ async function load(range: string) {
   }
 
   // Landing-page traffic by source, domain, campaign and place.
-  const { data: srcRows, error: e2 } = await db.rpc('marketing_visit_sources', { p_since: since.toISOString() })
-  if (e2) throw new Error(e2.message)
-  const rows = (srcRows ?? []) as SourceRow[]
+  // The database answers at most 1000 rows per call, so page through.
+  const rows: SourceRow[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.rpc('marketing_visit_sources', { p_since: since.toISOString() }).range(from, from + 999)
+    if (error) throw new Error(error.message)
+    rows.push(...((data ?? []) as SourceRow[]))
+    if (!data || data.length < 1000) break
+  }
   const sources = new Map<string, { visits: number; places: Map<string, { city: string | null; country: string | null; visits: number }>; countries: Map<string, number> }>()
   const domains = new Map<string, number>(), campaigns = new Map<string, number>(), visitCountries = new Map<string, number>()
   let totalVisits = 0
@@ -53,7 +66,8 @@ async function load(range: string) {
     s.places.set(pk, pl)
     if (r.country) s.countries.set(r.country, (s.countries.get(r.country) ?? 0) + v)
     sources.set(r.source, s)
-    domains.set(r.host, (domains.get(r.host) ?? 0) + v)
+    const host = cleanHost(r.host)
+    domains.set(host, (domains.get(host) ?? 0) + v)
     if (r.campaign) campaigns.set(r.campaign, (campaigns.get(r.campaign) ?? 0) + v)
     if (r.country) visitCountries.set(r.country, (visitCountries.get(r.country) ?? 0) + v)
   }

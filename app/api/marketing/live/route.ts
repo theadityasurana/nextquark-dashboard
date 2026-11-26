@@ -9,11 +9,16 @@ let coords: { at: number; city: Map<string, Coord>; country: Map<string, Coord> 
 // City/country coordinates learned from landing-visit geo, refreshed hourly.
 async function coordTable() {
   if (coords && Date.now() - coords.at < 3600_000) return coords
-  const { data, error } = await createAdminClient().rpc('marketing_city_coords')
-  if (error) throw new Error(error.message)
+  const data: unknown[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data: page, error } = await createAdminClient().rpc('marketing_city_coords').range(from, from + 999)
+    if (error) throw new Error(error.message)
+    data.push(...(page ?? []))
+    if (!page || page.length < 1000) break
+  }
   const city = new Map<string, Coord>(), country = new Map<string, Coord>()
   const best = new Map<string, number>()
-  for (const r of (data ?? []) as { country: string; city: string | null; lat: number; lng: number; n: number }[]) {
+  for (const r of data as { country: string; city: string | null; lat: number; lng: number; n: number }[]) {
     if (!r.city) { country.set(r.country, { lat: r.lat, lng: r.lng }); continue }
     const name = cityOf(r.city)
     if (!name) continue

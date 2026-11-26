@@ -6,8 +6,8 @@ import { resolvePlaceSource } from "@/lib/geo-display"
 import { NextResponse } from "next/server"
 
 const PAGE = 1000
-const MAX_ROWS = 5000
-const MAX_ROWS_ALL_TIME = 30000
+const MAX_ROWS = 60000
+const MAX_ROWS_ALL_TIME = 60000
 
 async function fetchExactCounts(supabase: ReturnType<typeof createAdminClient>, since30: string, since7: Date, todayStart: Date) {
   const [r30, r7, rToday] = await Promise.all([

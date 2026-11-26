@@ -101,14 +101,12 @@ export function LiveNowSection() {
   )
 }
 
-export function GeoSections({ range }: { range: string }) {
-  const { data } = useSWR<Geo>(`/api/marketing/geo?range=${range === "all" ? "all" : "30d"}`, fetcher)
+const useGeo = (range: string) => useSWR<Geo>(`/api/marketing/geo?range=${range === "all" ? "all" : "30d"}`, fetcher)
+
+export function AudienceSection({ range }: { range: string }) {
+  const { data } = useGeo(range)
   const label = range === "all" ? "all time" : "signed up in the last 30 days"
-  const srcMax = Math.max(1, ...(data?.sources ?? []).map(s => s.visits))
-  const domMax = Math.max(1, ...(data?.domains ?? []).map(s => s.visits))
-  const campMax = Math.max(1, ...(data?.campaigns ?? []).map(s => s.visits))
   return (
-    <>
       <Section title="Where your users are" description={`Countries and cities of users who ${range === "all" ? "have signed up" : "signed up in the last 30 days"}, from their profile (location, else phone code)`}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Panel className="flex flex-col justify-center gap-2 p-6">
@@ -128,7 +126,15 @@ export function GeoSections({ range }: { range: string }) {
           </Panel>
         </div>
       </Section>
+  )
+}
 
+export function TrafficSection({ range }: { range: string }) {
+  const { data } = useGeo(range)
+  const srcMax = Math.max(1, ...(data?.sources ?? []).map(s => s.visits))
+  const domMax = Math.max(1, ...(data?.domains ?? []).map(s => s.visits))
+  const campMax = Math.max(1, ...(data?.campaigns ?? []).map(s => s.visits))
+  return (
       <Section title="Traffic sources" description={`Where landing-page visitors came from (${range === "all" ? "all time" : "last 30 days"}): referrer, or the app they opened the link in`}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Panel className="overflow-hidden lg:col-span-2">
@@ -138,7 +144,7 @@ export function GeoSections({ range }: { range: string }) {
                 <div key={s.source} className="px-5 py-3">
                   <div className="flex items-center justify-between gap-3 text-[13px]">
                     <span className="font-medium">{s.source}</span>
-                    <span className="num"><b>{n(s.visits)}</b> <span className="text-xs text-muted-foreground">· {data?.totalVisits ? Math.round((s.visits / data.totalVisits) * 100) : 0}% · {s.countries} countries</span></span>
+                    <span className="num"><b>{n(s.visits)}</b> <span className="text-xs text-muted-foreground">· {data?.totalVisits ? Math.round((s.visits / data.totalVisits) * 100) : 0}% · {s.countries} {s.countries === 1 ? "country" : "countries"}</span></span>
                   </div>
                   <div className="mt-1.5"><Bar value={s.visits} max={srcMax} /></div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -178,6 +184,5 @@ export function GeoSections({ range }: { range: string }) {
           </div>
         </div>
       </Section>
-    </>
   )
 }
