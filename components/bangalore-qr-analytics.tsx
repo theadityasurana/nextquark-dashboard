@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { CountryFlag } from "@/components/country-flag"
 import { useApi } from "@/lib/api-cache"
 import dynamic from "next/dynamic"
 import {
@@ -297,7 +298,8 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
             ) : countries.map((row) => (
               <div key={row.country} className="flex flex-col gap-1.5 py-2">
                 <div className="flex items-center justify-between gap-2 text-[13px]">
-                  <span className="truncate">
+                  <span className="flex min-w-0 items-center gap-2 truncate">
+                    <CountryFlag code={row.country === "—" ? null : row.country} size={16} />
                     {countryLabel(row.country === "—" ? null : row.country)}
                     {row.country !== "—" && <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{row.country}</span>}
                   </span>

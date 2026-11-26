@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { GeoSections, LiveNowSection } from "@/components/marketing-geo"
 import { useApi } from "@/lib/api-cache"
 import { heardAboutLabel, percentOf } from "@/lib/marketing"
 import {
@@ -345,6 +346,10 @@ export function MarketingScreen() {
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-6">
+      <div className="mb-10 flex flex-col gap-10">
+        <LiveNowSection />
+        <GeoSections range={timeRange} />
+      </div>
 
       {loading ? (
         <div className="flex flex-col gap-6">
