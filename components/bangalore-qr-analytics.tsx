@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { VisitGlobePanel } from "@/components/dot-globe"
 import { CountryFlag } from "@/components/country-flag"
 import { useApi } from "@/lib/api-cache"
 import dynamic from "next/dynamic"
@@ -253,25 +254,23 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div>
             <h3 className="text-sm font-semibold tracking-tight">Global visit map</h3>
-            <p className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" />GPS</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-chart-1" />IP (approximate)</span>
-              <span>Precise places need users to allow location</span>
-            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Every landing visit as a dot. Drag to spin, scroll to zoom. Precise (GPS) places need people to allow location.</p>
           </div>
           <div className="flex items-center gap-2">
             {picking && (
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setPicking(false)}>Cancel pick</Button>
             )}
-            <Segmented
-              value={mapMode}
-              onChange={(v) => setMapMode(v as typeof mapMode)}
-              options={[{ value: "clusters", label: "Heat" }, { value: "pins", label: "Pins" }, ...(showAdvanced ? [{ value: "posters", label: "Posters" }] : [])]}
-            />
+            {showAdvanced && (
+              <Segmented
+                value={mapMode === "posters" ? "posters" : "globe"}
+                onChange={(v) => setMapMode((v === "posters" ? "posters" : "clusters") as typeof mapMode)}
+                options={[{ value: "globe", label: "Globe" }, { value: "posters", label: "Posters" }]}
+              />
+            )}
           </div>
         </div>
         <div className="p-3">
-          <BangaloreQrMap
+          {mapMode !== "posters" ? <VisitGlobePanel /> : <BangaloreQrMap
             pins={data?.pins ?? []}
             clusters={data?.clusters ?? []}
             posterMarkers={data?.posterMarkers ?? []}
@@ -282,7 +281,7 @@ export function BangaloreQrAnalytics({ refreshKey, range }: { refreshKey: number
               setSpotForm((f) => ({ ...f, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))
               setSpotMsg("Coordinates filled — save to store this poster’s location.")
             }}
-          />
+          />}
         </div>
       </div>
 

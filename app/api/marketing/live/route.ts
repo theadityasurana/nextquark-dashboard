@@ -48,14 +48,17 @@ async function activeUserIds(req: Request, minutes: number, since: string): Prom
 
 export async function GET(req: Request) {
   try {
-    const key = new URL(req.url).searchParams.get('window') || '30m'
+    const sp = new URL(req.url).searchParams
+    const key = sp.get('window') || '30m'
+    const withUsers = sp.get('users') !== '0'
     const minutes = WINDOWS[key] ?? 30
     const since = new Date(Date.now() - minutes * 60_000).toISOString()
     const db = createAdminClient()
 
-    const [ids, visitGeo, latestRes, table] = await Promise.all([
-      activeUserIds(req, minutes, since),
+    const [ids, visitGeo, visitPts, latestRes, table] = await Promise.all([
+      withUsers ? activeUserIds(req, minutes, since) : Promise.resolve([] as string[]),
       pagedRpc<{ lat: number; lng: number; country: string | null; city: string | null; n: number }>('marketing_visits_geo', { p_since: since }),
+      pagedRpc<{ lat: number; lng: number; gps: boolean }>('marketing_visit_points', { p_since: since }),
       db.rpc('marketing_live_visitors', { p_minutes: minutes }),
       coordTable(),
     ])
@@ -70,12 +73,16 @@ export async function GET(req: Request) {
 
     const byCountry = new Map<string, number>()
     const userDots = new Map<string, { lat: number; lng: number; n: number }>()
+    const userPoints: { lat: number; lng: number }[] = []
+    // Small, stable spread around the city so several people there read as a cluster.
+    const jitter = (seed: string, k: number) => { let h = 0; for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) | 0; return (((h >>> k) % 1000) / 1000 - 0.5) * 0.6 }
     for (const p of profs) {
       const code = resolveCountry(p.location, p.country_code)
       if (code) byCountry.set(code, (byCountry.get(code) ?? 0) + 1)
       const city = cityOf(p.location)
       const c = (code && city && table.city.get(`${code}|${city.toLowerCase()}`)) || (code && table.country.get(code)) || null
       if (!c) continue
+      userPoints.push({ lat: c.lat + jitter(p.id, 3), lng: c.lng + jitter(p.id, 13) })
       const k = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`
       const d = userDots.get(k) ?? { lat: c.lat, lng: c.lng, n: 0 }
       d.n++
@@ -88,6 +95,8 @@ export async function GET(req: Request) {
       userDots: [...userDots.values()],
       visits: visitGeo.reduce((s, v) => s + Number(v.n), 0),
       visitDots: visitGeo.map(v => ({ lat: v.lat, lng: v.lng, n: Number(v.n) })),
+      visitPoints: visitPts,
+      userPoints,
       latest: (latestRes.data ?? []).slice(0, 12),
       byCountry: [...byCountry.entries()].sort((a, b) => b[1] - a[1]).map(([code, n]) => ({ code, name: countryName(code), n })),
       generatedAt: new Date().toISOString(),

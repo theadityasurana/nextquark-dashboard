@@ -4,7 +4,7 @@ import { useState } from "react"
 import useSWR from "swr"
 import { Panel, PanelHeader, Section } from "@/components/ui/dashboard"
 import { CountryFlag } from "@/components/country-flag"
-import { LiveGlobe } from "@/components/live-globe"
+import { DotGlobe, DotLegend, WindowPicker, GLOBE_WINDOWS, toDots } from "@/components/dot-globe"
 
 const fetcher = (u: string) => fetch(u).then(r => (r.ok ? r.json() : Promise.reject(new Error("load"))))
 const n = (v: number) => v.toLocaleString()
@@ -18,15 +18,9 @@ type Live = {
   visitDots: { lat: number; lng: number; n: number }[]
   latest: { lat: number; lng: number; country: string | null; city: string | null; host: string; at: string }[]
   byCountry: { code: string; name: string; n: number }[]
+  visitPoints: { lat: number; lng: number; gps: boolean }[]
+  userPoints: { lat: number; lng: number }[]
 }
-const WINDOWS = [
-  { value: "30m", label: "30 min", long: "last 30 minutes" },
-  { value: "1h", label: "1 hour", long: "last hour" },
-  { value: "24h", label: "24 hours", long: "last 24 hours" },
-  { value: "7d", label: "7 days", long: "last 7 days" },
-  { value: "30d", label: "30 days", long: "last 30 days" },
-  { value: "90d", label: "90 days", long: "last 90 days" },
-]
 type Geo = {
   totalUsers: number; located: number; countriesCount: number; worldCountries: number
   countries: { code: string; name: string; users: number }[]
@@ -61,39 +55,19 @@ function RankList({ rows, empty }: { rows: { key: string; code: string | null; l
 
 export function LiveNowSection() {
   const [win, setWin] = useState("30m")
-  const long = WINDOWS.find(w => w.value === win)?.long ?? ""
+  const long = GLOBE_WINDOWS.find(w => w.value === win)?.long ?? ""
   const { data, isValidating } = useSWR<Live>(`/api/marketing/live?window=${win}`, fetcher, { refreshInterval: ["30m", "1h"].includes(win) ? 20_000 : 120_000, keepPreviousData: true })
-  // Dot size grows with how many people are in that city.
-  const grow = (n: number, base: number, step: number, max: number) => Math.min(max, base + step * Math.log2(1 + n))
-  const points = [
-    ...(data?.userDots ?? []).map(d => ({ lat: d.lat, lng: d.lng, size: grow(d.n, 0.07, 0.025, 0.24) })),
-    ...(data?.visitDots ?? []).map(d => ({ lat: d.lat, lng: d.lng, size: grow(d.n, 0.035, 0.012, 0.12) })),
-  ]
+  const points = toDots(data)
   return (
     <Section
       title="Live right now"
       description={`People using Iris and visiting your landing pages · ${long}. Drag the globe to spin it.`}
-      actions={
-        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
-          {WINDOWS.map(w => (
-            <button key={w.value} type="button" onClick={() => setWin(w.value)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${win === w.value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
-              {w.label}
-            </button>
-          ))}
-        </div>
-      }
+      actions={<WindowPicker value={win} onChange={setWin} />}
     >
       <div className={`grid grid-cols-1 gap-4 transition-opacity lg:grid-cols-5 ${isValidating && data?.window !== win ? "opacity-60" : ""}`}>
-        <Panel className="flex items-center justify-center overflow-hidden lg:col-span-3">
-          <div className="relative flex w-full items-center justify-center py-4">
-            <LiveGlobe points={points} size={480} />
-            <div className="absolute left-5 top-4 flex flex-col gap-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-800" />Active in the app</span>
-              <span className="flex items-center gap-2"><span className="ml-0.5 h-2 w-2 rounded-full bg-violet-800" />Landing-page visitors</span>
-              <span className="text-[10px]">Bigger dot = more people</span>
-            </div>
-          </div>
+        <Panel className="flex flex-col gap-3 overflow-hidden p-3 lg:col-span-3">
+          <div className="px-2 pt-1"><DotLegend /></div>
+          <DotGlobe points={points} height={500} />
         </Panel>
         <div className="flex flex-col gap-4 lg:col-span-2">
           <div className="grid grid-cols-2 gap-3">
