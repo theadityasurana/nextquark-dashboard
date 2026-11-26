@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import useSWR from "swr"
 import { Panel, PanelHeader, Section } from "@/components/ui/dashboard"
 import { CountryFlag } from "@/components/country-flag"
@@ -7,14 +8,25 @@ import { LiveGlobe } from "@/components/live-globe"
 
 const fetcher = (u: string) => fetch(u).then(r => (r.ok ? r.json() : Promise.reject(new Error("load"))))
 const n = (v: number) => v.toLocaleString()
-const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); return m < 1 ? "just now" : `${m}m ago` }
+const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 2880 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago` }
 
 type Live = {
-  activeNow: number
-  users: { name: string; code: string | null; city: string | null; lat: number | null; lng: number | null }[]
-  visitors: { lat: number; lng: number; country: string | null; city: string | null; host: string; at: string }[]
+  window: string
+  activeUsers: number
+  userDots: { lat: number; lng: number; n: number }[]
+  visits: number
+  visitDots: { lat: number; lng: number; n: number }[]
+  latest: { lat: number; lng: number; country: string | null; city: string | null; host: string; at: string }[]
   byCountry: { code: string; name: string; n: number }[]
 }
+const WINDOWS = [
+  { value: "30m", label: "30 min", long: "last 30 minutes" },
+  { value: "1h", label: "1 hour", long: "last hour" },
+  { value: "24h", label: "24 hours", long: "last 24 hours" },
+  { value: "7d", label: "7 days", long: "last 7 days" },
+  { value: "30d", label: "30 days", long: "last 30 days" },
+  { value: "90d", label: "90 days", long: "last 90 days" },
+]
 type Geo = {
   totalUsers: number; located: number; countriesCount: number; worldCountries: number
   countries: { code: string; name: string; users: number }[]
@@ -48,51 +60,69 @@ function RankList({ rows, empty }: { rows: { key: string; code: string | null; l
 }
 
 export function LiveNowSection() {
-  const { data } = useSWR<Live>("/api/marketing/live", fetcher, { refreshInterval: 20_000 })
+  const [win, setWin] = useState("30m")
+  const long = WINDOWS.find(w => w.value === win)?.long ?? ""
+  const { data, isValidating } = useSWR<Live>(`/api/marketing/live?window=${win}`, fetcher, { refreshInterval: ["30m", "1h"].includes(win) ? 20_000 : 120_000, keepPreviousData: true })
+  // Dot size grows with how many people are in that city.
+  const grow = (n: number, base: number, step: number, max: number) => Math.min(max, base + step * Math.log2(1 + n))
   const points = [
-    ...(data?.users ?? []).filter(u => u.lat != null && u.lng != null).map(u => ({ lat: u.lat!, lng: u.lng!, size: 0.13 })),
-    ...(data?.visitors ?? []).map(v => ({ lat: v.lat, lng: v.lng, size: 0.065 })),
+    ...(data?.userDots ?? []).map(d => ({ lat: d.lat, lng: d.lng, size: grow(d.n, 0.07, 0.025, 0.24) })),
+    ...(data?.visitDots ?? []).map(d => ({ lat: d.lat, lng: d.lng, size: grow(d.n, 0.035, 0.012, 0.12) })),
   ]
   return (
-    <Section title="Live right now" description="People using Iris and visiting your landing pages at this moment. Drag the globe to spin it.">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <Section
+      title="Live right now"
+      description={`People using Iris and visiting your landing pages · ${long}. Drag the globe to spin it.`}
+      actions={
+        <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
+          {WINDOWS.map(w => (
+            <button key={w.value} type="button" onClick={() => setWin(w.value)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${win === w.value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <div className={`grid grid-cols-1 gap-4 transition-opacity lg:grid-cols-5 ${isValidating && data?.window !== win ? "opacity-60" : ""}`}>
         <Panel className="flex items-center justify-center overflow-hidden lg:col-span-3">
           <div className="relative flex w-full items-center justify-center py-4">
             <LiveGlobe points={points} size={480} />
             <div className="absolute left-5 top-4 flex flex-col gap-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-800" />Active in the app</span>
-              <span className="flex items-center gap-2"><span className="ml-0.5 h-2 w-2 rounded-full bg-violet-800" />On a landing page (30 min)</span>
+              <span className="flex items-center gap-2"><span className="ml-0.5 h-2 w-2 rounded-full bg-violet-800" />Landing-page visitors</span>
+              <span className="text-[10px]">Bigger dot = more people</span>
             </div>
           </div>
         </Panel>
         <div className="flex flex-col gap-4 lg:col-span-2">
           <div className="grid grid-cols-2 gap-3">
             <Panel className="p-4">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-success"><span className="h-2 w-2 animate-pulse rounded-full bg-success" />Active now</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">{data ? n(data.activeNow) : "–"}</div>
-              <div className="text-xs text-muted-foreground">in the app, last 5 min</div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-success"><span className="h-2 w-2 animate-pulse rounded-full bg-success" />Active users</div>
+              <div className="mt-1 text-3xl font-semibold tabular-nums">{data ? n(data.activeUsers) : "–"}</div>
+              <div className="text-xs text-muted-foreground">in the app · {long}</div>
             </Panel>
             <Panel className="p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Live visitors</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">{data ? n(data.visitors.length) : "–"}</div>
-              <div className="text-xs text-muted-foreground">on landing pages, last 30 min</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Landing visits</div>
+              <div className="mt-1 text-3xl font-semibold tabular-nums">{data ? n(data.visits) : "–"}</div>
+              <div className="text-xs text-muted-foreground">on your sites · {long}</div>
             </Panel>
           </div>
           <Panel className="overflow-hidden">
-            <PanelHeader title="Active users by country" />
-            <RankList empty="No one active right now" rows={(data?.byCountry ?? []).map(c => ({ key: c.code, code: c.code, label: c.name, sub: c.code, value: c.n }))} />
+            <PanelHeader title="Active users by country" description={long} />
+            <RankList empty="No one active in this window" rows={(data?.byCountry ?? []).map(c => ({ key: c.code, code: c.code, label: c.name, sub: c.code, value: c.n }))} />
           </Panel>
           <Panel className="overflow-hidden">
             <PanelHeader title="Latest landing visits" />
             <div className="max-h-56 overflow-y-auto divide-y divide-border">
-              {(data?.visitors ?? []).slice(0, 12).map((v, i) => (
+              {(data?.latest ?? []).map((v, i) => (
                 <div key={i} className="flex items-center gap-2 px-5 py-2 text-[13px]">
                   <CountryFlag code={v.country} size={16} />
                   <span className="truncate">{[v.city, v.country].filter(Boolean).join(", ") || "Unknown"}</span>
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">{v.host} · {ago(v.at)}</span>
                 </div>
               ))}
-              {data && !data.visitors.length && <p className="py-6 text-center text-xs text-muted-foreground">No visits in the last 30 minutes</p>}
+              {data && !data.latest.length && <p className="py-6 text-center text-xs text-muted-foreground">No visits in this window</p>}
             </div>
           </Panel>
         </div>
