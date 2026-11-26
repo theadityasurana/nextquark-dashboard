@@ -50,8 +50,8 @@ function RankList({ rows, empty }: { rows: { key: string; code: string | null; l
 export function LiveNowSection() {
   const { data } = useSWR<Live>("/api/marketing/live", fetcher, { refreshInterval: 20_000 })
   const points = [
-    ...(data?.users ?? []).filter(u => u.lat != null && u.lng != null).map(u => ({ lat: u.lat!, lng: u.lng!, size: 0.09 })),
-    ...(data?.visitors ?? []).map(v => ({ lat: v.lat, lng: v.lng, size: 0.035 })),
+    ...(data?.users ?? []).filter(u => u.lat != null && u.lng != null).map(u => ({ lat: u.lat!, lng: u.lng!, size: 0.13 })),
+    ...(data?.visitors ?? []).map(v => ({ lat: v.lat, lng: v.lng, size: 0.065 })),
   ]
   return (
     <Section title="Live right now" description="People using Iris and visiting your landing pages at this moment. Drag the globe to spin it.">
@@ -60,8 +60,8 @@ export function LiveNowSection() {
           <div className="relative flex w-full items-center justify-center py-4">
             <LiveGlobe points={points} size={480} />
             <div className="absolute left-5 top-4 flex flex-col gap-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-500" />Active in the app</span>
-              <span className="flex items-center gap-2"><span className="ml-0.5 h-2 w-2 rounded-full bg-violet-500" />On a landing page (30 min)</span>
+              <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-800" />Active in the app</span>
+              <span className="flex items-center gap-2"><span className="ml-0.5 h-2 w-2 rounded-full bg-violet-800" />On a landing page (30 min)</span>
             </div>
           </div>
         </Panel>
