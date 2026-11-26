@@ -12,8 +12,9 @@ async function inPaywallGroup(userId: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const [{ data: a }, { data: exp }] = await Promise.all([
       db.from('web_experiment_assignments').select('variant, run').eq('user_id', userId).eq('experiment', 'paywall_after_first').maybeSingle(),
-      db.from('web_experiments').select('enabled, run').eq('key', 'paywall_after_first').maybeSingle(),
+      db.from('web_experiments').select('enabled, run, force_all').eq('key', 'paywall_after_first').maybeSingle(),
     ])
+    if (exp?.force_all) return true
     if (a) return a.variant === 'paywall' && !!exp?.enabled && exp.run === a.run
     if (!exp?.enabled) return false
     await new Promise(r => setTimeout(r, 2500))

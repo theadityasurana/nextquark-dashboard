@@ -74,3 +74,5 @@ language sql stable security definer set search_path = public as $$
   order by a.run desc, a.variant;
 $$;
 revoke all on function public.web_experiment_results(text) from public, anon, authenticated;
+
+alter table public.web_experiments add column if not exists force_all boolean not null default false;

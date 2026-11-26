@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FlaskConical, RefreshCw } from "lucide-react"
 import { IrisAdminGate, irisAdminFetch } from "@/components/iris-admin-gate"
 
-type Settings = { enabled: boolean; paywall_percent: number; run: string; started_at: string; updated_at: string }
+type Settings = { enabled: boolean; paywall_percent: number; run: string; started_at: string; updated_at: string; force_all?: boolean }
 type Row = {
   run: string; variant: "paywall" | "control"; users: number; applied: number; saw_paywall: number
   paid: number; paid_after_first: number; avg_hours_to_pay: number | null; revenue: Record<string, number>
@@ -89,6 +89,29 @@ function Experiments() {
             <Button size="sm" variant="outline" disabled={busy} onClick={() => { if (confirm("Start a new run? Only people who sign up from now on will be in it; earlier results stay listed.")) void save({ newRun: true }, "New run started") }}>Start a new run</Button>
             <Button size="sm" variant="ghost" onClick={() => void load()}><RefreshCw className="h-3.5 w-3.5 mr-1" />Refresh</Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className={settings?.force_all ? "border-violet-500/60" : ""}>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2 font-semibold">Everyone pays after the first application
+              <Badge variant={settings?.force_all ? "default" : "secondary"}>{settings?.force_all ? "On: everyone is on Group B" : "Off"}</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Puts <b>every website user</b> who isn't on a plan on the Group B rule: the onboarding application is free, then they must buy.
+              That includes existing users and new sign-ups, whatever their test group, and skips the welcome emails. The mobile app is unaffected.
+              Turn it off to go back to the split above; results and groups are kept.
+            </p>
+          </div>
+          <Switch
+            checked={!!settings?.force_all}
+            disabled={busy || !settings}
+            onCheckedChange={v => {
+              if (v && !confirm("Make everyone pay after their first application?\n\nEvery website user without a plan, including your existing users, gets the paywall straight away.")) return
+              void save({ forceAll: v }, v ? "Everyone now pays after the first application" : "Back to the A/B split")
+            }}
+          />
         </CardContent>
       </Card>
 

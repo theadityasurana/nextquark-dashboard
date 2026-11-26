@@ -8,16 +8,16 @@ const KEY = 'paywall_after_first'
 export async function GET() {
   const db = createAdminClient()
   const [{ data: settings, error: e1 }, { data: results, error: e2 }] = await Promise.all([
-    db.from('web_experiments').select('key, enabled, paywall_percent, run, started_at, updated_at').eq('key', KEY).maybeSingle(),
+    db.from('web_experiments').select('key, enabled, paywall_percent, run, started_at, updated_at, force_all').eq('key', KEY).maybeSingle(),
     db.rpc('web_experiment_results', { p_experiment: KEY }),
   ])
   if (e1 || e2) return Response.json({ error: (e1 || e2)?.message }, { status: 500 })
   return Response.json({ settings, results: results ?? [] })
 }
 
-/** { enabled?, percent?, newRun? } — newRun starts a fresh run (only sign-ups from now on count). */
+/** { enabled?, percent?, newRun?, forceAll? } — newRun starts a fresh run; forceAll = everyone pays after the first application. */
 export async function POST(req: Request) {
-  let body: { enabled?: boolean; percent?: number; newRun?: boolean }
+  let body: { enabled?: boolean; percent?: number; newRun?: boolean; forceAll?: boolean }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid request.' }, { status: 400 }) }
   const db = createAdminClient()
   const { data: cur } = await db.from('web_experiments').select('run, enabled').eq('key', KEY).maybeSingle()
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
     // Turning it on for the first time starts the clock: only accounts made from now on take part.
     if (body.enabled && !cur?.enabled && cur?.run === 'run-1') patch.started_at = new Date().toISOString()
   }
+  if (typeof body.forceAll === 'boolean') patch.force_all = body.forceAll
   if (body.percent !== undefined) {
     const p = Math.round(Number(body.percent))
     if (!Number.isFinite(p) || p < 0 || p > 100) return Response.json({ error: 'Split must be 0–100%.' }, { status: 400 })
