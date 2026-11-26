@@ -24,7 +24,7 @@ const money = (r: Record<string, number>) => {
   return parts.length ? parts.join(" + ") : "–"
 }
 
-function Experiments({ adminKey, onDenied }: { adminKey: string; onDenied: () => void }) {
+function Experiments() {
   const { toast } = useToast()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [rows, setRows] = useState<Row[]>([])
@@ -33,16 +33,16 @@ function Experiments({ adminKey, onDenied }: { adminKey: string; onDenied: () =>
 
   const load = useCallback(async () => {
     try {
-      const d = await irisAdminFetch(adminKey, "/api/web-experiments", {}, onDenied)
+      const d = await irisAdminFetch("/api/web-experiments")
       setSettings(d.settings); setRows(d.results); setPercent(d.settings?.paywall_percent ?? 50)
     } catch (e) { toast({ title: "Could not load", description: String((e as Error).message), variant: "destructive" }) }
-  }, [adminKey, onDenied, toast])
+  }, [toast])
   useEffect(() => { void load() }, [load])
 
   const save = async (body: Record<string, unknown>, msg: string) => {
     setBusy(true)
     try {
-      const d = await irisAdminFetch(adminKey, "/api/web-experiments", { method: "POST", body: JSON.stringify(body) }, onDenied)
+      const d = await irisAdminFetch("/api/web-experiments", { method: "POST", body: JSON.stringify(body) })
       setSettings(d.settings); setPercent(d.settings.paywall_percent)
       toast({ title: msg })
       void load()
@@ -138,5 +138,5 @@ function Experiments({ adminKey, onDenied }: { adminKey: string; onDenied: () =>
 }
 
 export function WebExperimentsScreen() {
-  return <IrisAdminGate>{(key, signOut) => <Experiments adminKey={key} onDenied={signOut} />}</IrisAdminGate>
+  return <IrisAdminGate>{() => <Experiments />}</IrisAdminGate>
 }

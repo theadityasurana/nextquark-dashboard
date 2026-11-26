@@ -18,6 +18,7 @@ import {
   LinkIcon, Globe, RefreshCw, CheckCircle, XCircle, Clock
 } from "lucide-react"
 import { PageHeader, Panel, StatCard, KpiGrid, Meter, TableHead, EmptyState, SearchField, Pagination, Segmented, Avatar } from "@/components/ui/dashboard"
+import { GroupBadge, UserAdminActions, useExperimentGroups } from "@/components/iris-user-tools"
 
 interface SupabaseAuthUser {
   id: string
@@ -132,6 +133,7 @@ export function UsersScreen() {
   const totalAuthPages = Math.max(1, Math.ceil(totalMatched / USERS_PER_PAGE))
   const safeAuthPage = Math.min(authPage, totalAuthPages)
   const pagedAuthUsers = authUsers
+  const groups = useExperimentGroups([...pagedAuthUsers.map(u => u.id), selectedAuthUser?.id])
 
   const relative = (d: string | null) => {
     if (!d) return "Never"
@@ -213,6 +215,8 @@ export function UsersScreen() {
               { label: "Verified", className: "w-24" },
               { label: "Last sign in", className: "w-28 text-right" },
               { label: "Joined", className: "w-28 text-right" },
+              { label: "A/B group", className: "w-28" },
+              { label: "Actions", className: "w-[190px]" },
               { label: "", className: "w-4" },
             ]} />
             {authLoading && !usersResp ? (
@@ -229,10 +233,13 @@ export function UsersScreen() {
             ) : (
               <div className={`divide-y divide-border transition-opacity ${authValidating && usersResp ? "opacity-60" : ""}`}>
                 {pagedAuthUsers.map((user) => (
-                  <button
+                  <div
                     key={user.id}
-                    className="group flex w-full flex-col gap-1.5 px-5 py-3 text-left transition-colors hover:bg-muted/40 md:flex-row md:items-center md:gap-4"
+                    role="button"
+                    tabIndex={0}
+                    className="group flex w-full cursor-pointer flex-col gap-1.5 px-5 py-3 text-left transition-colors hover:bg-muted/40 md:flex-row md:items-center md:gap-4"
                     onClick={() => setSelectedAuthUser(user)}
+                    onKeyDown={(e) => { if (e.key === "Enter") setSelectedAuthUser(user) }}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <Avatar name={user.email} />
@@ -249,8 +256,10 @@ export function UsersScreen() {
                     </span>
                     <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.last_sign_in_at)}>{relative(user.last_sign_in_at)}</span>
                     <span className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground md:block" title={formatDate(user.created_at)}>{relative(user.created_at)}</span>
+                    <span className="w-28"><GroupBadge group={groups[user.id]} />{!groups[user.id] && <span className="hidden text-xs text-muted-foreground/60 md:inline">–</span>}</span>
+                    <span className="w-[190px]"><UserAdminActions userId={user.id} email={user.email} onDeleted={() => refreshAuth()} /></span>
                     <ChevronRight className="hidden h-4 w-4 text-muted-foreground/50 group-hover:text-foreground md:block" />
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -320,8 +329,9 @@ export function UsersScreen() {
                     {selectedAuthUser.email.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <DialogTitle className="text-lg">{selectedAuthUser.email}</DialogTitle>
+                    <DialogTitle className="text-lg flex items-center gap-2">{selectedAuthUser.email}<GroupBadge group={groups[selectedAuthUser.id]} /></DialogTitle>
                     <p className="text-xs text-muted-foreground font-mono">{selectedAuthUser.id}</p>
+                    <div className="mt-2"><UserAdminActions size="md" userId={selectedAuthUser.id} email={selectedAuthUser.email} onDeleted={() => { setSelectedAuthUser(null); refreshAuth() }} /></div>
                   </div>
                 </div>
               </DialogHeader>

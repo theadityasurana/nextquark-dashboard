@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { GroupBadge, useExperimentGroups, type Group } from "@/components/iris-user-tools"
 import { BookOpen, Check, Copy, MessageCircle, RefreshCw, Sparkles, Phone, Users, Mail, Linkedin, ExternalLink, Repeat } from "lucide-react"
 import useSWR from "swr"
 import { PageHeader, StatCard, KpiGrid, Meter, Segmented, Toolbar, SearchField, EmptyState, Pagination } from "@/components/ui/dashboard"
@@ -40,8 +41,9 @@ function CopyButton({ text, label, title }: { text: string; label?: string; titl
   )
 }
 
-function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }: {
+function OutreachCard({ row, group, onToggle, onSave, onRegenerate, onPlaybook, busy }: {
   row: OutreachRow
+  group?: Group
   onPlaybook: () => void
   onToggle: (contacted: boolean) => void
   onSave: (message: string) => void
@@ -66,6 +68,7 @@ function OutreachCard({ row, onToggle, onSave, onRegenerate, onPlaybook, busy }:
           {/* Who */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="min-w-0 break-words text-[15px] font-semibold tracking-tight">{row.name}</span>
+            <GroupBadge group={group} />
             <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium tabular-nums">
               {row.jobsApplied} applied
             </span>
@@ -210,6 +213,7 @@ export function OutreachScreen() {
   const key = `/api/outreach?days=${days || 99999}&filter=${filter}&page=${page}&limit=${PER_PAGE}${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}`
   const { data, error: loadError, isLoading, isValidating, mutate } = useSWR<OutreachResp>(key, outreachFetcher, { keepPreviousData: true, revalidateOnFocus: false })
   const rows = data?.rows ?? []
+  const groups = useExperimentGroups(rows.map((r) => r.userId))
   const stats: OutreachStats = data?.stats ?? { total: 0, done: 0, withPhone: 0, withLinkedin: 0, applied: 0, missing: 0, returning: 0, returningUncontacted: 0 }
   const error = actionError ?? (loadError ? (loadError as Error).message : null)
   const load = () => mutate()
@@ -337,6 +341,7 @@ export function OutreachScreen() {
             <OutreachCard
               key={row.userId}
               row={row}
+              group={groups[row.userId]}
               busy={draftingAll || drafting.has(row.userId)}
               onToggle={(contacted) => patch(row.userId, { contacted })}
               onSave={(message) => patch(row.userId, { message })}

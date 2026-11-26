@@ -1,13 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { denied, verifyIrisAdmin } from '@/lib/iris-admin'
 
 export const dynamic = 'force-dynamic'
 
 const KEY = 'paywall_after_first'
 
 /** Settings + results for the website "pay after first application" experiment. */
-export async function GET(req: Request) {
-  if (!(await verifyIrisAdmin(req))) return denied()
+export async function GET() {
   const db = createAdminClient()
   const [{ data: settings, error: e1 }, { data: results, error: e2 }] = await Promise.all([
     db.from('web_experiments').select('key, enabled, paywall_percent, run, started_at, updated_at').eq('key', KEY).maybeSingle(),
@@ -19,7 +17,6 @@ export async function GET(req: Request) {
 
 /** { enabled?, percent?, newRun? } — newRun starts a fresh run (only sign-ups from now on count). */
 export async function POST(req: Request) {
-  if (!(await verifyIrisAdmin(req))) return denied()
   let body: { enabled?: boolean; percent?: number; newRun?: boolean }
   try { body = await req.json() } catch { return Response.json({ error: 'Invalid request.' }, { status: 400 }) }
   const db = createAdminClient()

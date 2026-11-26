@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { GroupBadge, useExperimentGroups } from "@/components/iris-user-tools"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -295,6 +296,7 @@ export function QueueScreen() {
   const totalQueuePages = Math.max(1, Math.ceil(totalFilteredApps / QUEUE_PER_PAGE))
   const safePage = Math.min(queuePage, totalQueuePages)
   const paginatedApps = applications
+  const groups = useExperimentGroups(paginatedApps.map((a) => a.user_id))
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -493,6 +495,7 @@ export function QueueScreen() {
                   <div className="min-w-0">
                     <p className="flex items-center gap-1 truncate text-[13px] font-medium">
                       <span className="truncate">{fullName}</span>
+                      <GroupBadge group={groups[app.user_id]} className="ml-1" />
                       {app.is_premium && (
                         <Tooltip>
                           <TooltipTrigger asChild><Crown className="h-3 w-3 shrink-0 text-warning" /></TooltipTrigger>

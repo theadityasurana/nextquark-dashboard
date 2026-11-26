@@ -25,13 +25,13 @@ const usd = (c: number) => `$${((c || 0) / 100).toLocaleString(undefined, { mini
 const bioLink = (code: string) => `https://irisjobs.live/?code=${encodeURIComponent(code)}`
 const dashLink = (slug: string) => `https://irisjobs.live/partner/${slug}`
 
-function Referrals({ adminKey, onDenied }: { adminKey: string; onDenied: () => void }) {
+function Referrals() {
   const { toast } = useToast()
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: "", promo_code: "", commission_percent: "20" })
 
-  const call = useCallback((init: RequestInit = {}, qs = "") => irisAdminFetch(adminKey, `/api/iris-referrals${qs}`, init, onDenied), [adminKey, onDenied])
+  const call = useCallback((init: RequestInit = {}, qs = "") => irisAdminFetch(`/api/iris-referrals${qs}`, init), [])
   const load = useCallback(async (fresh = false) => {
     setLoading(true)
     try { setData(await call({}, fresh ? "?fresh=1" : "")) }
@@ -136,5 +136,5 @@ function Referrals({ adminKey, onDenied }: { adminKey: string; onDenied: () => v
 }
 
 export function IrisReferralsScreen() {
-  return <IrisAdminGate>{(key, signOut) => <Referrals adminKey={key} onDenied={signOut} />}</IrisAdminGate>
+  return <IrisAdminGate>{() => <Referrals />}</IrisAdminGate>
 }
