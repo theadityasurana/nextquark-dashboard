@@ -6,10 +6,6 @@
     {
       "path": "/api/cron/job-summary",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/web-auto-apply",
-      "schedule": "30 2 * * *"
     }
   ]
 }
